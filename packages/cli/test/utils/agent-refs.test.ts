@@ -10,7 +10,7 @@ import {
 
 describe("collectReferencedAgents", () => {
   it("extracts names from `--agent <name>` flags", () => {
-    const body = "Run `trellis channel spawn --agent implement` then check.";
+    const body = "Run `suncode channel spawn --agent implement` then check.";
     expect(collectReferencedAgents(body)).toEqual(["implement"]);
   });
 
@@ -26,8 +26,8 @@ describe("collectReferencedAgents", () => {
 
   it("deduplicates and sorts results across both surface forms", () => {
     const body = `
-      trellis channel spawn --agent implement
-      trellis channel spawn --agent check
+      suncode channel spawn --agent implement
+      suncode channel spawn --agent check
       see .trellis/agents/implement.md for details
       another reference: --agent check
     `;

@@ -8,14 +8,14 @@
 import type { TemplateContext } from "../types/ai-tools.js";
 
 /**
- * Per-platform configure options threaded from `trellis init` flags.
+ * Per-platform configure options threaded from `suncode init` flags.
  * Defined here (not in index.ts) so configurators can reference it without
  * a circular import.
  */
 export interface PlatformConfigureOptions {
   /**
    * Claude Code only: install the opt-in Trellis statusLine
-   * (`trellis init --with-statusline`). Off by default — see
+   * (`suncode init --with-statusline`). Off by default — see
    * `configureClaude` in `claude.ts`.
    */
   withStatusline?: boolean;
@@ -174,20 +174,20 @@ export function resolvePlaceholders(
  * `.agents/skills/` workspace alias — Codex, Gemini CLI 0.40+, etc.).
  *
  * Identical to {@link resolvePlaceholders} except that {@link CMD_REF} is
- * rendered in a platform-neutral form (`` `name` (Trellis command) ``)
+ * rendered in a platform-neutral form (`` `name` (Suncode command) ``)
  * instead of substituting a platform-specific prefix. This is the only
  * placeholder that varies between platforms in the auto-triggered skill templates
  * from `common/skills/`, so
  * neutralizing it makes the rendered SKILL.md files byte-identical regardless
- * of which Trellis configurator wrote them — eliminating the
+ * of which Suncode configurator wrote them — eliminating the
  * "last-writer-wins" collision when both Codex and Gemini target
  * `.agents/skills/`.
  *
  * `{{CLI_FLAG}}`, `{{EXECUTOR_AI}}`, `{{USER_ACTION_LABEL}}`, conditionals,
  * and `{{PYTHON_CMD}}` are still resolved from the platform context. The
  * shared skills do not use those placeholders, so they remain platform-
- * neutral. Codex-only skill files (e.g. `trellis-continue/SKILL.md`,
- * `trellis-finish-work/SKILL.md` written via `resolveAllAsSkillsNeutral`) DO
+ * neutral. Codex-only skill files (e.g. `suncode-continue/SKILL.md`,
+ * `suncode-finish-work/SKILL.md` written via `resolveAllAsSkillsNeutral`) DO
  * use `{{CLI_FLAG}}` / `{{PYTHON_CMD}}` and resolve to Codex-correct values
  * — no other platform writes those files, so byte-identity is not required.
  */
@@ -204,7 +204,7 @@ export function resolvePlaceholdersNeutral(
   // Neutral form for the only collision-causing placeholder
   result = result.replace(
     RE_CMD_REF,
-    (_match, name: string) => `\`${name}\` (Trellis command)`,
+    (_match, name: string) => `\`${name}\` (Suncode command)`,
   );
   result = result.replace(RE_EXECUTOR_AI, context.executorAI);
   result = result.replace(RE_USER_ACTION_LABEL, context.userActionLabel);
@@ -263,8 +263,8 @@ export function wrapWithSkillFrontmatter(
   name: string,
   content: string,
 ): string {
-  // Look up description by base name (without trellis- prefix)
-  const baseName = name.replace(/^trellis-/, "");
+  // Look up description by base name (without suncode- prefix)
+  const baseName = name.replace(/^suncode-/, "");
   const description = SKILL_DESCRIPTIONS[baseName];
   if (!description) {
     throw new Error(
@@ -279,7 +279,7 @@ export function wrapWithSkillFrontmatter(
  * SKILL_DESCRIPTIONS, which is long prose aimed at the skill matcher.
  */
 const COMMAND_DESCRIPTIONS: Record<string, string> = {
-  start: "Initialize a Trellis development session.",
+  start: "Initialize a Suncode development session.",
   continue: "Resume work on the current task at the correct phase.",
   "finish-work":
     "Wrap up the current session: quality gate, commit reminder, archive, journal.",
@@ -290,7 +290,7 @@ export function wrapWithCommandFrontmatter(
   name: string,
   content: string,
 ): string {
-  const baseName = name.replace(/^trellis-/, "");
+  const baseName = name.replace(/^suncode-/, "");
   const description = COMMAND_DESCRIPTIONS[baseName];
   if (!description) {
     throw new Error(
@@ -321,7 +321,7 @@ export interface ResolvedTemplate {
 
 /** A resolved file inside a multi-file skill directory. */
 export interface ResolvedSkillFile {
-  /** POSIX path relative to the skills root, e.g. "trellis-meta/SKILL.md" */
+  /** POSIX path relative to the skills root, e.g. "suncode-meta/SKILL.md" */
   relativePath: string;
   content: string;
 }
@@ -337,7 +337,7 @@ export interface ResolvedSkillFile {
  *
  * `agentCapable && !hasHooks` platforms (Codex, ZCode, OpenCode, Reasonix)
  * have no such hook (or use an out-of-band plugin), so they need the
- * user-invocable `trellis-start` skill / `start.md` command as fallback.
+ * user-invocable `suncode-start` skill / `start.md` command as fallback.
  * Agent-less platforms (Kilo, Antigravity, Devin) also keep `start` since
  * they rely entirely on user-triggered workflows.
  */
@@ -352,7 +352,7 @@ function filterCommands(
 }
 
 /**
- * Resolve ALL templates as skills with trellis- prefix.
+ * Resolve ALL templates as skills with suncode- prefix.
  * Used by skill-only platforms (Kiro, Qoder, Codex) where everything is a skill.
  *
  * `start` is filtered out on agent-capable platforms — the session-start hook
@@ -364,9 +364,9 @@ export function resolveAllAsSkills(ctx: TemplateContext): ResolvedTemplate[] {
     ...getSkillTemplates(),
   ];
   return templates.map((tmpl) => ({
-    name: `trellis-${tmpl.name}`,
+    name: `suncode-${tmpl.name}`,
     content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
+      `suncode-${tmpl.name}`,
       resolvePlaceholders(tmpl.content, ctx),
     ),
   }));
@@ -386,14 +386,14 @@ export function resolveCommands(ctx: TemplateContext): ResolvedTemplate[] {
 }
 
 /**
- * Resolve the auto-triggered skill templates from `common/skills/` with trellis- prefix + SKILL.md frontmatter.
+ * Resolve the auto-triggered skill templates from `common/skills/` with suncode- prefix + SKILL.md frontmatter.
  * Used by "both" platforms for the auto-triggered skills.
  */
 export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
   return getSkillTemplates().map((tmpl) => ({
-    name: `trellis-${tmpl.name}`,
+    name: `suncode-${tmpl.name}`,
     content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
+      `suncode-${tmpl.name}`,
       resolvePlaceholders(tmpl.content, ctx),
     ),
   }));
@@ -408,9 +408,9 @@ export function resolveSkills(ctx: TemplateContext): ResolvedTemplate[] {
  */
 export function resolveSkillsNeutral(ctx: TemplateContext): ResolvedTemplate[] {
   return getSkillTemplates().map((tmpl) => ({
-    name: `trellis-${tmpl.name}`,
+    name: `suncode-${tmpl.name}`,
     content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
+      `suncode-${tmpl.name}`,
       resolvePlaceholdersNeutral(tmpl.content, ctx),
     ),
   }));
@@ -431,9 +431,9 @@ export function resolveAllAsSkillsNeutral(
     ...getSkillTemplates(),
   ];
   return templates.map((tmpl) => ({
-    name: `trellis-${tmpl.name}`,
+    name: `suncode-${tmpl.name}`,
     content: wrapWithSkillFrontmatter(
-      `trellis-${tmpl.name}`,
+      `suncode-${tmpl.name}`,
       resolvePlaceholdersNeutral(tmpl.content, ctx),
     ),
   }));
@@ -551,7 +551,7 @@ export function buildPullBasedPrelude(agentType: SubAgentType): string {
   // context buckets keyed by role (not by platform-visible agent name).
   const jsonl = agentType === "check" ? "check.jsonl" : "implement.jsonl";
 
-  return replacePythonCommandLiterals(`## Required: Load Trellis Context First
+  return replacePythonCommandLiterals(`## Required: Load Suncode Context First
 
 This platform does NOT auto-inject task context via hook. Before doing anything else, you MUST load context yourself.
 
@@ -610,13 +610,13 @@ export function injectPullBasedPreludeToml(
   return content.replace(re, `$1$2${prelude}`);
 }
 
-/** Best-effort detect agent type from filename ("trellis-implement.md" → "implement").
+/** Best-effort detect agent type from filename ("suncode-implement.md" → "implement").
  *  Returns null for research and unknown names — they skip the prelude.
  */
 export function detectSubAgentType(name: string): SubAgentType | null {
   const base = name.replace(/\.(md|toml|prompt\.md)$/, "");
-  if (base === "trellis-implement" || base === "trellis-check") {
-    return base === "trellis-implement" ? "implement" : "check";
+  if (base === "suncode-implement" || base === "suncode-check") {
+    return base === "suncode-implement" ? "implement" : "check";
   }
   return null;
 }
@@ -675,7 +675,7 @@ function mapLegacyToolToCopilot(tool: string): string[] {
       return ["search"];
     case "Bash":
       return ["execute"];
-    // Generic MCP wildcard — used by trellis-research to opt into "any MCP
+    // Generic MCP wildcard — used by suncode-research to opt into "any MCP
     // tool the user has configured" without locking the source template to a
     // specific provider. Claude Code parses wildcards as glob-match-at-runtime
     // (no silent agent-registration skip if nothing matches), so this is the

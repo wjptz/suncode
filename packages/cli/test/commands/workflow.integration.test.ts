@@ -1,12 +1,12 @@
 /**
- * Integration tests for `trellis workflow` and the init/update hash boundary
+ * Integration tests for `suncode workflow` and the init/update hash boundary
  * for non-native workflow selection.
  *
  * Coverage:
- * - `trellis workflow --template native`: writes bundled content, keeps hash.
- * - `trellis workflow --template tdd`: writes marketplace content, removes hash.
- * - `trellis init --workflow tdd`: marketplace content is written, hash removed.
- * - `trellis update` after switch to tdd does NOT silently restore native.
+ * - `suncode workflow --template native`: writes bundled content, keeps hash.
+ * - `suncode workflow --template tdd`: writes marketplace content, removes hash.
+ * - `suncode init --workflow tdd`: marketplace content is written, hash removed.
+ * - `suncode update` after switch to tdd does NOT silently restore native.
  * - Non-interactive modified workflow.md fails without --force / --create-new.
  * - `--create-new` writes `.new` and leaves workflow.md + hash untouched.
  */
@@ -83,7 +83,7 @@ function stubMarketplaceFetch(): void {
   );
 }
 
-describe("trellis workflow integration", () => {
+describe("suncode workflow integration", () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -172,7 +172,7 @@ describe("trellis workflow integration", () => {
     ).rejects.toThrow(/workflow template/i);
   });
 
-  it("trellis workflow --template native refreshes hash after switching from tdd", async () => {
+  it("suncode workflow --template native refreshes hash after switching from tdd", async () => {
     stubMarketplaceFetch();
     await init({ yes: true, workflow: "tdd" } as Record<string, unknown>);
     expect(
@@ -192,7 +192,7 @@ describe("trellis workflow integration", () => {
     expect(loadHashes(tmpDir)[PATHS.WORKFLOW_GUIDE_FILE]).toBeTruthy();
   });
 
-  it("trellis workflow --template tdd writes marketplace content and removes the hash", async () => {
+  it("suncode workflow --template tdd writes marketplace content and removes the hash", async () => {
     stubMarketplaceFetch();
     await init({ yes: true });
     expect(loadHashes(tmpDir)[PATHS.WORKFLOW_GUIDE_FILE]).toBeTruthy();
@@ -281,7 +281,7 @@ describe("trellis workflow integration", () => {
     expect(loadHashes(tmpDir)[PATHS.WORKFLOW_GUIDE_FILE]).toBe(originalHash);
   });
 
-  it("trellis update after switching to tdd does not silently restore native workflow", async () => {
+  it("suncode update after switching to tdd does not silently restore native workflow", async () => {
     stubMarketplaceFetch();
     await init({ yes: true });
     await runWorkflowCommand({ template: "tdd" });

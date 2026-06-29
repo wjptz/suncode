@@ -1,4 +1,4 @@
-# Trellis Brainstorm
+# Suncode Brainstorm
 
 ## Non-Negotiable Interview Contract
 
@@ -20,7 +20,7 @@ Use this skill during Phase 1 planning to turn the user's request into clear req
 
 ## Preconditions
 
-Use this skill only after task-creation consent has been given and the user is ready to enter Trellis planning.
+Use this skill only after task-creation consent has been given and the user is ready to enter Suncode planning.
 
 If no task exists yet, create one:
 
@@ -38,7 +38,7 @@ Use a concise title from the user's request. Use a slug without a date prefix. `
 2. Inspect available evidence before asking questions:
    - code, tests, fixtures, and configs
    - README files, docs, existing specs, and domain notes
-   - related Trellis tasks, research files, and session history when present
+   - related Suncode tasks, research files, and session history when present
 3. Separate what you found into:
    - confirmed facts
    - product intent still needed from the user
@@ -136,7 +136,7 @@ For each component of the current plan:
 
 Lightweight tasks may have only `prd.md`. Complex tasks must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
 
-`implement.md` is not a replacement for `implement.jsonl`. On sub-agent-dispatch workflows, `implement.jsonl` and `check.jsonl` must each contain at least one real spec/research entry before `task.py start`; the seed `_example` row does not count. Inline workflows skip this JSONL gate because Phase 2 loads context through `trellis-before-dev`.
+`implement.md` is not a replacement for `implement.jsonl`. On sub-agent-dispatch workflows, `implement.jsonl` and `check.jsonl` must each contain at least one real spec/research entry before `task.py start`; the seed `_example` row does not count. Inline workflows skip this JSONL gate because Phase 2 loads context through `suncode-before-dev`.
 
 ## PRD Convergence Pass
 

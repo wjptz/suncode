@@ -15,9 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../..");
 
 const EXPECTED_AGENT_NAMES = [
-  "trellis-check",
-  "trellis-implement",
-  "trellis-research",
+  "suncode-check",
+  "suncode-implement",
+  "suncode-research",
 ];
 
 // Shared skills are sourced from common/ via resolveAllAsSkills (written to
@@ -35,8 +35,8 @@ describe("trae shared skills (from common source)", () => {
   it("does not include platform-specific syntax in resolved output", () => {
     const skills = resolveAllAsSkills(AI_TOOLS.trae.templateContext);
     for (const skill of skills) {
-      // Trae uses /trellis- prefix, not /trellis:
-      expect(skill.content).not.toContain("/trellis:");
+      // Trae uses /suncode- prefix, not /suncode:
+      expect(skill.content).not.toContain("/suncode:");
       expect(skill.content).not.toContain(".claude/");
       expect(skill.content).not.toContain(".cursor/");
     }
@@ -78,12 +78,12 @@ describe("trae getAllAgents", () => {
 // Trae sub-agent recursion guard (mirrors codex issue #234)
 // =============================================================================
 //
-// trellis-implement / trellis-check agent markdown MUST contain a hard recursion
+// suncode-implement / suncode-check agent markdown MUST contain a hard recursion
 // guard so the dispatched sub-agent does not spawn another
-// trellis-implement / trellis-check sub-agent.
+// suncode-implement / suncode-check sub-agent.
 describe("trae sub-agent recursion guard", () => {
-  for (const name of ["trellis-implement", "trellis-check"] as const) {
-    it(`${name}.md forbids spawning trellis-implement / trellis-check`, () => {
+  for (const name of ["suncode-implement", "suncode-check"] as const) {
+    it(`${name}.md forbids spawning suncode-implement / suncode-check`, () => {
       const mdPath = path.join(
         repoRoot,
         "packages/cli/src/templates/trae/agents",
@@ -93,8 +93,8 @@ describe("trae sub-agent recursion guard", () => {
       // Hard prohibition keyword
       expect(content).toMatch(/Do NOT spawn/i);
       // Mentions both sibling agent kinds explicitly
-      expect(content).toContain("trellis-implement");
-      expect(content).toContain("trellis-check");
+      expect(content).toContain("suncode-implement");
+      expect(content).toContain("suncode-check");
       // Mentions the leakage source so the reader knows why
       expect(content).toMatch(
         /SessionStart|dispatch.*main session|breadcrumb/i,
@@ -209,10 +209,10 @@ describe("trae pull-based prelude injection (class-2)", () => {
     const agents = applyPullBasedPreludeMarkdown(getAllAgents());
     for (const agent of agents) {
       if (
-        agent.name === "trellis-implement" ||
-        agent.name === "trellis-check"
+        agent.name === "suncode-implement" ||
+        agent.name === "suncode-check"
       ) {
-        expect(agent.content).toContain("Load Trellis Context First");
+        expect(agent.content).toContain("Load Suncode Context First");
         expect(agent.content).toContain("task.py current --source");
       }
     }
@@ -220,9 +220,9 @@ describe("trae pull-based prelude injection (class-2)", () => {
 
   it("research agent does not get the prelude (no task context needed)", () => {
     const agents = applyPullBasedPreludeMarkdown(getAllAgents());
-    const research = agents.find((a) => a.name === "trellis-research");
+    const research = agents.find((a) => a.name === "suncode-research");
     expect(research).toBeDefined();
     if (!research) return; // guard for type-safety
-    expect(research.content).not.toContain("Load Trellis Context First");
+    expect(research.content).not.toContain("Load Suncode Context First");
   });
 });

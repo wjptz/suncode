@@ -70,12 +70,12 @@ describe("isManagedPath", () => {
     expect(isManagedPath(".codex/agents/check.toml")).toBe(true);
     expect(isManagedPath(".agent/workflows/start.md")).toBe(true);
     expect(isManagedPath(".kiro/skills/start/SKILL.md")).toBe(true);
-    expect(isManagedPath(".devin/workflows/trellis-start.md")).toBe(true);
+    expect(isManagedPath(".devin/workflows/suncode-start.md")).toBe(true);
     expect(isManagedPath(".github/prompts/start.prompt.md")).toBe(true);
     expect(isManagedPath(".github/copilot/hooks/session-start.py")).toBe(true);
-    expect(isManagedPath(".github/hooks/trellis.json")).toBe(true);
-    expect(isManagedPath(".pi/extensions/trellis/index.ts")).toBe(true);
-    expect(isManagedPath(".pi/prompts/trellis-continue.md")).toBe(true);
+    expect(isManagedPath(".github/hooks/suncode.json")).toBe(true);
+    expect(isManagedPath(".pi/extensions/suncode/index.ts")).toBe(true);
+    expect(isManagedPath(".pi/prompts/suncode-continue.md")).toBe(true);
   });
 
   // Positive: exact match (startsWith(d + "/") = false, === d = true)
@@ -142,13 +142,13 @@ describe("isManagedPath", () => {
     expect(isManagedPath(".codex\\agents\\check.toml")).toBe(true);
     expect(isManagedPath(".agent\\workflows\\start.md")).toBe(true);
     expect(isManagedPath(".kiro\\skills\\start\\SKILL.md")).toBe(true);
-    expect(isManagedPath(".devin\\workflows\\trellis-start.md")).toBe(true);
+    expect(isManagedPath(".devin\\workflows\\suncode-start.md")).toBe(true);
     expect(isManagedPath(".github\\prompts\\start.prompt.md")).toBe(true);
     expect(isManagedPath(".github\\copilot\\hooks\\session-start.py")).toBe(
       true,
     );
-    expect(isManagedPath(".github\\hooks\\trellis.json")).toBe(true);
-    expect(isManagedPath(".pi\\extensions\\trellis\\index.ts")).toBe(true);
+    expect(isManagedPath(".github\\hooks\\suncode.json")).toBe(true);
+    expect(isManagedPath(".pi\\extensions\\suncode\\index.ts")).toBe(true);
   });
 
   // Mixed separators
@@ -364,18 +364,18 @@ describe("collectPlatformTemplates", () => {
     for (const [id, skillRoot] of Object.entries(SKILL_ROOTS)) {
       const result = collectPlatformTemplates(id as AITool);
       expect(result, `${id} should have template tracking`).toBeInstanceOf(Map);
-      expect(result?.has(`${skillRoot}/trellis-meta/SKILL.md`)).toBe(true);
+      expect(result?.has(`${skillRoot}/suncode-meta/SKILL.md`)).toBe(true);
       expect(
         result?.has(
-          `${skillRoot}/trellis-meta/references/local-architecture/overview.md`,
+          `${skillRoot}/suncode-meta/references/local-architecture/overview.md`,
         ),
       ).toBe(true);
       expect(
-        result?.has(`${skillRoot}/trellis-spec-bootstrap/SKILL.md`),
+        result?.has(`${skillRoot}/suncode-spec-bootstrap/SKILL.md`),
       ).toBe(true);
       expect(
         result?.has(
-          `${skillRoot}/trellis-spec-bootstrap/references/spec-writing.md`,
+          `${skillRoot}/suncode-spec-bootstrap/references/spec-writing.md`,
         ),
       ).toBe(true);
     }
@@ -404,16 +404,16 @@ describe("collectPlatformTemplates", () => {
     expect(result?.has(".github/prompts/finish-work.prompt.md")).toBe(true);
     expect(result?.has(".github/prompts/continue.prompt.md")).toBe(true);
     expect(result?.has(".github/copilot/hooks.json")).toBe(true);
-    expect(result?.has(".github/hooks/trellis.json")).toBe(true);
+    expect(result?.has(".github/hooks/suncode.json")).toBe(true);
   });
 
   it("pi collectTemplates includes prompts, agents, extension, and settings", () => {
     const result = collectPlatformTemplates("pi");
     expect(result).toBeInstanceOf(Map);
-    expect(result?.has(".pi/prompts/trellis-start.md")).toBe(true);
-    expect(result?.has(".pi/prompts/trellis-finish-work.md")).toBe(true);
-    expect(result?.has(".pi/agents/trellis-implement.md")).toBe(true);
-    expect(result?.has(".pi/extensions/trellis/index.ts")).toBe(true);
+    expect(result?.has(".pi/prompts/suncode-start.md")).toBe(true);
+    expect(result?.has(".pi/prompts/suncode-finish-work.md")).toBe(true);
+    expect(result?.has(".pi/agents/suncode-implement.md")).toBe(true);
+    expect(result?.has(".pi/extensions/suncode/index.ts")).toBe(true);
     expect(result?.has(".pi/settings.json")).toBe(true);
   });
 });

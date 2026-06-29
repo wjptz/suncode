@@ -1,12 +1,12 @@
 /* global process */
 /**
- * Trellis Session Start Plugin
+ * Suncode Session Start Plugin
  *
  * Injects context when user sends the first message in a session.
  * Uses OpenCode's chat.message hook directly so the context persists in history.
  */
 
-import { TrellisContext, contextCollector, debugLog, isTrellisSubagent } from "../lib/trellis-context.js"
+import { SuncodeContext, contextCollector, debugLog, isSuncodeSubagent } from "../lib/suncode-context.js"
 import {
   buildSessionContext,
   hasPersistedInjectedContext,
@@ -15,7 +15,7 @@ import {
 
 // OpenCode 1.2.x expects plugins to be factory functions (see inject-subagent-context.js comment).
 export default async ({ directory, client }) => {
-  const ctx = new TrellisContext(directory)
+  const ctx = new SuncodeContext(directory)
   debugLog("session", "Plugin loaded, directory:", directory)
 
   return {
@@ -43,11 +43,11 @@ export default async ({ directory, client }) => {
         const agent = input.agent || "unknown"
         debugLog("session", "chat.message called, sessionID:", sessionID, "agent:", agent)
 
-        // Skip Trellis sub-agent turns — sub-agent context is injected by
+        // Skip Suncode sub-agent turns — sub-agent context is injected by
         // `inject-subagent-context.js` on the parent's tool.execute.before;
         // re-injecting the main-session SessionStart here would drown that.
-        if (isTrellisSubagent(input)) {
-          debugLog("session", "Skipping trellis subagent turn:", agent)
+        if (isSuncodeSubagent(input)) {
+          debugLog("session", "Skipping suncode subagent turn:", agent)
           return
         }
 
@@ -68,7 +68,7 @@ export default async ({ directory, client }) => {
 
         if (await hasPersistedInjectedContext(client, ctx.directory, sessionID)) {
           contextCollector.markProcessed(sessionID)
-          debugLog("session", "Skipping - session already contains persisted Trellis context")
+          debugLog("session", "Skipping - session already contains persisted Suncode context")
           return
         }
 

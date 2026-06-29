@@ -27,7 +27,7 @@ describe("registry-config", () => {
   it("writes and reads registry spec source", () => {
     fs.writeFileSync(
       path.join(tmpDir, ".trellis", "config.yaml"),
-      "# Trellis Configuration\n",
+      "# Suncode Configuration\n",
       "utf-8",
     );
 
@@ -41,7 +41,7 @@ describe("registry-config", () => {
   it("writes and reads registry marketplace template source", () => {
     fs.writeFileSync(
       path.join(tmpDir, ".trellis", "config.yaml"),
-      "# Trellis Configuration\n",
+      "# Suncode Configuration\n",
       "utf-8",
     );
 
@@ -59,17 +59,17 @@ describe("registry-config", () => {
   it("preserves self-hosted SSH registry source strings", () => {
     fs.writeFileSync(
       path.join(tmpDir, ".trellis", "config.yaml"),
-      "# Trellis Configuration\n",
+      "# Suncode Configuration\n",
       "utf-8",
     );
 
     writeSpecRegistryConfig(tmpDir, {
-      source: "git@git.ppdaicorp.com:xionghongwei/trellis-spec.git",
+      source: "git@git.ppdaicorp.com:xionghongwei/suncode-spec.git",
       template: "golang-spec",
     });
 
     expect(loadSpecRegistryConfig(tmpDir)).toEqual({
-      source: "git@git.ppdaicorp.com:xionghongwei/trellis-spec.git",
+      source: "git@git.ppdaicorp.com:xionghongwei/suncode-spec.git",
       template: "golang-spec",
     });
   });
@@ -113,14 +113,14 @@ describe("registry-config", () => {
     );
 
     writeSpecRegistryConfig(tmpDir, {
-      source: "git@git.ppdaicorp.com:xionghongwei/trellis-spec.git",
+      source: "git@git.ppdaicorp.com:xionghongwei/suncode-spec.git",
       template: "golang-spec",
     });
 
     const config = fs.readFileSync(configPath, "utf-8");
     expect(config.match(/^registry:/gm)).toHaveLength(1);
     expect(loadSpecRegistryConfig(tmpDir)).toEqual({
-      source: "git@git.ppdaicorp.com:xionghongwei/trellis-spec.git",
+      source: "git@git.ppdaicorp.com:xionghongwei/suncode-spec.git",
       template: "golang-spec",
     });
   });

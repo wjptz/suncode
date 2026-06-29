@@ -349,7 +349,7 @@ export interface InitializeHashesOptions {
  *
  * `.trellis/` is still walked recursively (with `EXCLUDE_FROM_HASH`) because
  * uninstall removes `.trellis/` wholesale via `rm -rf` regardless of manifest
- * content — accuracy there doesn't affect data-loss, only `trellis update`
+ * content — accuracy there doesn't affect data-loss, only `suncode update`
  * 3-way-merge fidelity (preserved by the existing walk).
  *
  * @returns Number of files hashed in the final manifest.
@@ -380,7 +380,7 @@ export function initializeHashes(
   }
 
   // .trellis/ workflow tree: still walked recursively. Accuracy here is for
-  // `trellis update`'s 3-way merge of workflow.md / config.yaml / scripts;
+  // `suncode update`'s 3-way merge of workflow.md / config.yaml / scripts;
   // uninstall removes .trellis/ wholesale so it does not matter for the
   // data-loss bug this contract addresses.
   const files = collectFiles(cwd, ".trellis");

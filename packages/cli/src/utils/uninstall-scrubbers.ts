@@ -1,5 +1,5 @@
 /**
- * Scrubbers for structured config files during `trellis uninstall`.
+ * Scrubbers for structured config files during `suncode uninstall`.
  *
  * Each scrubber takes the file content (and any context it needs) and returns
  * `{ content, fullyEmpty }`:
@@ -224,7 +224,7 @@ export function scrubOpencodePackageJson(content: string): ScrubResult {
  * The `extensions`/`skills`/`prompts` arrays are paths relative to `.pi/`. We
  * remove the exact entries that the Pi configurator emits.
  */
-const PI_TRELLIS_EXTENSION = "./extensions/trellis/index.ts";
+const PI_TRELLIS_EXTENSION = "./extensions/suncode/index.ts";
 const PI_TRELLIS_SKILLS = "./skills";
 const PI_TRELLIS_PROMPTS = "./prompts";
 const PI_SUBAGENTS_PACKAGE = "npm:pi-subagents";
@@ -324,7 +324,7 @@ export function scrubPiSettings(content: string): ScrubResult {
  */
 export function scrubCodexConfigToml(content: string): ScrubResult {
   const trellisCommentMarkers = [
-    "Project-scoped Codex defaults for Trellis workflows.",
+    "Project-scoped Codex defaults for Suncode workflows.",
     "Codex loads this after ~/.codex/config.toml when you work in this project.",
     "Keep AGENTS.md as the primary project instruction file.",
     "NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.",

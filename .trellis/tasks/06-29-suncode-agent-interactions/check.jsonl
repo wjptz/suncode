@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/cli/backend/platform-integration.md", "reason": "Check that every affected platform keeps its expected command format, command set, and sub-agent context behavior."}
+{"file": ".trellis/spec/cli/backend/configurator-shared.md", "reason": "Check init/update rendering parity, neutral .agents/skills output, bundled skill handling, and shared resolver invariants."}
+{"file": ".trellis/spec/cli/unit-test/conventions.md", "reason": "Check that changed generated behavior has appropriate updated tests and that test assertions are meaningful."}
+{"file": ".trellis/tasks/archive/2026-06/06-29-suncode-full-migration/research/phase-0-inventory.md", "reason": "Check remaining Trellis references against the migration classification rules."}

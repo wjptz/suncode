@@ -1,8 +1,8 @@
 /**
- * Trellis workflow templates
+ * Suncode workflow templates
  *
  * These are GENERIC templates for user projects.
- * Do NOT use Trellis project's own .trellis/ directory (which may be customized).
+ * Do NOT use Suncode project's own .trellis/ directory (which may be customized).
  *
  * Directory structure:
  *   trellis/
@@ -11,7 +11,7 @@
  *   │   ├── common/           # Shared utilities (Python)
  *   │   └── *.py              # Main scripts (Python)
  *   ├── agents/                # Channel runtime agent definitions
- *   │   └── *.md               # Loaded by `trellis channel spawn --agent <name>`
+ *   │   └── *.md               # Loaded by `suncode channel spawn --agent <name>`
  *   ├── scripts-shell-archive/ # Archived shell scripts (for reference)
  *   ├── workflow.md           # Workflow guide
  *   ├── config.yaml            # Trellis configuration
@@ -77,8 +77,8 @@ export const gitignoreTemplate = readTemplate("gitignore.txt");
 
 // Channel runtime agent definitions (loaded by
 // `packages/cli/src/commands/channel/agent-loader.ts` from `.trellis/agents/`).
-// These are platform-agnostic Trellis runtime files dispatched at `trellis init`
-// and refreshed by `trellis update`.
+// These are platform-agnostic Trellis runtime files dispatched at `suncode init`
+// and refreshed by `suncode update`.
 export const implementAgentTemplate = readTemplate("agents/implement.md");
 export const checkAgentTemplate = readTemplate("agents/check.md");
 
@@ -128,8 +128,8 @@ export function getAllScripts(): Map<string, string> {
  * Get all channel runtime agent definitions as a map of relative path
  * (under `.trellis/agents/`) to content.
  *
- * Consumed by `trellis init` (to dispatch on first install) and by
- * `trellis update` (to backfill missing files and surface conflicts on edited
+ * Consumed by `suncode init` (to dispatch on first install) and by
+ * `suncode update` (to backfill missing files and surface conflicts on edited
  * ones via the standard hash machinery).
  */
 export function getAllAgents(): Map<string, string> {

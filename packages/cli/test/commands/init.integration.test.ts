@@ -113,7 +113,7 @@ describe("init() integration", () => {
     // Built-in multi-file skills are installed for default platforms.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".claude", "skills", "trellis-meta", "SKILL.md"),
+        path.join(tmpDir, ".claude", "skills", "suncode-meta", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
@@ -122,7 +122,7 @@ describe("init() integration", () => {
           tmpDir,
           ".claude",
           "skills",
-          "trellis-spec-bootstrap",
+          "suncode-spec-bootstrap",
           "SKILL.md",
         ),
       ),
@@ -133,7 +133,7 @@ describe("init() integration", () => {
           tmpDir,
           ".cursor",
           "skills",
-          "trellis-meta",
+          "suncode-meta",
           "references",
           "local-architecture",
           "overview.md",
@@ -175,7 +175,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".claude", "skills", "trellis-meta", "SKILL.md"),
+        path.join(tmpDir, ".claude", "skills", "suncode-meta", "SKILL.md"),
       ),
     ).toBe(true);
   });
@@ -204,10 +204,10 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(true);
     // Codex SessionStart hook was removed (de-recursion fix); the
     // <trellis-bootstrap> notice in inject-workflow-state.py invokes
-    // `$trellis-start` to load workflow context, so the skill is emitted.
+    // `$suncode-start` to load workflow context, so the skill is emitted.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "trellis-start", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "suncode-start", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
@@ -216,19 +216,19 @@ describe("init() integration", () => {
           tmpDir,
           ".agents",
           "skills",
-          "trellis-finish-work",
+          "suncode-finish-work",
           "SKILL.md",
         ),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "trellis-continue", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "suncode-continue", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "trellis-meta", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "suncode-meta", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
@@ -237,7 +237,7 @@ describe("init() integration", () => {
           tmpDir,
           ".agents",
           "skills",
-          "trellis-meta",
+          "suncode-meta",
           "references",
           "local-architecture",
           "overview.md",
@@ -246,7 +246,7 @@ describe("init() integration", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".codex", "skills", "trellis-meta", "SKILL.md"),
+        path.join(tmpDir, ".codex", "skills", "suncode-meta", "SKILL.md"),
       ),
     ).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".codex", "config.toml"))).toBe(
@@ -254,7 +254,7 @@ describe("init() integration", () => {
     );
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".codex", "agents", "trellis-check.toml"),
+        path.join(tmpDir, ".codex", "agents", "suncode-check.toml"),
       ),
     ).toBe(true);
     // parallel skill removed — platform-native worktree features used instead
@@ -277,15 +277,15 @@ describe("init() integration", () => {
     };
     const hashes = hashesFile.hashes ?? {};
     const trackedPaths = Object.keys(hashes).map((p) => p.replace(/\\/g, "/"));
-    expect(trackedPaths).toContain(".agents/skills/trellis-meta/SKILL.md");
+    expect(trackedPaths).toContain(".agents/skills/suncode-meta/SKILL.md");
     expect(trackedPaths).toContain(
-      ".agents/skills/trellis-meta/references/local-architecture/overview.md",
+      ".agents/skills/suncode-meta/references/local-architecture/overview.md",
     );
     expect(trackedPaths).toContain(
-      ".agents/skills/trellis-spec-bootstrap/SKILL.md",
+      ".agents/skills/suncode-spec-bootstrap/SKILL.md",
     );
     expect(trackedPaths).toContain(
-      ".agents/skills/trellis-spec-bootstrap/references/spec-writing.md",
+      ".agents/skills/suncode-spec-bootstrap/references/spec-writing.md",
     );
   });
 
@@ -293,25 +293,25 @@ describe("init() integration", () => {
     await init({ yes: true, kiro: true });
 
     expect(fs.existsSync(path.join(tmpDir, ".kiro", "skills"))).toBe(true);
-    // Kiro is agent-capable → trellis-start skill not emitted.
+    // Kiro is agent-capable → suncode-start skill not emitted.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".kiro", "skills", "trellis-start", "SKILL.md"),
+        path.join(tmpDir, ".kiro", "skills", "suncode-start", "SKILL.md"),
       ),
     ).toBe(false);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".kiro", "skills", "trellis-finish-work", "SKILL.md"),
+        path.join(tmpDir, ".kiro", "skills", "suncode-finish-work", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".kiro", "skills", "trellis-continue", "SKILL.md"),
+        path.join(tmpDir, ".kiro", "skills", "suncode-continue", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".kiro", "skills", "trellis-check", "SKILL.md"),
+        path.join(tmpDir, ".kiro", "skills", "suncode-check", "SKILL.md"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
@@ -336,7 +336,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".devin", "workflows"))).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".devin", "workflows", "trellis-start.md"),
+        path.join(tmpDir, ".devin", "workflows", "suncode-start.md"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
@@ -350,7 +350,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".devin", "workflows"))).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".devin", "workflows", "trellis-start.md"),
+        path.join(tmpDir, ".devin", "workflows", "suncode-start.md"),
       ),
     ).toBe(true);
     // Should NOT write the old .windsurf/ directory.
@@ -364,28 +364,28 @@ describe("init() integration", () => {
 
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".qoder", "commands", "trellis-finish-work.md"),
+        path.join(tmpDir, ".qoder", "commands", "suncode-finish-work.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".qoder", "skills", "trellis-brainstorm", "SKILL.md"),
+        path.join(tmpDir, ".qoder", "skills", "suncode-brainstorm", "SKILL.md"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
   });
 
-  it("#3h codebuddy platform creates .codebuddy/commands/trellis", async () => {
+  it("#3h codebuddy platform creates .codebuddy/commands/suncode", async () => {
     await init({ yes: true, codebuddy: true });
 
     expect(
-      fs.existsSync(path.join(tmpDir, ".codebuddy", "commands", "trellis")),
+      fs.existsSync(path.join(tmpDir, ".codebuddy", "commands", "suncode")),
     ).toBe(true);
     // CodeBuddy is agent-capable → start.md not emitted.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".codebuddy", "commands", "trellis", "start.md"),
+        path.join(tmpDir, ".codebuddy", "commands", "suncode", "start.md"),
       ),
     ).toBe(false);
     expect(
@@ -394,14 +394,14 @@ describe("init() integration", () => {
           tmpDir,
           ".codebuddy",
           "commands",
-          "trellis",
+          "suncode",
           "finish-work.md",
         ),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".codebuddy", "commands", "trellis", "continue.md"),
+        path.join(tmpDir, ".codebuddy", "commands", "suncode", "continue.md"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
@@ -439,7 +439,7 @@ describe("init() integration", () => {
       fs.existsSync(path.join(tmpDir, ".github", "copilot", "hooks.json")),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".github", "hooks", "trellis.json")),
+      fs.existsSync(path.join(tmpDir, ".github", "hooks", "suncode.json")),
     ).toBe(true);
 
     const hashFile = path.join(
@@ -457,31 +457,31 @@ describe("init() integration", () => {
     expect(trackedPaths).toContain(".github/prompts/finish-work.prompt.md");
     expect(trackedPaths).toContain(".github/prompts/continue.prompt.md");
     expect(trackedPaths).toContain(".github/copilot/hooks.json");
-    expect(trackedPaths).toContain(".github/hooks/trellis.json");
+    expect(trackedPaths).toContain(".github/hooks/suncode.json");
 
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
   });
 
-  it("#3e gemini platform creates .gemini/commands/trellis", async () => {
+  it("#3e gemini platform creates .gemini/commands/suncode", async () => {
     await init({ yes: true, gemini: true });
     expect(
-      fs.existsSync(path.join(tmpDir, ".gemini", "commands", "trellis")),
+      fs.existsSync(path.join(tmpDir, ".gemini", "commands", "suncode")),
     ).toBe(true);
     // Gemini is agent-capable → start.toml not emitted.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".gemini", "commands", "trellis", "start.toml"),
+        path.join(tmpDir, ".gemini", "commands", "suncode", "start.toml"),
       ),
     ).toBe(false);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".gemini", "commands", "trellis", "finish-work.toml"),
+        path.join(tmpDir, ".gemini", "commands", "suncode", "finish-work.toml"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".gemini", "commands", "trellis", "continue.toml"),
+        path.join(tmpDir, ".gemini", "commands", "suncode", "continue.toml"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
@@ -493,23 +493,23 @@ describe("init() integration", () => {
     // Droid is agent-capable → start.md not emitted.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".factory", "commands", "trellis", "start.md"),
+        path.join(tmpDir, ".factory", "commands", "suncode", "start.md"),
       ),
     ).toBe(false);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".factory", "commands", "trellis", "finish-work.md"),
+        path.join(tmpDir, ".factory", "commands", "suncode", "finish-work.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".factory", "commands", "trellis", "continue.md"),
+        path.join(tmpDir, ".factory", "commands", "suncode", "continue.md"),
       ),
     ).toBe(true);
     // Skills (trellis- prefix)
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".factory", "skills", "trellis-check", "SKILL.md"),
+        path.join(tmpDir, ".factory", "skills", "suncode-check", "SKILL.md"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
@@ -521,27 +521,27 @@ describe("init() integration", () => {
 
     expect(fs.existsSync(path.join(tmpDir, ".pi", "settings.json"))).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "trellis-start.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "suncode-start.md")),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "prompts", "trellis-finish-work.md"),
+        path.join(tmpDir, ".pi", "prompts", "suncode-finish-work.md"),
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "trellis-continue.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "suncode-continue.md")),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "skills", "trellis-check", "SKILL.md"),
+        path.join(tmpDir, ".pi", "skills", "suncode-check", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "agents", "trellis-implement.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "agents", "suncode-implement.md")),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "extensions", "trellis", "index.ts"),
+        path.join(tmpDir, ".pi", "extensions", "suncode", "index.ts"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".pi", "hooks"))).toBe(false);
@@ -571,7 +571,7 @@ describe("init() integration", () => {
   it("#3l trae platform writes hooks, commands, agents, and tracked templates", async () => {
     await init({ yes: true, trae: true });
 
-    // Trae is agentCapable && hasHooks, so trellis-start is filtered like other
+    // Trae is agentCapable && hasHooks, so suncode-start is filtered like other
     // SessionStart-backed platforms. The generated agents are still pull-based
     // for sub-agent task context because Trae hooks cannot mutate sub-agent prompts.
     expect(fs.existsSync(path.join(tmpDir, ".trae", "hooks.json"))).toBe(true);
@@ -585,23 +585,23 @@ describe("init() integration", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".trae", "commands", "trellis-finish-work.md"),
+        path.join(tmpDir, ".trae", "commands", "suncode-finish-work.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".trae", "commands", "trellis-start.md"),
+        path.join(tmpDir, ".trae", "commands", "suncode-start.md"),
       ),
     ).toBe(false);
     expect(
-      fs.existsSync(path.join(tmpDir, ".trae", "agents", "trellis-implement.md")),
+      fs.existsSync(path.join(tmpDir, ".trae", "agents", "suncode-implement.md")),
     ).toBe(true);
     expect(
       fs.readFileSync(
-        path.join(tmpDir, ".trae", "agents", "trellis-implement.md"),
+        path.join(tmpDir, ".trae", "agents", "suncode-implement.md"),
         "utf-8",
       ),
-    ).toContain("Load Trellis Context First");
+    ).toContain("Load Suncode Context First");
 
     const hashFile = path.join(
       tmpDir,
@@ -629,21 +629,21 @@ describe("init() integration", () => {
 
     // ZCode is agentCapable && !hasHooks, so start must be user-invocable.
     // It has a private command surface, so command fallbacks stay under
-    // .zcode/commands/trellis/ instead of the shared .agents/skills/ path
+    // .zcode/commands/suncode/ instead of the shared .agents/skills/ path
     // that Codex also owns.
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "trellis-start", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "suncode-start", "SKILL.md"),
       ),
     ).toBe(false);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".zcode", "commands", "trellis", "start.md"),
+        path.join(tmpDir, ".zcode", "commands", "suncode", "start.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".zcode", "cli", "agents", "trellis-implement.md"),
+        path.join(tmpDir, ".zcode", "cli", "agents", "suncode-implement.md"),
       ),
     ).toBe(true);
   });
@@ -652,32 +652,32 @@ describe("init() integration", () => {
     await init({ yes: true, opencode: true });
 
     // OpenCode is agentCapable && !hasHooks per registry (plugins/session-start.js
-    // provides equivalent injection, but the user-invocable /trellis:start is
+    // provides equivalent injection, but the user-invocable /suncode:start is
     // still emitted as fallback for plugin failures / manual reload).
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".opencode", "commands", "trellis", "start.md"),
+        path.join(tmpDir, ".opencode", "commands", "suncode", "start.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".opencode", "commands", "trellis", "finish-work.md"),
+        path.join(tmpDir, ".opencode", "commands", "suncode", "finish-work.md"),
       ),
     ).toBe(true);
   });
 
-  it("#3o reasonix platform emits trellis-start skill without runAs:subagent", async () => {
+  it("#3o reasonix platform emits suncode-start skill without runAs:subagent", async () => {
     await init({ yes: true, reasonix: true });
 
-    // Reasonix is agentCapable && !hasHooks → trellis-start ships as a plain
+    // Reasonix is agentCapable && !hasHooks → suncode-start ships as a plain
     // user-invocable skill. It must NOT carry the `runAs: subagent` frontmatter
-    // — that field is reserved for trellis-implement / trellis-check which run
+    // — that field is reserved for suncode-implement / suncode-check which run
     // as isolated subagent loops.
     const startSkill = path.join(
       tmpDir,
       ".reasonix",
       "skills",
-      "trellis-start",
+      "suncode-start",
       "SKILL.md",
     );
     expect(fs.existsSync(startSkill)).toBe(true);

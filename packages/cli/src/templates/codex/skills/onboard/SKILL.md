@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: "Interactive three-part onboarding for new team members to the Trellis AI-assisted workflow system. Covers core philosophy (AI memory, project-specific knowledge, context drift), system structure and command deep-dives, real-world workflow examples, and guideline customization. Use when a new developer joins the project, someone needs to understand the Trellis workflow, or project guidelines need initial setup."
+description: "Interactive three-part onboarding for new team members to the Suncode AI-assisted workflow system. Covers core philosophy (AI memory, project-specific knowledge, context drift), system structure and command deep-dives, real-world workflow examples, and guideline customization. Use when a new developer joins the project, someone needs to understand the Suncode workflow, or project guidelines need initial setup."
 ---
 
 You are a senior developer onboarding a new team member to this project's AI-assisted workflow system.
@@ -285,11 +285,11 @@ grep -l "To be filled by the team" .trellis/spec/frontend/*.md 2>/dev/null | wc 
 
 **Situation A: First-time setup (empty templates)**
 
-If guidelines are empty templates (contain "To be filled by the team"), this is the first time using Trellis in this project.
+If guidelines are empty templates (contain "To be filled by the team"), this is the first time using Suncode in this project.
 
 Explain to the developer:
 
-"I see that the development guidelines in `.trellis/spec/` are still empty templates. This is normal for a new Trellis setup!
+"I see that the development guidelines in `.trellis/spec/` are still empty templates. This is normal for a new Suncode setup!
 
 The templates contain placeholder text that needs to be replaced with YOUR project's actual conventions. Without this, `$before-*-dev` skills won't provide useful guidance.
 
@@ -350,7 +350,7 @@ Work through one file at a time:
 
 After covering all three parts, summarize:
 
-"You're now onboarded to the Trellis workflow system! Here's what we covered:
+"You're now onboarded to the Suncode workflow system! Here's what we covered:
 - Part 1: Core concepts (why this workflow exists)
 - Part 2: Real-world examples (how to apply the workflow)
 - Part 3: Guidelines status (empty templates need filling / already customized)

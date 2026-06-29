@@ -203,8 +203,8 @@ describe("trellis template constants", () => {
         templates !== undefined &&
         [...templates.entries()].some(
           ([filePath, content]) =>
-            /trellis-(implement|check)/.test(filePath) &&
-            content.includes("Required: Load Trellis Context First"),
+            /suncode-(implement|check)/.test(filePath) &&
+            content.includes("Required: Load Suncode Context First"),
         );
       if (!hasPullBasedPrelude) {
         return [];
@@ -239,26 +239,26 @@ describe("trellis template constants", () => {
     const block = inProgressBreadcrumb();
     expect(block).toContain("Main-session default");
     expect(block).toContain("Sub-agent self-exemption");
-    expect(block).toContain("already running as `trellis-implement`");
-    expect(block).toContain("do NOT spawn another `trellis-implement`");
-    expect(block).toContain("already running as `trellis-check`");
-    expect(block).toContain("do NOT spawn another `trellis-check`");
+    expect(block).toContain("already running as `suncode-implement`");
+    expect(block).toContain("do NOT spawn another `suncode-implement`");
+    expect(block).toContain("already running as `suncode-check`");
+    expect(block).toContain("do NOT spawn another `suncode-check`");
     expect(block).toContain("main session only");
   });
 
   it("[issue-237] workflow.md Phase 2 dispatch steps require prompt recursion guards", () => {
     expect(workflowMdTemplate).toContain("**Dispatch prompt guard**");
     expect(workflowMdTemplate).toContain(
-      "already the `trellis-implement` sub-agent",
+      "already the `suncode-implement` sub-agent",
     );
     expect(workflowMdTemplate).toContain(
-      "not spawn another `trellis-implement` / `trellis-check`",
+      "not spawn another `suncode-implement` / `suncode-check`",
     );
     expect(workflowMdTemplate).toContain(
-      "already the `trellis-check` sub-agent",
+      "already the `suncode-check` sub-agent",
     );
     expect(workflowMdTemplate).toContain(
-      "not spawn another `trellis-check` / `trellis-implement`",
+      "not spawn another `suncode-check` / `suncode-implement`",
     );
   });
 
@@ -380,7 +380,7 @@ describe("getAllAgents", () => {
       expect(frontmatterClose, `${file} must have a closing --- frontmatter line`).toBeGreaterThan(0);
       const frontmatter = content.slice(4, frontmatterClose);
       // The agent's `name:` field must match the file basename so
-      // `trellis channel spawn --agent <name>` resolves correctly.
+      // `suncode channel spawn --agent <name>` resolves correctly.
       const expectedName = file.replace(/\.md$/, "");
       const nameLine = frontmatter
         .split("\n")

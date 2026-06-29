@@ -244,13 +244,13 @@ describe("update() integration", () => {
     await init({ yes: true, force: true, zcode: true });
 
     expect(
-      fs.existsSync(projectFile(".zcode/commands/trellis/start.md")),
+      fs.existsSync(projectFile(".zcode/commands/suncode/start.md")),
     ).toBe(true);
     expect(
-      fs.existsSync(projectFile(".agents/skills/trellis-start/SKILL.md")),
+      fs.existsSync(projectFile(".agents/skills/suncode-start/SKILL.md")),
     ).toBe(false);
     expect(
-      fs.existsSync(projectFile(".agents/skills/trellis-continue/SKILL.md")),
+      fs.existsSync(projectFile(".agents/skills/suncode-continue/SKILL.md")),
     ).toBe(false);
 
     await update({});
@@ -366,8 +366,8 @@ describe("update() integration", () => {
     const targetFull = path.join(tmpDir, targetRelative);
     const templateContent = fs.readFileSync(targetFull, "utf-8");
     const modifiedOldContent = removeSubagentsSection(templateContent).replace(
-      "# Trellis Instructions",
-      "# Custom Trellis Instructions",
+      "# Suncode Instructions",
+      "# Custom Suncode Instructions",
     );
     fs.writeFileSync(targetFull, modifiedOldContent);
 
@@ -581,7 +581,7 @@ describe("update() integration", () => {
       "#### 2.1 Implement `[required · repeatable]`\n\n" +
       "[Codex]\nSpawn the implement sub-agent:\n[/Codex]\n\n" +
       "[Kilo, Antigravity, Windsurf]\n" +
-      "1. Load the `trellis-before-dev` skill to read project guidelines\n" +
+      "1. Load the `suncode-before-dev` skill to read project guidelines\n" +
       "[/Kilo, Antigravity, Windsurf]\n";
 
     stageVersionedUpgradeProject({
@@ -889,7 +889,7 @@ describe("update() integration", () => {
     await setupProject();
 
     // Simulate upgrading from an old version — deprecated files don't exist
-    // The manifest has safe-file-delete entries for .claude/commands/trellis/before-backend-dev.md etc.
+    // The historical manifest has safe-file-delete entries for .claude/commands/trellis/before-backend-dev.md etc.
     // but init() doesn't create them (templates removed). update() should not crash.
     const versionPath = path.join(tmpDir, DIR_NAMES.WORKFLOW, ".version");
     fs.writeFileSync(versionPath, "0.3.7");
@@ -1251,7 +1251,7 @@ describe("update() integration", () => {
       "#### 2.1 Implement `[required · repeatable]`\n\n" +
       "[Codex]\nSpawn the implement sub-agent:\n[/Codex]\n\n" +
       "[Kilo, Antigravity, Windsurf]\n" +
-      "1. Load the `trellis-before-dev` skill to read project guidelines\n" +
+      "1. Load the `suncode-before-dev` skill to read project guidelines\n" +
       "[/Kilo, Antigravity, Windsurf]\n";
 
     fs.writeFileSync(workflowPath, staleWorkflow, "utf-8");

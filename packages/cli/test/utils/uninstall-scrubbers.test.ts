@@ -334,7 +334,7 @@ describe("scrubPiSettings", () => {
   it("strips trellis entries and reports fullyEmpty", () => {
     const input = {
       enableSkillCommands: true,
-      extensions: ["./extensions/trellis/index.ts"],
+      extensions: ["./extensions/suncode/index.ts"],
       skills: ["./skills"],
       prompts: ["./prompts"],
       packages: [
@@ -357,7 +357,7 @@ describe("scrubPiSettings", () => {
   it("preserves user-added array entries", () => {
     const input = {
       enableSkillCommands: true,
-      extensions: ["./extensions/trellis/index.ts", "./extensions/my-ext"],
+      extensions: ["./extensions/suncode/index.ts", "./extensions/my-ext"],
       skills: ["./skills", "./other-skills"],
       prompts: ["./prompts"],
       packages: [
@@ -395,7 +395,7 @@ describe("scrubPiSettings", () => {
 });
 
 describe("scrubCodexConfigToml", () => {
-  const TEMPLATE = `# Project-scoped Codex defaults for Trellis workflows.
+  const TEMPLATE = `# Project-scoped Codex defaults for Suncode workflows.
 # Codex loads this after ~/.codex/config.toml when you work in this project.
 
 # Keep AGENTS.md as the primary project instruction file.
@@ -444,7 +444,7 @@ key = 1
   });
 
   it("strips the new `hooks = true` marker line (Codex 0.129+) alongside the legacy `codex_hooks` line", () => {
-    const newTemplate = `# Project-scoped Codex defaults for Trellis workflows.
+    const newTemplate = `# Project-scoped Codex defaults for Suncode workflows.
 # Codex loads this after ~/.codex/config.toml when you work in this project.
 
 # Keep AGENTS.md as the primary project instruction file.

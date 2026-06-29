@@ -1,7 +1,7 @@
 /**
  * Homedir guard for destructive commands (init, uninstall).
  *
- * Running `trellis init` / `trellis uninstall` in `$HOME` is catastrophic:
+ * Running `suncode init` / `suncode uninstall` in `$HOME` is catastrophic:
  * platforms like Claude Code, Codex, OpenCode all store global runtime data
  * (`.claude/projects/<sanitized-cwd>/*.jsonl` chat history, `.codex/sessions/`,
  * `.opencode/` caches, etc.) directly in the user's home directory. If
@@ -44,7 +44,7 @@ export function isCwdHomedir(): boolean {
 }
 
 /**
- * Error message printed by both `trellis init` and `trellis uninstall` when
+ * Error message printed by both `suncode init` and `suncode uninstall` when
  * the homedir guard trips.
  */
 export function homedirGuardMessage(commandName: "init" | "uninstall"): string {

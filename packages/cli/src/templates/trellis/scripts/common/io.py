@@ -2,7 +2,7 @@
 JSON file I/O utilities.
 
 Provides read_json and write_json as the single source of truth
-for JSON file operations across all Trellis scripts.
+for JSON file operations across all Suncode scripts.
 """
 
 from __future__ import annotations

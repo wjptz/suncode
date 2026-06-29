@@ -45,7 +45,7 @@ export type SharedHookPlatform =
 /**
  * Which shared hooks each platform actually invokes. Single source of truth
  * for shared-hook distribution — both `writeSharedHooks` (runtime install)
- * and `collectSharedHooks` (`trellis update` diff) read from this table.
+ * and `collectSharedHooks` (`suncode update` diff) read from this table.
  *
  * Routing rules encoded here:
  * - `session-start.py` — shipped by every platform with a SessionStart
@@ -68,7 +68,7 @@ export type SharedHookPlatform =
  *   stdout directly to the conversation context (no JSON envelope).
  * - Claude Code `statusLine` is intentionally not installed by default.
  *   Users can add their own statusLine command in `.claude/settings.json`,
- *   or opt in to the Trellis one via `trellis init --with-statusline`
+ *   or opt in to the Suncode one via `suncode init --with-statusline`
  *   (installed from `templates/claude/hooks/`, not from this table — no
  *   other platform has a statusLine event).
  */

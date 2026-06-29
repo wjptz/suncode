@@ -63,7 +63,7 @@ import {
   workspaceIndexContent,
 } from "../src/templates/markdown/index.js";
 import * as markdownExports from "../src/templates/markdown/index.js";
-import { TrellisContext } from "../src/templates/opencode/lib/trellis-context.js";
+import { SuncodeContext } from "../src/templates/opencode/lib/suncode-context.js";
 
 afterEach(() => {
   clearManifestCache();
@@ -503,7 +503,7 @@ describe("regression: Windows path separator (beta.12)", () => {
     expect(isManagedPath(".github\\copilot\\hooks\\session-start.py")).toBe(
       true,
     );
-    expect(isManagedPath(".github\\hooks\\trellis.json")).toBe(true);
+    expect(isManagedPath(".github\\hooks\\suncode.json")).toBe(true);
   });
 
   it("[beta.12] isManagedPath handles mixed separators", () => {
@@ -664,7 +664,7 @@ describe("regression: migration data integrity (beta.14)", () => {
   });
 
   it("[statusline-opt-in] statusline.py is not in claude's collected templates (update must not force-install it)", () => {
-    // The opt-in statusline (`trellis init --with-statusline`) must stay out
+    // The opt-in statusline (`suncode init --with-statusline`) must stay out
     // of the unconditional template walk: analyzeChanges() classifies any
     // collected-but-absent file as `newFiles` and installs it on update,
     // which would force statusline onto opted-out projects.
@@ -701,7 +701,7 @@ describe("regression: migration data integrity (beta.14)", () => {
 describe("regression: update only configured platforms (beta.16)", () => {
   // NOTE: v0.5.0-beta.8 added collectTemplates for opencode. Before that,
   // opencode was the only configured platform with no update tracking —
-  // `trellis update` silently ignored .opencode/, so CLI-side changes to
+  // `suncode update` silently ignored .opencode/, so CLI-side changes to
   // opencode plugins / agents / package.json never reached installed projects.
   // That was a bug, not a design choice. This test used to assert the bug;
   // now it asserts the fix.
@@ -710,15 +710,15 @@ describe("regression: update only configured platforms (beta.16)", () => {
     expect(result).toBeInstanceOf(Map);
     if (!result) throw new Error("unreachable");
     // Sanity: must include the three plugin files — the bug that prompted this
-    // fix was a plugin-shape change that couldn't be delivered via `trellis update`.
+    // fix was a plugin-shape change that couldn't be delivered via `suncode update`.
     expect(result.has(".opencode/plugins/inject-subagent-context.js")).toBe(
       true,
     );
     expect(result.has(".opencode/plugins/session-start.js")).toBe(true);
     expect(result.has(".opencode/plugins/inject-workflow-state.js")).toBe(true);
     // Plus agents, lib, package.json, at least one command, at least one skill
-    expect(result.has(".opencode/agents/trellis-implement.md")).toBe(true);
-    expect(result.has(".opencode/lib/trellis-context.js")).toBe(true);
+    expect(result.has(".opencode/agents/suncode-implement.md")).toBe(true);
+    expect(result.has(".opencode/lib/suncode-context.js")).toBe(true);
     expect(result.has(".opencode/package.json")).toBe(true);
   });
 
@@ -937,62 +937,62 @@ describe("regression: agent-session Trellis update hint", () => {
   it("shows a concise update hint when trellis --version reports a newer version", () => {
     const output = runContextWithTrellisOutput(
       "0.5.0",
-      "Trellis update available: 0.5.0 → 0.5.9\nRun: trellis update\n0.5.9",
+      "Suncode update available: 0.5.0 → 0.5.9\nRun: suncode update\n0.5.9",
     );
 
-    expect(output).toContain("Trellis update available: 0.5.0 -> 0.5.9");
-    expect(output).toContain("run trellis upgrade");
+    expect(output).toContain("Suncode update available: 0.5.0 -> 0.5.9");
+    expect(output).toContain("run suncode upgrade");
     expect(output).toContain("SESSION CONTEXT");
   });
 
   it("does not show a hint when installed version is equal or newer", () => {
     expect(runContextWithTrellisOutput("0.5.9", "0.5.9")).not.toContain(
-      "Trellis update available",
+      "Suncode update available",
     );
     fs.rmSync(path.join(tmpDir, ".trellis", ".runtime"), {
       recursive: true,
       force: true,
     });
     expect(runContextWithTrellisOutput("0.6.0", "0.5.9")).not.toContain(
-      "Trellis update available",
+      "Suncode update available",
     );
   });
 
   it("silently skips the hint when trellis --version fails or version parsing fails", () => {
     expect(runContextWithTrellisOutput("0.5.0", null)).not.toContain(
-      "Trellis update available",
+      "Suncode update available",
     );
     fs.rmSync(path.join(tmpDir, ".trellis", ".runtime"), {
       recursive: true,
       force: true,
     });
     expect(runContextWithTrellisOutput("not-a-version", "0.5.9")).not.toContain(
-      "Trellis update available",
+      "Suncode update available",
     );
   });
 
   it("does not burn the once-per-session marker when version lookup fails", () => {
     expect(runContextWithTrellisOutput("0.5.0", null)).not.toContain(
-      "Trellis update available",
+      "Suncode update available",
     );
 
     const output = runContextWithTrellisOutput("0.5.0", "0.5.9");
 
-    expect(output).toContain("Trellis update available: 0.5.0 -> 0.5.9");
+    expect(output).toContain("Suncode update available: 0.5.0 -> 0.5.9");
   });
 
   it("uses the final trellis --version token when no update line is present", () => {
     const output = runContextWithTrellisOutput("0.5.0", "0.5.9");
 
-    expect(output).toContain("Trellis update available: 0.5.0 -> 0.5.9");
+    expect(output).toContain("Suncode update available: 0.5.0 -> 0.5.9");
   });
 
   it("only attempts the default text update hint once per session", () => {
     const first = runContextWithTrellisOutput("0.5.0", "0.5.9");
     const second = runContextWithTrellisOutput("0.5.0", "0.5.9");
 
-    expect(first).toContain("Trellis update available: 0.5.0 -> 0.5.9");
-    expect(second).not.toContain("Trellis update available");
+    expect(first).toContain("Suncode update available: 0.5.0 -> 0.5.9");
+    expect(second).not.toContain("Suncode update available");
     expect(
       fs.existsSync(
         path.join(
@@ -1213,7 +1213,7 @@ describe("regression: current-task path normalization", () => {
     (hook) => hook.name === "session-start.py",
   )?.content;
   const firstReplyNoticeSentence =
-    "Trellis SessionStart 已注入：workflow、当前任务状态、开发者身份、git 状态、active tasks、spec 索引已加载。";
+    "Suncode SessionStart 已注入：workflow、当前任务状态、开发者身份、git 状态、active tasks、spec 索引已加载。";
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-current-task-"));
@@ -2362,7 +2362,7 @@ describe("regression: current-task path normalization", () => {
           prompt: "Report whether TOKEN_CURSOR_HOOK_TEST is visible.",
           subagent_type: {
             custom: {
-              name: "trellis-implement",
+              name: "suncode-implement",
             },
           },
         },
@@ -2509,7 +2509,7 @@ describe("regression: current-task path normalization", () => {
       ),
     );
 
-    const ctx = new TrellisContext(tmpDir);
+    const ctx = new SuncodeContext(tmpDir);
     // With no input, legacy `.current-task` MUST still be ignored. Issue #264
     // adds a single-session fallback that mirrors Python's
     // `_resolve_single_session_fallback` — with exactly one session file
@@ -2568,7 +2568,7 @@ describe("regression: current-task path normalization", () => {
     const previous = process.env.OPENCODE_RUN_ID;
     process.env.OPENCODE_RUN_ID = "run-a";
     try {
-      const active = new TrellisContext(tmpDir).getActiveTask({
+      const active = new SuncodeContext(tmpDir).getActiveTask({
         sessionID: "oc-a",
       });
 
@@ -2620,7 +2620,7 @@ describe("regression: current-task path normalization", () => {
 
       const ctx = payload.hookSpecificOutput.additionalContext;
       expect(ctx).toContain("<first-reply-notice>");
-      expect(ctx).toMatch(/first visible assistant reply|First visible reply|Trellis SessionStart 已注入/);
+      expect(ctx).toMatch(/first visible assistant reply|First visible reply|Suncode SessionStart 已注入/);
       expect(ctx).toMatch(/one-shot/i);
       expect(ctx.indexOf("<first-reply-notice>")).toBeLessThan(
         ctx.indexOf("<current-state>"),
@@ -2647,7 +2647,7 @@ describe("regression: current-task path normalization", () => {
     const ctx = payload.hookSpecificOutput.additionalContext;
     expect(payload.hookSpecificOutput.hookEventName).toBe("SessionStart");
     expect(ctx.startsWith("<session-context>")).toBe(true);
-    expect(ctx).toContain("Trellis compact SessionStart context");
+    expect(ctx).toContain("Suncode compact SessionStart context");
     expect(ctx).toContain("Task context order for implementation/check");
     expect(ctx).toContain("design.md if present");
     expect(ctx).not.toContain("<sub-agent-notice>");
@@ -2672,7 +2672,7 @@ describe("regression: current-task path normalization", () => {
       "Copilot currently ignores sessionStart hook output",
     );
     expect(content).not.toContain("systemMessage");
-    expect(content).not.toContain("Trellis context injected");
+    expect(content).not.toContain("Suncode context injected");
     expect(content).not.toContain(firstReplyNoticeSentence);
   });
 
@@ -2791,7 +2791,7 @@ describe("regression: current-task path normalization", () => {
     setupTaskRepo();
     writeSessionContext("opencode_oc-a", ".trellis\\tasks\\issue-106");
 
-    const ctx = new TrellisContext(tmpDir) as TrellisContext & {
+    const ctx = new SuncodeContext(tmpDir) as SuncodeContext & {
       getCurrentTask: (platformInput?: object | null) => string | null;
       resolveTaskDir: (taskRef: string) => string | null;
     };
@@ -2953,7 +2953,7 @@ describe("regression: current-task path normalization", () => {
     );
     // Hardcoded fallback wording must NOT appear post-R5
     expect(parsed.hookSpecificOutput.additionalContext).not.toContain(
-      "trellis-implement → trellis-check",
+      "suncode-implement → suncode-check",
     );
   });
 
@@ -2966,7 +2966,7 @@ describe("regression: current-task path normalization", () => {
     // regressions that omit Phase 3.4 from the per-turn breadcrumb.
     writeWorkflowMd(
       "[workflow-state:in_progress]\n" +
-        "Flow: trellis-implement → trellis-check → trellis-update-spec → commit (Phase 3.4) → /trellis:finish-work\n" +
+        "Flow: suncode-implement → suncode-check → suncode-update-spec → commit (Phase 3.4) → /suncode:finish-work\n" +
         "[/workflow-state:in_progress]\n",
     );
 
@@ -2993,7 +2993,7 @@ describe("regression: current-task path normalization", () => {
       "CUSTOM BODY from workflow.md",
     );
     expect(parsed.hookSpecificOutput.additionalContext).not.toContain(
-      "trellis-implement → trellis-check",
+      "suncode-implement → suncode-check",
     );
   });
 
@@ -3075,11 +3075,11 @@ describe("regression: current-task path normalization", () => {
     writeProjectFile(path.join(".trellis", ".developer"), "name=test\n");
     // Post-R5: breadcrumb body is read exclusively from workflow.md tag
     // blocks. Provide a minimal no_task tag so the test can assert the
-    // routing to trellis-brainstorm content surfaces.
+    // routing to suncode-brainstorm content surfaces.
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
       "[workflow-state:no_task]\n" +
-        "No active task. Load `trellis-brainstorm` skill to start.\n" +
+        "No active task. Load `suncode-brainstorm` skill to start.\n" +
         "[/workflow-state:no_task]\n",
     );
     writeLegacyCurrentTask(".trellis/tasks/issue-106");
@@ -3094,7 +3094,7 @@ describe("regression: current-task path normalization", () => {
       "Status: no_task",
     );
     expect(parsed.hookSpecificOutput.additionalContext).toContain(
-      "trellis-brainstorm",
+      "suncode-brainstorm",
     );
   });
 
@@ -3123,7 +3123,7 @@ describe("regression: current-task path normalization", () => {
     );
   });
 
-  it("[workflow-state] silent exit 0 when not a Trellis project (no .trellis/ dir)", () => {
+  it("[workflow-state] silent exit 0 when not a Suncode project (no .trellis/ dir)", () => {
     // No .trellis/ at all — hook should silently exit
     writeWorkflowStateHook();
     fs.rmSync(path.join(tmpDir, ".trellis"), { recursive: true, force: true });
@@ -3438,24 +3438,24 @@ print(len(entries))
       "templates",
     );
     const agentFiles = [
-      "claude/agents/trellis-implement.md",
-      "claude/agents/trellis-check.md",
-      "codebuddy/agents/trellis-implement.md",
-      "codebuddy/agents/trellis-check.md",
-      "codex/agents/trellis-implement.toml",
-      "codex/agents/trellis-check.toml",
-      "cursor/agents/trellis-implement.md",
-      "cursor/agents/trellis-check.md",
-      "gemini/agents/trellis-implement.md",
-      "gemini/agents/trellis-check.md",
-      "kiro/agents/trellis-implement.json",
-      "kiro/agents/trellis-check.json",
-      "opencode/agents/trellis-implement.md",
-      "opencode/agents/trellis-check.md",
-      "pi/agents/trellis-implement.md",
-      "pi/agents/trellis-check.md",
-      "qoder/agents/trellis-implement.md",
-      "qoder/agents/trellis-check.md",
+      "claude/agents/suncode-implement.md",
+      "claude/agents/suncode-check.md",
+      "codebuddy/agents/suncode-implement.md",
+      "codebuddy/agents/suncode-check.md",
+      "codex/agents/suncode-implement.toml",
+      "codex/agents/suncode-check.toml",
+      "cursor/agents/suncode-implement.md",
+      "cursor/agents/suncode-check.md",
+      "gemini/agents/suncode-implement.md",
+      "gemini/agents/suncode-check.md",
+      "kiro/agents/suncode-implement.json",
+      "kiro/agents/suncode-check.json",
+      "opencode/agents/suncode-implement.md",
+      "opencode/agents/suncode-check.md",
+      "pi/agents/suncode-implement.md",
+      "pi/agents/suncode-check.md",
+      "qoder/agents/suncode-implement.md",
+      "qoder/agents/suncode-check.md",
     ];
 
     for (const relativePath of agentFiles) {
@@ -3472,17 +3472,17 @@ print(len(entries))
 
       if (relativePath.includes("implement")) {
         expect(content, `${relativePath} should forbid nested implement`).toContain(
-          "spawn another `trellis-implement`",
+          "spawn another `suncode-implement`",
         );
         expect(content, `${relativePath} should forbid nested check`).toContain(
-          "`trellis-check`",
+          "`suncode-check`",
         );
       } else {
         expect(content, `${relativePath} should forbid nested check`).toContain(
-          "spawn another `trellis-check`",
+          "spawn another `suncode-check`",
         );
         expect(content, `${relativePath} should forbid nested implement`).toContain(
-          "`trellis-implement`",
+          "`suncode-implement`",
         );
       }
     }
@@ -3506,9 +3506,9 @@ print(len(entries))
       "templates",
     );
     const codexAgentFiles = [
-      "codex/agents/trellis-implement.toml",
-      "codex/agents/trellis-check.toml",
-      "codex/agents/trellis-research.toml",
+      "codex/agents/suncode-implement.toml",
+      "codex/agents/suncode-check.toml",
+      "codex/agents/suncode-research.toml",
     ];
 
     for (const relativePath of codexAgentFiles) {
@@ -3714,7 +3714,7 @@ print(len(entries))
       templateWorkflowMd(),
     );
     // Codex defaults to inline since 0.5.9; opt into sub-agent dispatch
-    // explicitly so the legacy spawn-trellis-implement block surfaces.
+    // explicitly so the legacy spawn-suncode-implement block surfaces.
     writeConfigYaml("codex:\n  dispatch_mode: sub-agent\n");
 
     const contextScript = path.join(
@@ -3728,9 +3728,9 @@ print(len(entries))
       { cwd: tmpDir, encoding: "utf-8" },
     );
 
-    expect(output).toContain("trellis-implement");
+    expect(output).toContain("suncode-implement");
     expect(output).not.toContain(
-      "| About to write code / start implementing | trellis-before-dev |",
+      "| About to write code / start implementing | suncode-before-dev |",
     );
     expect(output).not.toContain("before-dev takes under a minute");
   });
@@ -3754,10 +3754,10 @@ print(len(entries))
       { cwd: tmpDir, encoding: "utf-8" },
     );
 
-    expect(output).toContain("trellis-implement");
+    expect(output).toContain("suncode-implement");
     expect(output).toContain("implement.jsonl");
     expect(output).not.toContain(
-      "| About to write code / start implementing | trellis-before-dev |",
+      "| About to write code / start implementing | suncode-before-dev |",
     );
     expect(output).not.toContain("before-dev takes under a minute");
   });
@@ -3789,7 +3789,7 @@ print(len(entries))
       "Resolves the active task with `task.py current --source`",
     );
     expect(output).not.toContain("The platform hook/plugin auto-handles");
-    expect(output).not.toContain("Load the `trellis-before-dev` skill");
+    expect(output).not.toContain("Load the `suncode-before-dev` skill");
   });
 
   it("[pi] step 2.1 describes extension-backed sub-agent context path", () => {
@@ -3814,12 +3814,12 @@ print(len(entries))
     expect(output).toContain("The platform hook/plugin auto-handles");
     expect(output).toContain("Reads `implement.jsonl`");
     expect(output).not.toContain("The Codex sub-agent definition auto-handles");
-    expect(output).not.toContain("Load the `trellis-before-dev` skill");
+    expect(output).not.toContain("Load the `suncode-before-dev` skill");
   });
 
-  it("[workflow-v2] --mode phase --platform kilo keeps trellis-before-dev routing (agent-less path)", () => {
+  it("[workflow-v2] --mode phase --platform kilo keeps suncode-before-dev routing (agent-less path)", () => {
     // Symmetric to the codex filter test: agent-less platforms MUST still
-    // see `trellis-before-dev` because they write code in the main session.
+    // see `suncode-before-dev` because they write code in the main session.
     writeTrellisScripts();
     writeProjectFile(path.join(".trellis", ".developer"), "name=test\n");
     writeProjectFile(
@@ -3838,8 +3838,8 @@ print(len(entries))
       { cwd: tmpDir, encoding: "utf-8" },
     );
 
-    expect(output).toContain("`trellis-before-dev`");
-    expect(output).not.toContain("Dispatch the `trellis-implement` sub-agent");
+    expect(output).toContain("`suncode-before-dev`");
+    expect(output).not.toContain("Dispatch the `suncode-implement` sub-agent");
   });
 
   // ------------------------------------------------------------
@@ -3984,7 +3984,7 @@ print(len(entries))
     const input = JSON.stringify({
       tool_name: "Task",
       tool_input: {
-        subagent_type: "trellis-implement",
+        subagent_type: "suncode-implement",
         prompt: "do work",
       },
       cwd: tmpDir,
@@ -4043,10 +4043,10 @@ print(len(entries))
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
       "[workflow-state:in_progress]\n" +
-        "DISPATCH the trellis-implement / trellis-check sub-agents.\n" +
+        "DISPATCH the suncode-implement / suncode-check sub-agents.\n" +
         "[/workflow-state:in_progress]\n" +
         "[workflow-state:in_progress-inline]\n" +
-        "MAIN SESSION edits code via trellis-before-dev directly.\n" +
+        "MAIN SESSION edits code via suncode-before-dev directly.\n" +
         "[/workflow-state:in_progress-inline]\n",
     );
 
@@ -4055,7 +4055,7 @@ print(len(entries))
     ) as { hookSpecificOutput: { additionalContext: string } };
     const ctx = parsed.hookSpecificOutput.additionalContext;
     expect(ctx).toContain("MAIN SESSION edits code");
-    expect(ctx).not.toContain("DISPATCH the trellis-implement");
+    expect(ctx).not.toContain("DISPATCH the suncode-implement");
   });
 
   it("[issue-codex-dispatch-mode] codex breadcrumb routes to plain status when codex.dispatch_mode=sub-agent", () => {
@@ -4065,10 +4065,10 @@ print(len(entries))
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
       "[workflow-state:in_progress]\n" +
-        "DISPATCH the trellis-implement / trellis-check sub-agents.\n" +
+        "DISPATCH the suncode-implement / suncode-check sub-agents.\n" +
         "[/workflow-state:in_progress]\n" +
         "[workflow-state:in_progress-inline]\n" +
-        "MAIN SESSION edits code via trellis-before-dev directly.\n" +
+        "MAIN SESSION edits code via suncode-before-dev directly.\n" +
         "[/workflow-state:in_progress-inline]\n",
     );
     writeConfigYaml("codex:\n  dispatch_mode: sub-agent\n");
@@ -4077,7 +4077,7 @@ print(len(entries))
       runPython(codexHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    expect(ctx).toContain("DISPATCH the trellis-implement");
+    expect(ctx).toContain("DISPATCH the suncode-implement");
     expect(ctx).not.toContain("MAIN SESSION edits code");
   });
 
@@ -4088,10 +4088,10 @@ print(len(entries))
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
       "[workflow-state:in_progress]\n" +
-        "DISPATCH the trellis-implement / trellis-check sub-agents.\n" +
+        "DISPATCH the suncode-implement / suncode-check sub-agents.\n" +
         "[/workflow-state:in_progress]\n" +
         "[workflow-state:in_progress-inline]\n" +
-        "MAIN SESSION edits code via trellis-before-dev directly.\n" +
+        "MAIN SESSION edits code via suncode-before-dev directly.\n" +
         "[/workflow-state:in_progress-inline]\n",
     );
     writeConfigYaml("codex:\n  dispatch_mode: inline\n");
@@ -4101,8 +4101,8 @@ print(len(entries))
     ) as { hookSpecificOutput: { additionalContext: string } };
     const ctx = parsed.hookSpecificOutput.additionalContext;
     expect(ctx).toContain("MAIN SESSION edits code");
-    expect(ctx).toContain("trellis-before-dev");
-    expect(ctx).not.toContain("DISPATCH the trellis-implement");
+    expect(ctx).toContain("suncode-before-dev");
+    expect(ctx).not.toContain("DISPATCH the suncode-implement");
   });
 
   it("[issue-codex-dispatch-mode] non-codex platform ignores codex.dispatch_mode=inline", () => {
@@ -4121,10 +4121,10 @@ print(len(entries))
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
       "[workflow-state:in_progress]\n" +
-        "DISPATCH the trellis-implement / trellis-check sub-agents.\n" +
+        "DISPATCH the suncode-implement / suncode-check sub-agents.\n" +
         "[/workflow-state:in_progress]\n" +
         "[workflow-state:in_progress-inline]\n" +
-        "MAIN SESSION edits code via trellis-before-dev directly.\n" +
+        "MAIN SESSION edits code via suncode-before-dev directly.\n" +
         "[/workflow-state:in_progress-inline]\n",
     );
     writeConfigYaml("codex:\n  dispatch_mode: inline\n");
@@ -4133,7 +4133,7 @@ print(len(entries))
       runPython(claudeHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    expect(ctx).toContain("DISPATCH the trellis-implement");
+    expect(ctx).toContain("DISPATCH the suncode-implement");
     expect(ctx).not.toContain("MAIN SESSION edits code");
   });
 
@@ -4158,8 +4158,8 @@ print(len(entries))
     );
 
     // The [Kilo, Antigravity, Devin] inline block content surfaces:
-    // it tells the main session to load trellis-before-dev directly.
-    expect(output).toContain("trellis-before-dev");
+    // it tells the main session to load suncode-before-dev directly.
+    expect(output).toContain("suncode-before-dev");
     expect(output).toContain("Read `{TASK_DIR}/prd.md`");
     // The Codex sub-agent dispatch text must NOT surface in inline mode.
     expect(output).not.toMatch(/Active task: <task path>/);
@@ -4305,7 +4305,7 @@ print(len(entries))
     );
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
-      "[workflow-state:in_progress]\nDISPATCH the trellis-implement.\n[/workflow-state:in_progress]\n[workflow-state:in_progress-inline]\nMAIN SESSION inline edit.\n[/workflow-state:in_progress-inline]\n",
+      "[workflow-state:in_progress]\nDISPATCH the suncode-implement.\n[/workflow-state:in_progress]\n[workflow-state:in_progress-inline]\nMAIN SESSION inline edit.\n[/workflow-state:in_progress-inline]\n",
     );
 
     // Default (no config.yaml) → inline banner.
@@ -4322,7 +4322,7 @@ print(len(entries))
       runPython(codexHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
     expect(subAgentRun.hookSpecificOutput.additionalContext).toContain(
-      "<codex-mode>sub-agent: implement/check work defaults to Trellis sub-agents; the main session still coordinates, clarifies, updates specs, commits, and finishes.</codex-mode>",
+      "<codex-mode>sub-agent: implement/check work defaults to Suncode sub-agents; the main session still coordinates, clarifies, updates specs, commits, and finishes.</codex-mode>",
     );
   });
 
@@ -4341,7 +4341,7 @@ print(len(entries))
     );
     writeProjectFile(
       path.join(".trellis", "workflow.md"),
-      "[workflow-state:in_progress]\nDISPATCH the trellis-implement.\n[/workflow-state:in_progress]\n",
+      "[workflow-state:in_progress]\nDISPATCH the suncode-implement.\n[/workflow-state:in_progress]\n",
     );
     writeConfigYaml("codex:\n  dispatch_mode: inline\n");
 
@@ -4533,7 +4533,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(commonCliAdapter).toContain('cmd = ["pi", "-p", prompt]');
     expect(commonCliAdapter).toContain('return ["pi", "-c", session_id]');
     expect(commonCliAdapter).toContain(
-      'return f".pi/prompts/trellis-{name}.md"',
+      'return f".pi/prompts/suncode-{name}.md"',
     );
   });
 
@@ -4547,13 +4547,13 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(commonCliAdapter).toContain('elif self.platform == "droid":');
     expect(commonCliAdapter).toContain('return "droid"');
     expect(commonCliAdapter).toContain(
-      'return f".factory/commands/trellis/{name}.md"',
+      'return f".factory/commands/suncode/{name}.md"',
     );
   });
 
   it("[droid] cli_adapter.py has explicit droid branches in all key methods", () => {
     expect(commonCliAdapter).toMatch(
-      /def get_trellis_command_path[\s\S]*?elif self\.platform == "droid":[\s\S]*?\.factory\/commands\/trellis\//,
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "droid":[\s\S]*?\.factory\/commands\/suncode\//,
     );
     expect(commonCliAdapter).toMatch(
       /def get_non_interactive_env[\s\S]*?elif self\.platform == "droid":[\s\S]*?return \{\}/,
@@ -4581,26 +4581,25 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
   });
 
   // Regression for 04-22-migrate-flow-bugs Bug A: codex/kiro branches of
-  // get_trellis_command_path were missing the `trellis-` prefix that
-  // 0.5.0-beta.0 introduced via 60+ rename manifest entries. Without the
-  // prefix, any caller that built skill paths via get_trellis_command_path
+  // get_suncode_command_path were missing the `suncode-` prefix. Without the
+  // prefix, any caller that built skill paths via get_suncode_command_path
   // (add-context, check agent prelude, etc.) would produce paths that don't
   // resolve to any real skill file.
-  it("[migrate-flow-bugs] get_trellis_command_path codex branch uses trellis- prefix", () => {
+  it("[migrate-flow-bugs] get_suncode_command_path codex branch uses suncode- prefix", () => {
     expect(commonCliAdapter).toMatch(
-      /def get_trellis_command_path[\s\S]*?elif self\.platform == "codex":[\s\S]*?return f"\.agents\/skills\/trellis-\{name\}\/SKILL\.md"/,
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "codex":[\s\S]*?return f"\.agents\/skills\/suncode-\{name\}\/SKILL\.md"/,
     );
     expect(commonCliAdapter).not.toMatch(
-      /def get_trellis_command_path[\s\S]*?elif self\.platform == "codex":[\s\S]*?return f"\.agents\/skills\/\{name\}\/SKILL\.md"/,
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "codex":[\s\S]*?return f"\.agents\/skills\/\{name\}\/SKILL\.md"/,
     );
   });
 
-  it("[migrate-flow-bugs] get_trellis_command_path kiro branch uses trellis- prefix", () => {
+  it("[migrate-flow-bugs] get_suncode_command_path kiro branch uses suncode- prefix", () => {
     expect(commonCliAdapter).toMatch(
-      /def get_trellis_command_path[\s\S]*?elif self\.platform == "kiro":[\s\S]*?return f"\.kiro\/skills\/trellis-\{name\}\/SKILL\.md"/,
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "kiro":[\s\S]*?return f"\.kiro\/skills\/suncode-\{name\}\/SKILL\.md"/,
     );
     expect(commonCliAdapter).not.toMatch(
-      /def get_trellis_command_path[\s\S]*?elif self\.platform == "kiro":[\s\S]*?return f"\.kiro\/skills\/\{name\}\/SKILL\.md"/,
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "kiro":[\s\S]*?return f"\.kiro\/skills\/\{name\}\/SKILL\.md"/,
     );
   });
 
@@ -4625,7 +4624,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
   });
 
   it("[migrate-flow-bugs] detect_platform has codex shared-skills fallback guarded by no-other-platform-dir check", () => {
-    // Fallback fires when .agents/skills/trellis-* exists AND no other
+    // Fallback fires when .agents/skills/suncode-* exists AND no other
     // platform dir is present. Guard is essential — .agents/skills/ can
     // legitimately coexist with .claude (claude user + shared layer for
     // other agents) and must not trigger codex in that case.
@@ -4635,7 +4634,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(commonCliAdapter).toMatch(
       /if agents_skills\.is_dir\(\) and not _has_other_platform_dir\(\s*project_root,\s*set\(\)/,
     );
-    expect(commonCliAdapter).toMatch(/entry\.name\.startswith\("trellis-"\)/);
+    expect(commonCliAdapter).toMatch(/entry\.name\.startswith\("suncode-"\)/);
   });
 
   // v0.5.0-beta.12 removed `task.py init-context`; jsonl manifests are now
@@ -4716,7 +4715,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(typeof manifest.aiInstructions).toBe("string");
     expect(manifest.aiInstructions.length).toBeGreaterThan(200);
     // Sanity: guide references the actual 0.5 breaking themes
-    expect(manifest.migrationGuide).toMatch(/trellis-/); // skill renames
+    expect(manifest.migrationGuide).toMatch(/trellis-/); // historical skill renames
     expect(manifest.migrationGuide).toMatch(/record-session|finish-work/);
   });
 
@@ -4803,7 +4802,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
       /def get_commands_path[\s\S]*?if self\.platform == "copilot":[\s\S]*?prompts_dir/,
     );
     expect(commonCliAdapter).toMatch(
-      /def get_trellis_command_path[\s\S]*?elif self\.platform == "copilot":[\s\S]*?\.github\/prompts\//,
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "copilot":[\s\S]*?\.github\/prompts\//,
     );
     expect(commonCliAdapter).toMatch(
       /def get_non_interactive_env[\s\S]*?elif self\.platform == "copilot":[\s\S]*?return \{\}/,
@@ -5030,7 +5029,7 @@ describe("regression: migration manifest consistency", () => {
       const migrations = getMigrationsForVersion("0.4.0", "0.5.0-beta.0");
       const renames = migrations.filter((m) => m.type === "rename");
       // >= because additional non-command→skill renames may exist (e.g. finish-work
-      // relocation under trellis- namespace on skill-only platforms).
+      // relocation under the prefixed namespace on skill-only platforms).
       expect(renames.length).toBeGreaterThanOrEqual(
         PLATFORMS.length * COMMANDS.length,
       );
@@ -5057,7 +5056,7 @@ describe("regression: migration manifest consistency", () => {
     it("breaking + recommendMigrate flags are both set (drives gate)", () => {
       // The update.ts breaking-change gate only fires when BOTH flags are true.
       // If either gets dropped accidentally, users upgrading from 0.4.x can half-migrate
-      // by running `trellis update` without `--migrate`.
+      // by running `suncode update` without `--migrate`.
       const manifestPath = path.join(
         path.dirname(fileURLToPath(import.meta.url)),
         "../src/migrations/manifests/0.5.0-beta.0.json",
@@ -5077,7 +5076,7 @@ describe("regression: migration manifest consistency", () => {
 // =============================================================================
 
 describe("regression: collectTemplates paths match init directory structure (0.3.1)", () => {
-  it("[0.3.1] all platforms with commands use consistent trellis/ subdirectory", () => {
+  it("[0.3.1] all platforms with commands use consistent suncode/ subdirectory", () => {
     const platformsWithCommands = ["claude-code", "gemini"] as const;
     for (const id of platformsWithCommands) {
       const templates = collectPlatformTemplates(id);
@@ -5088,8 +5087,8 @@ describe("regression: collectTemplates paths match init directory structure (0.3
       for (const key of commandKeys) {
         expect(
           key,
-          `${id} command path should include trellis/ subdirectory: ${key}`,
-        ).toContain("/commands/trellis/");
+          `${id} command path should include suncode/ subdirectory: ${key}`,
+        ).toContain("/commands/suncode/");
       }
     }
   });
@@ -5108,7 +5107,7 @@ describe("regression: collectTemplates paths match init directory structure (0.3
     }
   });
 
-  it("[devin] devin uses workflows/ instead of commands/trellis/", () => {
+  it("[devin] devin uses workflows/ instead of commands/suncode/", () => {
     const templates = collectPlatformTemplates("devin");
     expect(templates).toBeInstanceOf(Map);
     if (!templates) return;
@@ -5151,7 +5150,7 @@ describe("regression: collectTemplates paths match init directory structure (0.3
       true,
     );
     expect(keys).toContain(".github/copilot/hooks.json");
-    expect(keys).toContain(".github/hooks/trellis.json");
+    expect(keys).toContain(".github/hooks/suncode.json");
   });
 });
 
@@ -5292,37 +5291,37 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
       id: "qoder" as const,
       hooksDir: ".qoder/hooks",
       preludeAgents: [
-        ".qoder/agents/trellis-implement.md",
-        ".qoder/agents/trellis-check.md",
+        ".qoder/agents/suncode-implement.md",
+        ".qoder/agents/suncode-check.md",
       ],
-      nonPreludeAgents: [".qoder/agents/trellis-research.md"],
+      nonPreludeAgents: [".qoder/agents/suncode-research.md"],
     },
     {
       id: "gemini" as const,
       hooksDir: ".gemini/hooks",
       preludeAgents: [
-        ".gemini/agents/trellis-implement.md",
-        ".gemini/agents/trellis-check.md",
+        ".gemini/agents/suncode-implement.md",
+        ".gemini/agents/suncode-check.md",
       ],
-      nonPreludeAgents: [".gemini/agents/trellis-research.md"],
+      nonPreludeAgents: [".gemini/agents/suncode-research.md"],
     },
     {
       id: "codex" as const,
       hooksDir: ".codex/hooks",
       preludeAgents: [
-        ".codex/agents/trellis-implement.toml",
-        ".codex/agents/trellis-check.toml",
+        ".codex/agents/suncode-implement.toml",
+        ".codex/agents/suncode-check.toml",
       ],
-      nonPreludeAgents: [".codex/agents/trellis-research.toml"],
+      nonPreludeAgents: [".codex/agents/suncode-research.toml"],
     },
     {
       id: "copilot" as const,
       hooksDir: ".github/copilot/hooks",
       preludeAgents: [
-        ".github/agents/trellis-implement.agent.md",
-        ".github/agents/trellis-check.agent.md",
+        ".github/agents/suncode-implement.agent.md",
+        ".github/agents/suncode-check.agent.md",
       ],
-      nonPreludeAgents: [".github/agents/trellis-research.agent.md"],
+      nonPreludeAgents: [".github/agents/suncode-research.agent.md"],
     },
   ];
 
@@ -5348,7 +5347,7 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
       it("implement/check definitions contain pull-based prelude", () => {
         for (const file of preludeAgents) {
           const content = fs.readFileSync(path.join(tmpDir, file), "utf-8");
-          expect(content).toContain("Required: Load Trellis Context First");
+          expect(content).toContain("Required: Load Suncode Context First");
           expect(content).toContain("task.py current --source");
         }
       });
@@ -5361,7 +5360,7 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
         for (const file of preludeAgents) {
           const content = fs.readFileSync(path.join(tmpDir, file), "utf-8");
           const occurrences = content.split(
-            "Required: Load Trellis Context First",
+            "Required: Load Suncode Context First",
           ).length - 1;
           expect(occurrences, `${file} should have exactly one prelude`).toBe(1);
         }
@@ -5381,7 +5380,7 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
         // runs before planning-time jsonl curation.
         for (const file of nonPreludeAgents) {
           const content = fs.readFileSync(path.join(tmpDir, file), "utf-8");
-          expect(content).not.toContain("Required: Load Trellis Context First");
+          expect(content).not.toContain("Required: Load Suncode Context First");
         }
       });
 
@@ -5391,7 +5390,7 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
           ".gemini/settings.json",
           ".codex/hooks.json",
           ".github/copilot/hooks.json",
-          ".github/hooks/trellis.json",
+          ".github/hooks/suncode.json",
         ];
         for (const p of configPaths) {
           const full = path.join(tmpDir, p);
@@ -5425,7 +5424,7 @@ describe("regression: copilot agents use YAML tools frontmatter", () => {
     // (#302). Copilot's transformer therefore emits only the local-tool
     // equivalents.
     const content = fs.readFileSync(
-      path.join(tmpDir, ".github/agents/trellis-implement.agent.md"),
+      path.join(tmpDir, ".github/agents/suncode-implement.agent.md"),
       "utf-8",
     );
     const frontmatter = content.split("---\n")[1] ?? "";
@@ -5447,7 +5446,7 @@ describe("regression: copilot agents use YAML tools frontmatter", () => {
     // Copilot transformer maps that wildcard to the full set of supported
     // Copilot MCP tool equivalents.
     const content = fs.readFileSync(
-      path.join(tmpDir, ".github/agents/trellis-research.agent.md"),
+      path.join(tmpDir, ".github/agents/suncode-research.agent.md"),
       "utf-8",
     );
     const frontmatter = content.split("---\n")[1] ?? "";
@@ -5470,10 +5469,10 @@ describe("regression: copilot agents use YAML tools frontmatter", () => {
     expect(templates).toBeInstanceOf(Map);
 
     const generated = fs.readFileSync(
-      path.join(tmpDir, ".github/agents/trellis-check.agent.md"),
+      path.join(tmpDir, ".github/agents/suncode-check.agent.md"),
       "utf-8",
     );
-    expect(templates?.get(".github/agents/trellis-check.agent.md")).toBe(
+    expect(templates?.get(".github/agents/suncode-check.agent.md")).toBe(
       generated,
     );
   });
@@ -5502,19 +5501,19 @@ describe("regression: pi uses TypeScript extension assets instead of Python hook
 
   it("installs a subagent-capable extension and pull-based agent context", () => {
     const extension = fs.readFileSync(
-      path.join(tmpDir, ".pi", "extensions", "trellis", "index.ts"),
+      path.join(tmpDir, ".pi", "extensions", "suncode", "index.ts"),
       "utf-8",
     );
-    expect(extension).toContain('name: "trellis_subagent"');
+    expect(extension).toContain('name: "suncode_subagent"');
     expect(extension).toContain('pi.on?.("before_agent_start"');
     expect(extension).toContain('pi.on?.("tool_call"');
 
-    for (const agent of ["trellis-implement.md", "trellis-check.md"]) {
+    for (const agent of ["suncode-implement.md", "suncode-check.md"]) {
       const content = fs.readFileSync(
         path.join(tmpDir, ".pi", "agents", agent),
         "utf-8",
       );
-      expect(content).toContain("Required: Load Trellis Context First");
+      expect(content).toContain("Required: Load Suncode Context First");
       expect(content).toContain("task.py current --source");
     }
   });
@@ -5535,11 +5534,11 @@ describe("regression: research agent persists findings to task dir", () => {
   // Before 0.5, research agents were read-only and only emitted chat
   // replies, which got compacted away.
   const markdownPlatforms = [
-    "packages/cli/src/templates/claude/agents/trellis-research.md",
-    "packages/cli/src/templates/cursor/agents/trellis-research.md",
-    "packages/cli/src/templates/qoder/agents/trellis-research.md",
-    "packages/cli/src/templates/codebuddy/agents/trellis-research.md",
-    "packages/cli/src/templates/droid/droids/trellis-research.md",
+    "packages/cli/src/templates/claude/agents/suncode-research.md",
+    "packages/cli/src/templates/cursor/agents/suncode-research.md",
+    "packages/cli/src/templates/qoder/agents/suncode-research.md",
+    "packages/cli/src/templates/codebuddy/agents/suncode-research.md",
+    "packages/cli/src/templates/droid/droids/suncode-research.md",
   ];
 
   const __dirname2 = path.dirname(fileURLToPath(import.meta.url));
@@ -5564,8 +5563,8 @@ describe("regression: research agent persists findings to task dir", () => {
   // line entirely so the sub-agent inherits parent tools — see issue #224
   // and research/agent-tools-frontmatter.md. The persist contract still
   // applies (body references {TASK_DIR}/research/ and the PERSIST keyword).
-  it("[packages/cli/src/templates/gemini/agents/trellis-research.md] omits tools line + has persist instruction", () => {
-    const rel = "packages/cli/src/templates/gemini/agents/trellis-research.md";
+  it("[packages/cli/src/templates/gemini/agents/suncode-research.md] omits tools line + has persist instruction", () => {
+    const rel = "packages/cli/src/templates/gemini/agents/suncode-research.md";
     const content = fs.readFileSync(path.join(repoRoot, rel), "utf-8");
     const fm = content.split("---\n")[1] ?? "";
     expect(fm).not.toMatch(/^tools:/m);
@@ -5578,7 +5577,7 @@ describe("regression: research agent persists findings to task dir", () => {
     const content = fs.readFileSync(
       path.join(
         repoRoot,
-        "packages/cli/src/templates/codex/agents/trellis-research.toml",
+        "packages/cli/src/templates/codex/agents/suncode-research.toml",
       ),
       "utf-8",
     );
@@ -5591,7 +5590,7 @@ describe("regression: research agent persists findings to task dir", () => {
     const content = fs.readFileSync(
       path.join(
         repoRoot,
-        "packages/cli/src/templates/kiro/agents/trellis-research.json",
+        "packages/cli/src/templates/kiro/agents/suncode-research.json",
       ),
       "utf-8",
     );
@@ -5608,7 +5607,7 @@ describe("regression: research agent persists findings to task dir", () => {
     const content = fs.readFileSync(
       path.join(
         repoRoot,
-        "packages/cli/src/templates/opencode/agents/trellis-research.md",
+        "packages/cli/src/templates/opencode/agents/suncode-research.md",
       ),
       "utf-8",
     );
@@ -5781,7 +5780,7 @@ describe("regression: Gemini CLI 0.40.x template compatibility (#224)", () => {
         `Codex and Gemini disagree on ${filePath} — last-writer-wins would corrupt the shared skill`,
       ).toBe(codexContent);
     }
-    // At least the shared common skills + bundled trellis-meta files must
+    // At least the shared common skills + bundled suncode-meta files must
     // overlap. If this drops to 0 the assertion above is silently passing.
     expect(overlapCount).toBeGreaterThan(0);
   });
@@ -5837,7 +5836,7 @@ describe("regression: Gemini CLI 0.40.x template compatibility (#224)", () => {
     // skills only), the legacy-Codex detector previously triggered
     // a false-positive `.codex/` install on every fresh `init --gemini` +
     // `update` cycle. The fix narrows detection to command-as-skill files
-    // (`trellis-continue/SKILL.md`, `trellis-finish-work/SKILL.md`) and the
+    // (`suncode-continue/SKILL.md`, `suncode-finish-work/SKILL.md`) and the
     // update integration suite covers platforms such as ZCode that share
     // `.agents/skills/` but must not trigger the legacy Codex backfill.
     const updateSrc = fs.readFileSync(
@@ -5847,10 +5846,10 @@ describe("regression: Gemini CLI 0.40.x template compatibility (#224)", () => {
     // Must check for command-as-skill markers, not the bare
     // `.agents/skills/` prefix.
     expect(updateSrc).toMatch(
-      /\.agents\/skills\/trellis-continue\/SKILL\.md/,
+      /\.agents\/skills\/suncode-continue\/SKILL\.md/,
     );
     expect(updateSrc).toMatch(
-      /\.agents\/skills\/trellis-finish-work\/SKILL\.md/,
+      /\.agents\/skills\/suncode-finish-work\/SKILL\.md/,
     );
     // Must NOT use the broad `startsWith(".agents/skills/")` heuristic
     // inside needsCodexUpgrade — that would re-introduce the false positive.
@@ -5932,8 +5931,8 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
   // without prd / spec / jsonl context, with no recovery path.
   //
   // The fix: hook output now begins with a `<!-- trellis-hook-injected -->`
-  // marker, and every class-1 trellis-implement / trellis-check definition
-  // file carries a Trellis Context Loading Protocol section telling the
+  // marker, and every class-1 suncode-implement / suncode-check definition
+  // file carries a Suncode Context Loading Protocol section telling the
   // sub-agent to load context itself when the marker is absent.
   const HOOK_INJECTED_MARKER = "<!-- trellis-hook-injected -->";
 
@@ -5955,16 +5954,16 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
   // 5 markdown class-1 platforms × 2 agents = 10 markdown files.
   // Kiro is a JSON file (separate test below).
   const CLASS1_MD_AGENT_FILES: { platform: string; rel: string; agent: "implement" | "check" }[] = [
-    { platform: "claude", rel: "packages/cli/src/templates/claude/agents/trellis-implement.md", agent: "implement" },
-    { platform: "claude", rel: "packages/cli/src/templates/claude/agents/trellis-check.md", agent: "check" },
-    { platform: "cursor", rel: "packages/cli/src/templates/cursor/agents/trellis-implement.md", agent: "implement" },
-    { platform: "cursor", rel: "packages/cli/src/templates/cursor/agents/trellis-check.md", agent: "check" },
-    { platform: "codebuddy", rel: "packages/cli/src/templates/codebuddy/agents/trellis-implement.md", agent: "implement" },
-    { platform: "codebuddy", rel: "packages/cli/src/templates/codebuddy/agents/trellis-check.md", agent: "check" },
-    { platform: "opencode", rel: "packages/cli/src/templates/opencode/agents/trellis-implement.md", agent: "implement" },
-    { platform: "opencode", rel: "packages/cli/src/templates/opencode/agents/trellis-check.md", agent: "check" },
-    { platform: "droid", rel: "packages/cli/src/templates/droid/droids/trellis-implement.md", agent: "implement" },
-    { platform: "droid", rel: "packages/cli/src/templates/droid/droids/trellis-check.md", agent: "check" },
+    { platform: "claude", rel: "packages/cli/src/templates/claude/agents/suncode-implement.md", agent: "implement" },
+    { platform: "claude", rel: "packages/cli/src/templates/claude/agents/suncode-check.md", agent: "check" },
+    { platform: "cursor", rel: "packages/cli/src/templates/cursor/agents/suncode-implement.md", agent: "implement" },
+    { platform: "cursor", rel: "packages/cli/src/templates/cursor/agents/suncode-check.md", agent: "check" },
+    { platform: "codebuddy", rel: "packages/cli/src/templates/codebuddy/agents/suncode-implement.md", agent: "implement" },
+    { platform: "codebuddy", rel: "packages/cli/src/templates/codebuddy/agents/suncode-check.md", agent: "check" },
+    { platform: "opencode", rel: "packages/cli/src/templates/opencode/agents/suncode-implement.md", agent: "implement" },
+    { platform: "opencode", rel: "packages/cli/src/templates/opencode/agents/suncode-check.md", agent: "check" },
+    { platform: "droid", rel: "packages/cli/src/templates/droid/droids/suncode-implement.md", agent: "implement" },
+    { platform: "droid", rel: "packages/cli/src/templates/droid/droids/suncode-check.md", agent: "check" },
   ];
 
   const __dirnameFb = path.dirname(fileURLToPath(import.meta.url));
@@ -5985,7 +5984,7 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
       // 1. References the marker
       expect(content).toContain(HOOK_INJECTED_MARKER);
       // 2. Has the protocol heading
-      expect(content).toContain("Trellis Context Loading Protocol");
+      expect(content).toContain("Suncode Context Loading Protocol");
       // 3. Tells AI how to find the active task path
       expect(content).toContain("Active task:");
       // 4. Tells AI which task files to Read in fallback path
@@ -6000,12 +5999,12 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
       // 0.5.7 (#247): Kiro CLI renamed `instructions` → `prompt` in agent JSON.
       const filePath = path.join(
         repoRootFb,
-        `packages/cli/src/templates/kiro/agents/trellis-${agent}.json`,
+        `packages/cli/src/templates/kiro/agents/suncode-${agent}.json`,
       );
       const json = JSON.parse(fs.readFileSync(filePath, "utf-8"));
       const prompt: string = json.prompt ?? "";
       expect(prompt).toContain(HOOK_INJECTED_MARKER);
-      expect(prompt).toContain("Trellis Context Loading Protocol");
+      expect(prompt).toContain("Suncode Context Loading Protocol");
       expect(prompt).toContain("Active task:");
       expectTaskArtifactContract(prompt);
       const expectedJsonl = agent === "implement" ? "implement.jsonl" : "check.jsonl";
@@ -6014,10 +6013,10 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
   }
 
   const GEMINI_QODER_AGENT_FILES = [
-    "packages/cli/src/templates/gemini/agents/trellis-implement.md",
-    "packages/cli/src/templates/gemini/agents/trellis-check.md",
-    "packages/cli/src/templates/qoder/agents/trellis-implement.md",
-    "packages/cli/src/templates/qoder/agents/trellis-check.md",
+    "packages/cli/src/templates/gemini/agents/suncode-implement.md",
+    "packages/cli/src/templates/gemini/agents/suncode-check.md",
+    "packages/cli/src/templates/qoder/agents/suncode-implement.md",
+    "packages/cli/src/templates/qoder/agents/suncode-check.md",
   ];
 
   for (const rel of GEMINI_QODER_AGENT_FILES) {
@@ -6030,7 +6029,7 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
   for (const agent of ["implement", "check"] as const) {
     it(`pi/${agent} agent references task artifacts`, () => {
       const content = fs.readFileSync(
-        path.join(repoRootFb, `packages/cli/src/templates/pi/agents/trellis-${agent}.md`),
+        path.join(repoRootFb, `packages/cli/src/templates/pi/agents/suncode-${agent}.md`),
         "utf-8",
       );
       expectTaskArtifactContract(content);
@@ -6046,7 +6045,7 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
     for (const agent of ["implement", "check", "research"] as const) {
       const filePath = path.join(
         repoRootFb,
-        `packages/cli/src/templates/kiro/agents/trellis-${agent}.json`,
+        `packages/cli/src/templates/kiro/agents/suncode-${agent}.json`,
       );
       const data = JSON.parse(fs.readFileSync(filePath, "utf-8")) as {
         prompt?: unknown;
@@ -6078,13 +6077,13 @@ describe("regression: sub-agent context injection fallback (0.5.3)", () => {
     );
     const wf = fs.readFileSync(workflowPath, "utf-8");
     // The protocol enforces `Active task: <path>` for ALL sub-agents (no
-    // trellis-research carve-out as of 0.5.8 — research sub-agents need the
+    // suncode-research carve-out as of 0.5.8 — research sub-agents need the
     // task path to know which `{task_dir}/research/` to write into).
     expect(wf).toContain("Sub-agent dispatch protocol");
     expect(wf).toContain("all platforms");
     expect(wf).toContain("all sub-agents");
-    expect(wf).not.toContain("EXCEPT trellis-research");
-    expect(wf).toContain("trellis-research");
+    expect(wf).not.toContain("EXCEPT suncode-research");
+    expect(wf).toContain("suncode-research");
     expect(wf).toContain("Active task:");
     // Must NOT scope the rule to class-2 only — that was the pre-0.5.3 limit.
     expect(wf).not.toMatch(
@@ -6151,14 +6150,14 @@ describe("regression: configSectionsAdded (issue-codex-dispatch-mode)", () => {
     fs.mkdirSync(trellisDir, { recursive: true });
     const userConfigPath = path.join(trellisDir, "config.yaml");
     const userConfig = [
-      "# Trellis Configuration",
+      "# Suncode Configuration",
       "session_commit_message: \"chore: record journal\"",
       "",
     ].join("\n");
     fs.writeFileSync(userConfigPath, userConfig);
 
     const bundledTemplate = [
-      "# Trellis Configuration",
+      "# Suncode Configuration",
       "session_commit_message: \"chore: record journal\"",
       "",
       "#-------------------------------------------------------------------------------",

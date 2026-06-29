@@ -1,11 +1,11 @@
 /**
- * `trellis workflow` command — list and switch the active `.trellis/workflow.md`.
+ * `suncode workflow` command — list and switch the active `.trellis/workflow.md`.
  *
  * Behavior contracts:
  *
  * - Hash boundary: after writing native content, refresh the
  *   `.trellis/workflow.md` entry in `.template-hashes.json`. After writing
- *   any non-native content, remove that entry. This prevents `trellis update`
+ *   any non-native content, remove that entry. This prevents `suncode update`
  *   from silently restoring native bytes over a user-selected variant
  *   (see design.md "Durable-state contract").
  *
@@ -151,7 +151,7 @@ function applyHashContract(cwd: string, templateId: string): void {
     updateHashes(cwd, files);
   } else {
     // Non-native workflow is user-managed local content. Drop the hash entry
-    // so `trellis update` treats it as modified and does not silently restore
+    // so `suncode update` treats it as modified and does not silently restore
     // native bytes.
     removeHash(cwd, relPath);
   }

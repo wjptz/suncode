@@ -1,5 +1,5 @@
 ---
-description: "Trellis Copilot prompt: before-dev.prompt"
+description: "Suncode Copilot prompt: before-dev.prompt"
 ---
 
 Read the relevant development guidelines before starting your task.

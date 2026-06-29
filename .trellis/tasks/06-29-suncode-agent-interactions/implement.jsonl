@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/cli/backend/platform-integration.md", "reason": "Platform command formats, command filtering rules, and sub-agent context classes define how generated interaction names must remain platform-correct."}
+{"file": ".trellis/spec/cli/backend/configurator-shared.md", "reason": "Shared resolver invariants for placeholder rendering, skill naming, update/init byte identity, bundled skills, and pull-based prelude transforms."}
+{"file": ".trellis/spec/cli/unit-test/conventions.md", "reason": "Changed init/update behavior and generated path expectations require updated integration and template tests."}
+{"file": ".trellis/tasks/archive/2026-06/06-29-suncode-full-migration/research/phase-0-inventory.md", "reason": "Prior Suncode migration inventory classifies interaction surfaces and states the target Suncode naming contract."}

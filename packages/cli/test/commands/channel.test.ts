@@ -42,7 +42,7 @@ describe("channel storage and forum channels", () => {
   let originalStdin: typeof process.stdin;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-channel-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-channel-test-"));
     projectDir = path.join(tmpDir, "project");
     fs.mkdirSync(projectDir);
     oldRoot = process.env.TRELLIS_CHANNEL_ROOT;

@@ -17,7 +17,7 @@ import {
 /**
  * Configure GitHub Copilot:
  * - prompts/ — start + finish-work as prompt files
- * - skills/trellis-{name}/SKILL.md — auto-triggered skills from `common/skills/`
+ * - skills/suncode-{name}/SKILL.md — auto-triggered skills from `common/skills/`
  * - agents/{name}.agent.md — sub-agent definitions (note .agent.md suffix)
  * - copilot/hooks/ — platform-specific + shared hook scripts
  * - hooks config — hooks.json
@@ -79,5 +79,5 @@ export async function configureCopilot(cwd: string): Promise<void> {
   await writeFile(path.join(copilotRoot, "hooks.json"), resolvedConfig);
   const githubHooksDir = path.join(cwd, ".github", "hooks");
   ensureDir(githubHooksDir);
-  await writeFile(path.join(githubHooksDir, "trellis.json"), resolvedConfig);
+  await writeFile(path.join(githubHooksDir, "suncode.json"), resolvedConfig);
 }

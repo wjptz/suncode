@@ -1,5 +1,5 @@
 ---
-description: "Trellis Copilot prompt: Finish Work — survey + archive task + record session journal"
+description: "Suncode Copilot prompt: Finish Work — survey + archive task + record session journal"
 ---
 
 # Finish Work

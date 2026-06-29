@@ -41,12 +41,12 @@ import {
 } from "../../src/configurators/shared.js";
 
 const BUNDLED_SKILL_NAMES = [
-  "trellis-channel",
-  "trellis-meta",
-  "trellis-session-insight",
-  "trellis-spec-bootstrap",
+  "suncode-channel",
+  "suncode-meta",
+  "suncode-session-insight",
+  "suncode-spec-bootstrap",
 ];
-const BUNDLED_SKILL_NAME = "trellis-meta";
+const BUNDLED_SKILL_NAME = "suncode-meta";
 const BUNDLED_REFERENCE = path.join(
   BUNDLED_SKILL_NAME,
   "references",
@@ -54,7 +54,7 @@ const BUNDLED_REFERENCE = path.join(
   "overview.md",
 );
 const SPEC_BOOTSTRAP_REFERENCE = path.join(
-  "trellis-spec-bootstrap",
+  "suncode-spec-bootstrap",
   "references",
   "spec-writing.md",
 );
@@ -277,7 +277,7 @@ describe("configurePlatform", () => {
     // Codex writes shared skills under `.agents/skills/` using the neutral
     // placeholder resolver so the rendered files are byte-identical to
     // Gemini's writes for the same skill names — see issue #224 fix.
-    // `trellis-start` is included via `resolveAllAsSkillsNeutral` directly —
+    // `suncode-start` is included via `resolveAllAsSkillsNeutral` directly —
     // it's the user-invocable fallback referenced by the <trellis-bootstrap>
     // notice in inject-workflow-state.py (the SessionStart hook was removed
     // for de-recursion).
@@ -300,7 +300,7 @@ describe("configurePlatform", () => {
     }
     expect(fs.existsSync(path.join(skillsRoot, BUNDLED_REFERENCE))).toBe(true);
     expect(
-      fs.existsSync(path.join(skillsRoot, "trellis-start", "SKILL.md")),
+      fs.existsSync(path.join(skillsRoot, "suncode-start", "SKILL.md")),
     ).toBe(true);
   });
 
@@ -325,11 +325,11 @@ describe("configurePlatform", () => {
       // Codex is a class-2 (pull-based) platform. Prelude is injected into
       // implement/check only — research is orthogonal (searches spec tree,
       // no task dependency) and must stay pristine.
-      const needsPrelude = ["trellis-implement", "trellis-check"].includes(
+      const needsPrelude = ["suncode-implement", "suncode-check"].includes(
         agent.name,
       );
       if (needsPrelude) {
-        expect(written).toContain("Required: Load Trellis Context First");
+        expect(written).toContain("Required: Load Suncode Context First");
         expect(written).toContain("task.py current --source");
         // Original body must still be present (prepend, not replace)
         const originalBody = agent.content
@@ -411,29 +411,29 @@ describe("configurePlatform", () => {
       expect(fs.existsSync(path.join(hooksDir, script))).toBe(true);
     }
 
-    // Main `trellis` agent wires per-turn + session-start hooks; PYTHON_CMD
+    // Main `suncode` agent wires per-turn + session-start hooks; PYTHON_CMD
     // resolved.
-    const trellisPath = path.join(tmpDir, ".kiro", "agents", "trellis.json");
-    expect(fs.existsSync(trellisPath)).toBe(true);
-    const trellisRaw = fs.readFileSync(trellisPath, "utf-8");
-    expect(trellisRaw).not.toContain("{{PYTHON_CMD}}");
-    const trellis = JSON.parse(trellisRaw) as {
+    const suncodePath = path.join(tmpDir, ".kiro", "agents", "suncode.json");
+    expect(fs.existsSync(suncodePath)).toBe(true);
+    const suncodeRaw = fs.readFileSync(suncodePath, "utf-8");
+    expect(suncodeRaw).not.toContain("{{PYTHON_CMD}}");
+    const suncode = JSON.parse(suncodeRaw) as {
       resources?: string[];
       hooks?: Record<string, { command: string }[]>;
     };
-    expect(trellis.hooks?.userPromptSubmit?.[0].command).toBe(
+    expect(suncode.hooks?.userPromptSubmit?.[0].command).toBe(
       `${expectedPythonCmd} .kiro/hooks/inject-workflow-state.py`,
     );
-    expect(trellis.hooks?.agentSpawn?.[0].command).toBe(
+    expect(suncode.hooks?.agentSpawn?.[0].command).toBe(
       `${expectedPythonCmd} .kiro/hooks/session-start.py`,
     );
-    expect(trellis.resources).toContain("file://.trellis/workflow.md");
+    expect(suncode.resources).toContain("file://.trellis/workflow.md");
 
     // 3 sub-agents keep their inject-subagent-context.py spawn hook.
     for (const name of [
-      "trellis-implement",
-      "trellis-check",
-      "trellis-research",
+      "suncode-implement",
+      "suncode-check",
+      "suncode-research",
     ]) {
       const sub = JSON.parse(
         fs.readFileSync(
@@ -449,7 +449,7 @@ describe("configurePlatform", () => {
     // IDE `.kiro.hook` written with PYTHON_CMD resolved and valid schema.
     const ideHookPath = path.join(
       hooksDir,
-      "trellis-workflow-state.kiro.hook",
+      "suncode-workflow-state.kiro.hook",
     );
     expect(fs.existsSync(ideHookPath)).toBe(true);
     const ideRaw = fs.readFileSync(ideHookPath, "utf-8");
@@ -474,7 +474,7 @@ describe("configurePlatform", () => {
     await configurePlatform("gemini", tmpDir);
 
     // Commands as TOML
-    const commandsDir = path.join(tmpDir, ".gemini", "commands", "trellis");
+    const commandsDir = path.join(tmpDir, ".gemini", "commands", "suncode");
     expect(fs.existsSync(commandsDir)).toBe(true);
     const tomlFiles = fs
       .readdirSync(commandsDir)
@@ -500,7 +500,7 @@ describe("configurePlatform", () => {
         ).length,
     );
     for (const dir of skillDirs) {
-      expect(dir.name.startsWith("trellis-")).toBe(true);
+      expect(dir.name.startsWith("suncode-")).toBe(true);
       expect(fs.existsSync(path.join(skillsDir, dir.name, "SKILL.md"))).toBe(
         true,
       );
@@ -604,10 +604,10 @@ describe("configurePlatform", () => {
       .filter((f) => f.endsWith(".md"))
       .sort();
     expect(actualCommandFiles).toEqual(
-      expectedCommands.map((c) => `trellis-${c.name}.md`).sort(),
+      expectedCommands.map((c) => `suncode-${c.name}.md`).sort(),
     );
     for (const cmd of expectedCommands) {
-      const name = `trellis-${cmd.name}`;
+      const name = `suncode-${cmd.name}`;
       const filePath = path.join(commandsDir, `${name}.md`);
       const actual = fs.readFileSync(filePath, "utf-8");
       expect(actual).toBe(wrapWithCommandFrontmatter(name, cmd.content));
@@ -629,9 +629,9 @@ describe("configurePlatform", () => {
     }
     expect(fs.existsSync(path.join(skillsDir, BUNDLED_REFERENCE))).toBe(true);
 
-    expect(actualSkillDirs).not.toContain("trellis-finish-work");
-    expect(actualSkillDirs).not.toContain("trellis-continue");
-    expect(actualSkillDirs).not.toContain("trellis-start");
+    expect(actualSkillDirs).not.toContain("suncode-finish-work");
+    expect(actualSkillDirs).not.toContain("suncode-continue");
+    expect(actualSkillDirs).not.toContain("suncode-start");
   });
 
   it("configurePlatform('qoder') does not include compiled artifacts", async () => {
@@ -661,12 +661,12 @@ describe("configurePlatform", () => {
 
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".zcode", "commands", "trellis", "start.md"),
+        path.join(tmpDir, ".zcode", "commands", "suncode", "start.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "trellis-start", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "suncode-start", "SKILL.md"),
       ),
     ).toBe(false);
     expect(
@@ -675,19 +675,19 @@ describe("configurePlatform", () => {
           tmpDir,
           ".agents",
           "skills",
-          "trellis-continue",
+          "suncode-continue",
           "SKILL.md",
         ),
       ),
     ).toBe(false);
 
     const templates = collectPlatformTemplates("zcode");
-    expect(templates?.has(".zcode/commands/trellis/start.md")).toBe(true);
-    expect(templates?.has(".agents/skills/trellis-start/SKILL.md")).toBe(false);
-    expect(templates?.has(".agents/skills/trellis-continue/SKILL.md")).toBe(
+    expect(templates?.has(".zcode/commands/suncode/start.md")).toBe(true);
+    expect(templates?.has(".agents/skills/suncode-start/SKILL.md")).toBe(false);
+    expect(templates?.has(".agents/skills/suncode-continue/SKILL.md")).toBe(
       false,
     );
-    expect(templates?.has(".agents/skills/trellis-check/SKILL.md")).toBe(true);
+    expect(templates?.has(".agents/skills/suncode-check/SKILL.md")).toBe(true);
   });
 
   it("configurePlatform('codebuddy') creates .codebuddy directory", async () => {
@@ -699,7 +699,7 @@ describe("configurePlatform", () => {
     await configurePlatform("codebuddy", tmpDir);
 
     const expected = resolveCommands(AI_TOOLS.codebuddy.templateContext);
-    const commandsDir = path.join(tmpDir, ".codebuddy", "commands", "trellis");
+    const commandsDir = path.join(tmpDir, ".codebuddy", "commands", "suncode");
     expect(fs.existsSync(commandsDir)).toBe(true);
 
     const actualFiles = fs
@@ -797,7 +797,7 @@ describe("configurePlatform", () => {
 
     const expected = resolvePlaceholders(getCopilotHooksConfig());
     const tracked = path.join(tmpDir, ".github", "copilot", "hooks.json");
-    const discovery = path.join(tmpDir, ".github", "hooks", "trellis.json");
+    const discovery = path.join(tmpDir, ".github", "hooks", "suncode.json");
 
     expect(fs.existsSync(tracked)).toBe(true);
     expect(fs.existsSync(discovery)).toBe(true);
@@ -906,10 +906,10 @@ describe("configurePlatform", () => {
     expect(fs.existsSync(path.join(tmpDir, ".cursor", "commands"))).toBe(true);
   });
 
-  it("configurePlatform('droid') creates .factory/commands/trellis directory", async () => {
+  it("configurePlatform('droid') creates .factory/commands/suncode directory", async () => {
     await configurePlatform("droid", tmpDir);
     expect(
-      fs.existsSync(path.join(tmpDir, ".factory", "commands", "trellis")),
+      fs.existsSync(path.join(tmpDir, ".factory", "commands", "suncode")),
     ).toBe(true);
   });
 
@@ -920,7 +920,7 @@ describe("configurePlatform", () => {
       tmpDir,
       ".factory",
       "commands",
-      "trellis",
+      "suncode",
       "start.md",
     );
     expect(fs.existsSync(startPath)).toBe(false);
@@ -928,7 +928,7 @@ describe("configurePlatform", () => {
       tmpDir,
       ".factory",
       "commands",
-      "trellis",
+      "suncode",
       "finish-work.md",
     );
     expect(fs.existsSync(finishPath)).toBe(true);
@@ -936,7 +936,7 @@ describe("configurePlatform", () => {
       tmpDir,
       ".factory",
       "commands",
-      "trellis",
+      "suncode",
       "continue.md",
     );
     expect(fs.existsSync(continuePath)).toBe(true);
@@ -945,13 +945,13 @@ describe("configurePlatform", () => {
       tmpDir,
       ".factory",
       "skills",
-      "trellis-check",
+      "suncode-check",
       "SKILL.md",
     );
     expect(fs.existsSync(skillPath)).toBe(true);
     const content = fs.readFileSync(skillPath, "utf-8");
     expect(content.startsWith("---\n")).toBe(true);
-    expect(content).toContain("name: trellis-check");
+    expect(content).toContain("name: suncode-check");
   });
 
   it("configurePlatform('pi') creates extension-backed Pi assets", async () => {
@@ -960,18 +960,18 @@ describe("configurePlatform", () => {
     expect(fs.existsSync(path.join(tmpDir, ".pi", "settings.json"))).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "prompts", "trellis-finish-work.md"),
+        path.join(tmpDir, ".pi", "prompts", "suncode-finish-work.md"),
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "trellis-continue.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "suncode-continue.md")),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "trellis-start.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "prompts", "suncode-start.md")),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "skills", "trellis-check", "SKILL.md"),
+        path.join(tmpDir, ".pi", "skills", "suncode-check", "SKILL.md"),
       ),
     ).toBe(true);
     expect(
@@ -983,38 +983,38 @@ describe("configurePlatform", () => {
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "agents", "trellis-implement.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "agents", "suncode-implement.md")),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "agents", "trellis-check.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "agents", "suncode-check.md")),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".pi", "agents", "trellis-research.md")),
+      fs.existsSync(path.join(tmpDir, ".pi", "agents", "suncode-research.md")),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "extensions", "trellis", "index.ts"),
+        path.join(tmpDir, ".pi", "extensions", "suncode", "index.ts"),
       ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".pi", "hooks"))).toBe(false);
 
     const extension = fs.readFileSync(
-      path.join(tmpDir, ".pi", "extensions", "trellis", "index.ts"),
+      path.join(tmpDir, ".pi", "extensions", "suncode", "index.ts"),
       "utf-8",
     );
     expect(extension).toContain("registerTool?.({");
-    expect(extension).toContain('name: "trellis_subagent"');
+    expect(extension).toContain('name: "suncode_subagent"');
     expect(extension).toContain('pi.on?.("session_start"');
     expect(extension).toContain('pi.on?.("tool_call"');
     expect(extension).toContain("ctx?.sessionManager?.getSessionId");
     expect(extension).toContain("TRELLIS_PI_CLI_JS");
     expect(extension).toContain("function formatPiOutput");
-    expect(extension).toContain('"## Trellis Agent Definition"');
+    expect(extension).toContain('"## Suncode Agent Definition"');
     expect(extension).toContain("ctx?.ui?.notify?.(");
     expect(extension).toContain("systemPrompt:");
-    expect(extension).toContain("isTrellisAgent(root, agentName)");
-    expect(extension).not.toContain("message: buildTrellisContext");
-    expect(extension).not.toContain('message:\n      "Trellis project context');
+    expect(extension).toContain("isSuncodeAgent(root, agentName)");
+    expect(extension).not.toContain("message: buildSuncodeContext");
+    expect(extension).not.toContain('message:\n      "Suncode project context');
     expect(extension).not.toContain("persistent: true");
     expect(extension).not.toContain(
       '["--mode", "json", "-p", "--no-session", toPiPromptArgument(prompt)]',
@@ -1057,7 +1057,7 @@ describe("configurePlatform", () => {
 
     expect(
       fs.readFileSync(
-        path.join(tmpDir, ".pi", "extensions", "trellis", "index.ts"),
+        path.join(tmpDir, ".pi", "extensions", "suncode", "index.ts"),
         "utf-8",
       ),
     ).toBe(replacePythonCommandLiterals(getPiExtensionTemplate()));
@@ -1067,8 +1067,8 @@ describe("configurePlatform", () => {
         path.join(tmpDir, ".pi", "agents", `${agent.name}.md`),
         "utf-8",
       );
-      if (["trellis-implement", "trellis-check"].includes(agent.name)) {
-        expect(content).toContain("Required: Load Trellis Context First");
+      if (["suncode-implement", "suncode-check"].includes(agent.name)) {
+        expect(content).toContain("Required: Load Suncode Context First");
       } else {
         expect(content).toBe(replacePythonCommandLiterals(agent.content));
       }
@@ -1078,24 +1078,24 @@ describe("configurePlatform", () => {
   it("collectPlatformTemplates('pi') maps prompts, skills, agents, extension, and settings", () => {
     const templates = collectPlatformTemplates("pi");
     expect(templates).toBeInstanceOf(Map);
-    expect(templates?.get(".pi/prompts/trellis-start.md")).toBeDefined();
-    expect(templates?.get(".pi/prompts/trellis-finish-work.md")).toBeDefined();
-    expect(templates?.get(".pi/prompts/trellis-continue.md")).toBeDefined();
-    expect(templates?.get(".pi/skills/trellis-check/SKILL.md")).toBeDefined();
+    expect(templates?.get(".pi/prompts/suncode-start.md")).toBeDefined();
+    expect(templates?.get(".pi/prompts/suncode-finish-work.md")).toBeDefined();
+    expect(templates?.get(".pi/prompts/suncode-continue.md")).toBeDefined();
+    expect(templates?.get(".pi/skills/suncode-check/SKILL.md")).toBeDefined();
     expect(
       templates?.get(
-        ".pi/skills/trellis-meta/references/local-architecture/overview.md",
+        ".pi/skills/suncode-meta/references/local-architecture/overview.md",
       ),
     ).toBeDefined();
     expect(
       templates?.get(
-        ".pi/skills/trellis-spec-bootstrap/references/spec-writing.md",
+        ".pi/skills/suncode-spec-bootstrap/references/spec-writing.md",
       ),
     ).toBeDefined();
-    expect(templates?.get(".pi/agents/trellis-implement.md")).toContain(
-      "Required: Load Trellis Context First",
+    expect(templates?.get(".pi/agents/suncode-implement.md")).toContain(
+      "Required: Load Suncode Context First",
     );
-    expect(templates?.get(".pi/extensions/trellis/index.ts")).toBe(
+    expect(templates?.get(".pi/extensions/suncode/index.ts")).toBe(
       replacePythonCommandLiterals(getPiExtensionTemplate()),
     );
     expect(templates?.get(".pi/settings.json")).toBe(
@@ -1103,18 +1103,18 @@ describe("configurePlatform", () => {
     );
   });
 
-  it("collectPlatformTemplates('droid') maps commands under .factory/commands/trellis/", () => {
+  it("collectPlatformTemplates('droid') maps commands under .factory/commands/suncode/", () => {
     const templates = collectPlatformTemplates("droid");
     expect(templates).toBeInstanceOf(Map);
     // Droid is agent-capable → start.md not emitted.
     expect(
-      templates?.get(".factory/commands/trellis/start.md"),
+      templates?.get(".factory/commands/suncode/start.md"),
     ).toBeUndefined();
     expect(
-      templates?.get(".factory/commands/trellis/finish-work.md"),
+      templates?.get(".factory/commands/suncode/finish-work.md"),
     ).toBeDefined();
     expect(
-      templates?.get(".factory/commands/trellis/continue.md"),
+      templates?.get(".factory/commands/suncode/continue.md"),
     ).toBeDefined();
   });
 
@@ -1167,7 +1167,7 @@ describe("configurePlatform", () => {
     expect(templates?.get(".github/copilot/hooks.json")).toBe(
       resolvePlaceholders(getCopilotHooksConfig()),
     );
-    expect(templates?.get(".github/hooks/trellis.json")).toBe(
+    expect(templates?.get(".github/hooks/suncode.json")).toBe(
       resolvePlaceholders(getCopilotHooksConfig()),
     );
   });

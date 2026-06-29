@@ -39,7 +39,7 @@ interface TmpEnv {
 
 function setup(): TmpEnv {
   const tmpDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "trellis-channel-guard-test-"),
+    path.join(os.tmpdir(), "suncode-channel-guard-test-"),
   );
   const projectDir = path.join(tmpDir, "project");
   fs.mkdirSync(projectDir);
@@ -537,7 +537,7 @@ describe("scanLiveWorkers + enforceSpawnBudget (integration)", () => {
     });
     expect(msg).toContain("Live worker budget exhausted");
     expect(msg).toContain("channel='c5'");
-    expect(msg).toContain("trellis channel kill");
+    expect(msg).toContain("suncode channel kill");
     expect(msg).toContain("--max-live-workers");
   });
 

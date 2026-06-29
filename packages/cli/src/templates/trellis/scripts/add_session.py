@@ -321,7 +321,7 @@ def update_index(
 # =============================================================================
 
 def _auto_commit_workspace(repo_root: Path) -> None:
-    """Stage Trellis-owned workspace + current-task paths and commit.
+    """Stage Suncode-owned workspace + current-task paths and commit.
 
     Path scope is restricted to specific products: the current developer's
     journal files + index.md, and ONLY the current task directory (resolved

@@ -1,5 +1,5 @@
 ---
-description: "Trellis Copilot prompt: Break the Loop - Deep Bug Analysis"
+description: "Suncode Copilot prompt: Break the Loop - Deep Bug Analysis"
 ---
 
 # Break the Loop - Deep Bug Analysis
@@ -117,10 +117,10 @@ Three levels of insight:
 **IMPORTANT**: After completing the analysis above, you MUST immediately:
 
 1. **Update spec/guides** - Don't just list TODOs, actually update the relevant files:
-   - If it's a cross-platform issue â†?update `cross-platform-thinking-guide.md`
-   - If it's a cross-layer issue â†?update `cross-layer-thinking-guide.md`
-   - If it's a code reuse issue â†?update `code-reuse-thinking-guide.md`
-   - If it's domain-specific â†?update `backend/*.md` or `frontend/*.md`
+   - If it's a cross-platform issue ï¿½?update `cross-platform-thinking-guide.md`
+   - If it's a cross-layer issue ï¿½?update `cross-layer-thinking-guide.md`
+   - If it's a code reuse issue ï¿½?update `code-reuse-thinking-guide.md`
+   - If it's domain-specific ï¿½?update `backend/*.md` or `frontend/*.md`
 
 2. **Sync templates** - After updating `.trellis/spec/`, sync to `src/templates/markdown/spec/`
 

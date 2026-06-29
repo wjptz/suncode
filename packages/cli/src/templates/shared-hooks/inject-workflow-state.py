@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Trellis per-turn breadcrumb hook (UserPromptSubmit / BeforeAgent equivalent).
+"""Suncode per-turn breadcrumb hook (UserPromptSubmit / BeforeAgent equivalent).
 
-Runs on every user prompt. Resolves the active task through Trellis'
+Runs on every user prompt. Resolves the active task through Suncode'
 session-aware active task resolver and emits a short <workflow-state>
 block reminding the main AI what task is active and its expected flow.
 
@@ -25,7 +25,7 @@ custom agent's ``hooks.userPromptSubmit`` and the IDE ``.kiro.hook``
 each platform's hooks directory via writeSharedHooks() at init time.
 
 Silent exit 0 cases (no output):
-  - No .trellis/ directory found (not a Trellis project)
+  - No .trellis/ directory found (not a Suncode project)
   - task.json malformed or missing status
 """
 from __future__ import annotations
@@ -66,12 +66,12 @@ from typing import Optional
 # get the full SessionStart overview; this short reminder points the main session
 # at the start skill once and leaves the per-turn state block compact.
 CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<trellis-bootstrap>
-If you have not already loaded Trellis context this session, read the `trellis-start` skill once.
-</trellis-bootstrap>"""
+If you have not already loaded Suncode context this session, read the `suncode-start` skill once.
+</suncode-bootstrap>"""
 
 
 # ---------------------------------------------------------------------------
-# CWD-robust Trellis root discovery (fixes hook-path-robustness for this hook)
+# CWD-robust Suncode root discovery (fixes hook-path-robustness for this hook)
 # ---------------------------------------------------------------------------
 
 def find_trellis_root(start: Path) -> Optional[Path]:
@@ -243,7 +243,7 @@ def _codex_mode_banner(config: dict) -> str:
                 mode = cfg_mode
     if mode == "sub-agent":
         meaning = (
-            "sub-agent: implement/check work defaults to Trellis sub-agents; "
+            "sub-agent: implement/check work defaults to Suncode sub-agents; "
             "the main session still coordinates, clarifies, updates specs, commits, and finishes."
         )
     else:
@@ -351,7 +351,7 @@ def main() -> int:
 
     root = find_trellis_root(cwd)
     if root is None:
-        return 0  # not a Trellis project
+        return 0  # not a Suncode project
 
     templates = load_breadcrumbs(root)
     platform = _detect_platform(data)
@@ -359,7 +359,7 @@ def main() -> int:
     task = get_active_task(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward
-        # trellis-brainstorm + task.py create when user describes real work.
+        # suncode-brainstorm + task.py create when user describes real work.
         no_task_key = resolve_breadcrumb_key("no_task", platform, config)
         breadcrumb = build_breadcrumb(
             None, "no_task", templates, breadcrumb_key=no_task_key

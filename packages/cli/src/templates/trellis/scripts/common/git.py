@@ -1,7 +1,7 @@
 """
 Git command execution utility.
 
-Single source of truth for running git commands across all Trellis scripts.
+Single source of truth for running git commands across all Suncode scripts.
 """
 
 from __future__ import annotations

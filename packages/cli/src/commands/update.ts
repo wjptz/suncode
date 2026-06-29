@@ -98,7 +98,7 @@ const TRELLIS_BLOCK_START = "<!-- TRELLIS:START -->";
 const TRELLIS_BLOCK_END = "<!-- TRELLIS:END -->";
 const LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES = new Set<string>([
   // v0.5.0-beta.17 and earlier wrote AGENTS.md but did not hash-track it.
-  // This hash is the pristine Trellis-managed block before the Subagents
+  // This hash is the pristine Suncode-managed block before the Subagents
   // section was added, so old untouched projects can be updated without a
   // false "modified by you" conflict.
   "c1f511b1cfc1902f2147da159f09cc51f380b0c9e341cdb3ac5dea5233f3e307",
@@ -571,8 +571,8 @@ function needsCodexUpgrade(cwd: string): boolean {
   // the marker paths in its templates.
   const hashes = loadHashes(cwd);
   const legacyMarkers = [
-    ".agents/skills/trellis-continue/SKILL.md",
-    ".agents/skills/trellis-finish-work/SKILL.md",
+    ".agents/skills/suncode-continue/SKILL.md",
+    ".agents/skills/suncode-finish-work/SKILL.md",
   ];
   const hasLegacyMarker = legacyMarkers.some(
     (key) => hashes[key] !== undefined,
@@ -771,7 +771,7 @@ async function collectTemplateFiles(
   }
 
   // Channel runtime agent definitions (single source of truth: getAllAgents()).
-  // Backfilled by `trellis update` if missing so users who installed before the
+  // Backfilled by `suncode update` if missing so users who installed before the
   // bundled agents existed pick them up. Edited files take the standard
   // modified-file prompt path.
   for (const [agentFile, content] of getAllAgents()) {
@@ -1948,7 +1948,7 @@ export async function update(options: UpdateOptions): Promise<void> {
 
   // Self-heal poisoned manifests: prune entries that no current platform
   // configurator owns. This silently removes user-owned paths that early
-  // buggy versions of `trellis init` over-hashed (e.g. .codex/sessions/*).
+  // buggy versions of `suncode init` over-hashed (e.g. .codex/sessions/*).
   // Include codex in known-platforms when codexUpgradeNeeded so legacy Codex
   // markers under .agents/skills/ survive into the upgrade flow.
   {

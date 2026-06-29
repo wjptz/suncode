@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   contextCollector,
-  isTrellisSubagent,
-  TrellisContext,
-} from "../../src/templates/opencode/lib/trellis-context.js";
+  isSuncodeSubagent,
+  SuncodeContext,
+} from "../../src/templates/opencode/lib/suncode-context.js";
 import {
   buildSessionContext,
-  hasInjectedTrellisContext,
+  hasInjectedSuncodeContext,
 } from "../../src/templates/opencode/lib/session-utils.js";
 import injectSubagentContextPlugin from "../../src/templates/opencode/plugins/inject-subagent-context.js";
 import sessionStartPlugin from "../../src/templates/opencode/plugins/session-start.js";
@@ -34,7 +34,7 @@ async function createOpenCodeInjectHooks(
   env: NodeJS.ProcessEnv = {},
 ): Promise<OpenCodeInjectHooks> {
   return (await injectSubagentContextPlugin({
-    directory: "/tmp/trellis-opencode-test",
+    directory: "/tmp/suncode-opencode-test",
     platform,
     env,
   })) as OpenCodeInjectHooks;
@@ -74,7 +74,7 @@ describe("opencode session context dedupe", () => {
 describe("opencode session-start history detection", () => {
   it("includes the one-shot first-reply notice in injected context", () => {
     const context = buildSessionContext({
-      directory: "/tmp/trellis-opencode-test",
+      directory: "/tmp/suncode-opencode-test",
       getActiveTask: () => ({ taskPath: null, source: "none", stale: false }),
       getContextKey: () => null,
       getCurrentTask: () => null,
@@ -86,7 +86,7 @@ describe("opencode session-start history detection", () => {
 
     expect(context).toContain("<first-reply-notice>");
     expect(context).toContain("First visible reply");
-    expect(context).toContain("Trellis SessionStart context is loaded");
+    expect(context).toContain("Suncode SessionStart context is loaded");
     expect(context).toContain("This notice is one-shot");
     expect(context.indexOf("<first-reply-notice>")).toBeLessThan(
       context.indexOf("<guidelines>"),
@@ -111,7 +111,7 @@ describe("opencode session-start history detection", () => {
       },
     ];
 
-    expect(hasInjectedTrellisContext(messages)).toBe(true);
+    expect(hasInjectedSuncodeContext(messages)).toBe(true);
   });
 
   it("ignores unrelated user messages", () => {
@@ -127,7 +127,7 @@ describe("opencode session-start history detection", () => {
       },
     ];
 
-    expect(hasInjectedTrellisContext(messages)).toBe(false);
+    expect(hasInjectedSuncodeContext(messages)).toBe(false);
   });
 });
 
@@ -408,7 +408,7 @@ function setupTrellisProject(): string {
       "# Workflow",
       "",
       "[workflow-state:in_progress]",
-      "Active task: <task path>. Dispatch trellis-implement or trellis-check.",
+      "Active task: <task path>. Dispatch suncode-implement or suncode-check.",
       "[/workflow-state:in_progress]",
       "",
     ].join("\n"),
@@ -422,22 +422,22 @@ function writeSessionFile(dir: string, key: string, taskRef: string): void {
 }
 
 describe("opencode subagent helper", () => {
-  it("isTrellisSubagent matches the three trellis sub-agent names", () => {
-    expect(isTrellisSubagent({ agent: "trellis-implement" })).toBe(true);
-    expect(isTrellisSubagent({ agent: "trellis-check" })).toBe(true);
-    expect(isTrellisSubagent({ agent: "trellis-research" })).toBe(true);
+  it("isSuncodeSubagent matches the three trellis sub-agent names", () => {
+    expect(isSuncodeSubagent({ agent: "suncode-implement" })).toBe(true);
+    expect(isSuncodeSubagent({ agent: "suncode-check" })).toBe(true);
+    expect(isSuncodeSubagent({ agent: "suncode-research" })).toBe(true);
   });
 
-  it("isTrellisSubagent rejects unrelated agents", () => {
-    expect(isTrellisSubagent({ agent: "build" })).toBe(false);
-    expect(isTrellisSubagent({ agent: "trellis-implement-extra" })).toBe(false);
-    expect(isTrellisSubagent({ agent: undefined })).toBe(false);
-    expect(isTrellisSubagent({})).toBe(false);
-    expect(isTrellisSubagent(null)).toBe(false);
+  it("isSuncodeSubagent rejects unrelated agents", () => {
+    expect(isSuncodeSubagent({ agent: "build" })).toBe(false);
+    expect(isSuncodeSubagent({ agent: "suncode-implement-extra" })).toBe(false);
+    expect(isSuncodeSubagent({ agent: undefined })).toBe(false);
+    expect(isSuncodeSubagent({})).toBe(false);
+    expect(isSuncodeSubagent(null)).toBe(false);
   });
 });
 
-describe("opencode TrellisContext single-session fallback", () => {
+describe("opencode SuncodeContext single-session fallback", () => {
   let dir: string;
 
   beforeEach(() => {
@@ -450,7 +450,7 @@ describe("opencode TrellisContext single-session fallback", () => {
 
   it("returns the only session file when exactly one exists", () => {
     writeSessionFile(dir, "opencode_sole", ".trellis/tasks/demo-task");
-    const ctx = new TrellisContext(dir);
+    const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "missing-key" });
 
     expect(active.taskPath).toBe(".trellis/tasks/demo-task");
@@ -461,7 +461,7 @@ describe("opencode TrellisContext single-session fallback", () => {
   it("refuses to guess when two or more session files exist", () => {
     writeSessionFile(dir, "opencode_a", ".trellis/tasks/demo-task");
     writeSessionFile(dir, "opencode_b", ".trellis/tasks/demo-task");
-    const ctx = new TrellisContext(dir);
+    const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "missing-key" });
 
     expect(active.taskPath).toBeNull();
@@ -470,7 +470,7 @@ describe("opencode TrellisContext single-session fallback", () => {
 
   it("returns no task when zero session files exist (Python parity)", () => {
     // sessions/ exists from setupTrellisProject but contains no files
-    const ctx = new TrellisContext(dir);
+    const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "missing-key" });
 
     expect(active.taskPath).toBeNull();
@@ -480,7 +480,7 @@ describe("opencode TrellisContext single-session fallback", () => {
   it("prefers an exact context-key match over the fallback", () => {
     writeSessionFile(dir, "opencode_session_exact", ".trellis/tasks/demo-task");
     writeSessionFile(dir, "opencode_other", ".trellis/tasks/demo-task");
-    const ctx = new TrellisContext(dir);
+    const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "exact" });
 
     // sessionID="exact" maps to "opencode_exact" via buildContextKey; we
@@ -512,7 +512,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     writeSessionFile(dir, "opencode_sole", ".trellis/tasks/demo-task");
     const output: TaskToolOutput = {
       args: {
-        subagent_type: "trellis-implement",
+        subagent_type: "suncode-implement",
         prompt: "do the implementation",
       },
     };
@@ -547,7 +547,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
 
     const output: TaskToolOutput = {
       args: {
-        subagent_type: "trellis-implement",
+        subagent_type: "suncode-implement",
         prompt: "do the implementation",
       },
     };
@@ -568,7 +568,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     // Hint is the only resolver.
     const output: TaskToolOutput = {
       args: {
-        subagent_type: "trellis-check",
+        subagent_type: "suncode-check",
         prompt: "Active task: .trellis/tasks/demo-task\n\nplease check",
       },
     };
@@ -594,7 +594,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
 
     const output: TaskToolOutput = {
       args: {
-        subagent_type: "trellis-implement",
+        subagent_type: "suncode-implement",
         prompt: "Active task: .trellis/tasks/hint-task\n\ngo",
       },
     };
@@ -611,7 +611,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
   it("emits the trellis-hook-injected marker for research agent too", async () => {
     const output: TaskToolOutput = {
       args: {
-        subagent_type: "trellis-research",
+        subagent_type: "suncode-research",
         prompt: "investigate something",
       },
     };
@@ -628,7 +628,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
   it("skips when no task can be resolved through any path", async () => {
     const output: TaskToolOutput = {
       args: {
-        subagent_type: "trellis-implement",
+        subagent_type: "suncode-implement",
         prompt: "implement without context",
       },
     };
@@ -664,7 +664,7 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     const parts: ChatMessagePart[] = [{ type: "text", text: "original" }];
 
     await hooks["chat.message"](
-      { sessionID: "subagent-session", agent: "trellis-implement" },
+      { sessionID: "subagent-session", agent: "suncode-implement" },
       { parts },
     );
 
@@ -673,13 +673,13 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     expect(parts[0].metadata).toBeUndefined();
   });
 
-  it("session-start.js skips trellis-check and trellis-research", async () => {
+  it("session-start.js skips suncode-check and suncode-research", async () => {
     const hooks = (await sessionStartPlugin({
       directory: dir,
       client: undefined,
     })) as ChatMessageHooks;
 
-    for (const agent of ["trellis-check", "trellis-research"]) {
+    for (const agent of ["suncode-check", "suncode-research"]) {
       const parts: ChatMessagePart[] = [{ type: "text", text: "untouched" }];
       await hooks["chat.message"](
         { sessionID: "subagent-session", agent },
@@ -696,7 +696,7 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     const parts: ChatMessagePart[] = [{ type: "text", text: "original" }];
 
     await hooks["chat.message"](
-      { sessionID: "subagent-session", agent: "trellis-implement" },
+      { sessionID: "subagent-session", agent: "suncode-implement" },
       { parts },
     );
 

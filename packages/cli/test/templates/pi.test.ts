@@ -28,7 +28,7 @@ interface PiRunConfig {
 
 interface PiExtensionInternals {
   normalizeAgent: (agent: string | undefined) => string;
-  isTrellisAgent: (root: string, agent: string) => boolean;
+  isSuncodeAgent: (root: string, agent: string) => boolean;
   parseAgentFM: (content: string) => AgentConfig;
   buildPiArgs: (config: PiRunConfig) => string[];
   resolveRunCfg: (
@@ -36,9 +36,9 @@ interface PiExtensionInternals {
     agentCfg: AgentConfig,
     inheritedThinking?: string,
   ) => PiRunConfig;
-  cmdHasTrellisCtx: (cmd: string) => boolean;
+  cmdHasSuncodeCtx: (cmd: string) => boolean;
   shellQuote: (v: string) => string;
-  trellisExtension: (pi: {
+  suncodeExtension: (pi: {
     registerTool?: (tool: unknown) => void;
     registerShortcut?: (key: string, opts: unknown) => void;
     on?: (event: string, handler: (event: unknown, ctx?: unknown) => unknown) => void;
@@ -50,13 +50,13 @@ function loadExtensionInternals(cwd = process.cwd()): PiExtensionInternals {
 
 export {
   normalizeAgent,
-  isTrellisAgent,
+  isSuncodeAgent,
   parseAgentFM,
   buildPiArgs,
   resolveRunCfg,
-  cmdHasTrellisCtx,
+  cmdHasSuncodeCtx,
   shellQuote,
-  trellisExtension,
+  suncodeExtension,
 };
 `;
   const compiled = ts.transpileModule(source, {
@@ -91,7 +91,7 @@ function createMinimalTrellisRoot(): string {
     join(root, ".trellis", "workflow.md"),
     [
       "[workflow-state:no_task]",
-      "No active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.",
+      "No active task. First classify the current turn and ask for task-creation consent before creating any Suncode task.",
       "[/workflow-state:no_task]",
       "",
     ].join("\n"),
@@ -112,12 +112,12 @@ function createMinimalTrellisRoot(): string {
 }
 
 describe("pi templates", () => {
-  it("provides the three Trellis sub-agent definitions", () => {
+  it("provides the three Suncode sub-agent definitions", () => {
     const agents = getAllAgents();
     expect(agents.map((agent) => agent.name).sort()).toEqual([
-      "trellis-check",
-      "trellis-implement",
-      "trellis-research",
+      "suncode-check",
+      "suncode-implement",
+      "suncode-research",
     ]);
 
     for (const agent of agents) {
@@ -136,32 +136,32 @@ describe("pi templates", () => {
     };
 
     expect(settings.enableSkillCommands).toBe(true);
-    expect(settings.extensions).toEqual(["./extensions/trellis/index.ts"]);
+    expect(settings.extensions).toEqual(["./extensions/suncode/index.ts"]);
     expect(settings.skills).toEqual(["./skills"]);
     expect(settings.prompts).toEqual(["./prompts"]);
     expect(settings.packages).toBeUndefined();
   });
 
-  it("collects a manual trellis-start prompt for Pi fallback bootstrap", () => {
+  it("collects a manual suncode-start prompt for Pi fallback bootstrap", () => {
     const templates = collectPiTemplates();
 
-    expect(templates.get(".pi/prompts/trellis-start.md")).toContain(
+    expect(templates.get(".pi/prompts/suncode-start.md")).toContain(
       "# Start Session",
     );
-    expect(templates.get(".pi/prompts/trellis-continue.md")).toContain(
+    expect(templates.get(".pi/prompts/suncode-continue.md")).toContain(
       "get_context.py --mode phase",
     );
-    expect(templates.get(".pi/prompts/trellis-finish-work.md")).toContain(
+    expect(templates.get(".pi/prompts/suncode-finish-work.md")).toContain(
       "finish-work",
     );
   });
 
-  it("extension registers the trellis_subagent tool with mode+thinking schema", () => {
+  it("extension registers the suncode_subagent tool with mode+thinking schema", () => {
     const extension = getExtensionTemplate();
 
     // Tool name + label avoid collision with community subagent packages.
-    expect(extension).toContain('name: "trellis_subagent"');
-    expect(extension).toContain('label: "Trellis Subagent"');
+    expect(extension).toContain('name: "suncode_subagent"');
+    expect(extension).toContain('label: "Suncode Subagent"');
 
     // Schema must declare the three dispatch modes and the thinking enum so the LLM
     // can pick a valid mode and override thinking per call.
@@ -176,14 +176,14 @@ describe("pi templates", () => {
     expect(extension).toContain("Active task:");
   });
 
-  it("extension wires the Pi events Trellis needs for context flow", () => {
+  it("extension wires the Pi events Suncode needs for context flow", () => {
     const extension = getExtensionTemplate();
 
     // session_start: notify-only welcome
     expect(extension).toContain('pi.on?.("session_start"');
     // input: per-turn model-visible workflow breadcrumb
     expect(extension).toContain('pi.on?.("input"');
-    // before_agent_start: inject Trellis task context + per-turn breadcrumb
+    // before_agent_start: inject Suncode task context + per-turn breadcrumb
     expect(extension).toContain('pi.on?.("before_agent_start"');
     // tool_call: inject TRELLIS_CONTEXT_ID into bash commands
     expect(extension).toContain('pi.on?.("tool_call"');
@@ -193,13 +193,13 @@ describe("pi templates", () => {
 
   it("injects workflow state on input and startup context on first agent start", () => {
     const root = createMinimalTrellisRoot();
-    const { trellisExtension } = loadExtensionInternals(root);
+    const { suncodeExtension } = loadExtensionInternals(root);
     const handlers = new Map<
       string,
       (event: unknown, ctx?: unknown) => unknown
     >();
 
-    trellisExtension({
+    suncodeExtension({
       registerTool: vi.fn(),
       registerShortcut: vi.fn(),
       on(event, handler) {
@@ -232,12 +232,12 @@ describe("pi templates", () => {
     ) as { systemPrompt: string };
 
     expect(first.systemPrompt).toContain(
-      "Trellis compact SessionStart context",
+      "Suncode compact SessionStart context",
     );
     expect(first.systemPrompt).toContain("<first-reply-notice>");
     expect(first.systemPrompt).toContain("<trellis-workflow>");
     expect(first.systemPrompt).toContain("Phase 1: Plan");
-    expect(first.systemPrompt).toContain("No active Trellis task found");
+    expect(first.systemPrompt).toContain("No active Suncode task found");
 
     const second = beforeAgentStart?.(
       {
@@ -250,7 +250,7 @@ describe("pi templates", () => {
     ) as { systemPrompt: string };
 
     expect(second.systemPrompt).not.toContain(
-      "Trellis compact SessionStart context",
+      "Suncode compact SessionStart context",
     );
     expect(second.systemPrompt).toContain("<workflow-state>");
   });
@@ -262,40 +262,40 @@ describe("pi templates", () => {
     // python scripts (e.g. task.py current) inherit session identity.
     expect(extension).toContain('ev.toolName === "bash"');
     expect(extension).toContain("export TRELLIS_CONTEXT_ID=");
-    expect(extension).toContain("cmdHasTrellisCtx");
+    expect(extension).toContain("cmdHasSuncodeCtx");
   });
 
   it("extension tool_result handler marks failed/cancelled subagent runs as errors", () => {
     const extension = getExtensionTemplate();
 
-    expect(extension).toContain('ev.toolName === "trellis_subagent"');
+    expect(extension).toContain('ev.toolName === "suncode_subagent"');
     expect(extension).toContain('r.status === "failed"');
     expect(extension).toContain('r.status === "cancelled"');
     expect(extension).toContain("isError: true");
   });
 
-  it("normalizeAgent prefixes bare names with trellis- and leaves prefixed names alone", () => {
+  it("normalizeAgent prefixes bare names with suncode- and leaves prefixed names alone", () => {
     const { normalizeAgent } = loadExtensionInternals();
 
-    expect(normalizeAgent("implement")).toBe("trellis-implement");
-    expect(normalizeAgent("check")).toBe("trellis-check");
-    expect(normalizeAgent("trellis-research")).toBe("trellis-research");
-    expect(normalizeAgent(undefined)).toBe("trellis-implement");
-    expect(normalizeAgent("trellis-custom")).toBe("trellis-custom");
+    expect(normalizeAgent("implement")).toBe("suncode-implement");
+    expect(normalizeAgent("check")).toBe("suncode-check");
+    expect(normalizeAgent("suncode-research")).toBe("suncode-research");
+    expect(normalizeAgent(undefined)).toBe("suncode-implement");
+    expect(normalizeAgent("suncode-custom")).toBe("suncode-custom");
   });
 
-  it("isTrellisAgent gates on a real .pi/agents/*.md definition file", () => {
-    const { isTrellisAgent } = loadExtensionInternals();
+  it("isSuncodeAgent gates on a real .pi/agents/*.md definition file", () => {
+    const { isSuncodeAgent } = loadExtensionInternals();
 
     const root = mkdtempSync(join(tmpdir(), "trellis-pi-test-"));
     mkdirSync(join(root, ".pi", "agents"), { recursive: true });
     writeFileSync(
-      join(root, ".pi", "agents", "trellis-implement.md"),
-      "---\nname: trellis-implement\n---\n",
+      join(root, ".pi", "agents", "suncode-implement.md"),
+      "---\nname: suncode-implement\n---\n",
     );
 
-    expect(isTrellisAgent(root, "trellis-implement")).toBe(true);
-    expect(isTrellisAgent(root, "trellis-foo")).toBe(false);
+    expect(isSuncodeAgent(root, "suncode-implement")).toBe(true);
+    expect(isSuncodeAgent(root, "not-suncode-foo")).toBe(false);
     expect(existsSync(root)).toBe(true);
   });
 
@@ -421,14 +421,14 @@ fallbackModels:
     ).toEqual({ model: "gpt-5:medium", thinking: "medium" });
   });
 
-  it("cmdHasTrellisCtx detects already-prefixed bash commands", () => {
-    const { cmdHasTrellisCtx } = loadExtensionInternals();
+  it("cmdHasSuncodeCtx detects already-prefixed bash commands", () => {
+    const { cmdHasSuncodeCtx } = loadExtensionInternals();
 
-    expect(cmdHasTrellisCtx("export TRELLIS_CONTEXT_ID=foo; ls")).toBe(true);
-    expect(cmdHasTrellisCtx("TRELLIS_CONTEXT_ID=foo ls")).toBe(true);
-    expect(cmdHasTrellisCtx("env TRELLIS_CONTEXT_ID=foo ls")).toBe(true);
-    expect(cmdHasTrellisCtx("ls -la")).toBe(false);
-    expect(cmdHasTrellisCtx("")).toBe(false);
+    expect(cmdHasSuncodeCtx("export TRELLIS_CONTEXT_ID=foo; ls")).toBe(true);
+    expect(cmdHasSuncodeCtx("TRELLIS_CONTEXT_ID=foo ls")).toBe(true);
+    expect(cmdHasSuncodeCtx("env TRELLIS_CONTEXT_ID=foo ls")).toBe(true);
+    expect(cmdHasSuncodeCtx("ls -la")).toBe(false);
+    expect(cmdHasSuncodeCtx("")).toBe(false);
   });
 
   it("shellQuote single-quotes values and escapes embedded single quotes", () => {
@@ -451,10 +451,10 @@ fallbackModels:
   it("extension validates agent definition before spawning a child pi process", () => {
     const extension = getExtensionTemplate();
 
-    // Non-Trellis agent calls must short-circuit and point users to community
+    // Non-Suncode agent calls must short-circuit and point users to community
     // subagent packages instead of silently spawning a child pi process with
     // a missing agent definition.
-    expect(extension).toContain("isTrellisAgent(root, agentName)");
+    expect(extension).toContain("isSuncodeAgent(root, agentName)");
     expect(extension).toContain("npm:@tintinweb/pi-subagents");
     expect(extension).toContain("npm:pi-subagents");
   });

@@ -12,7 +12,7 @@ Core Design Philosophy:
 
 Trigger: PreToolUse (before Task tool call)
 
-Context Source: Trellis active task resolver points to task directory
+Context Source: Suncode active task resolver points to task directory
 - implement.jsonl - Implement agent dedicated context
 - check.jsonl     - Check agent dedicated context
 - prd.md          - Requirements document
@@ -54,9 +54,9 @@ FILE_TASK_JSON = "task.json"
 # Subagent Constants (change here to rename subagent types)
 # =============================================================================
 
-AGENT_IMPLEMENT = "trellis-implement"
-AGENT_CHECK = "trellis-check"
-AGENT_RESEARCH = "trellis-research"
+AGENT_IMPLEMENT = "suncode-implement"
+AGENT_CHECK = "suncode-check"
+AGENT_RESEARCH = "suncode-research"
 
 # Agents that require a task directory
 AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, AGENT_CHECK)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Session-scoped active task resolution.
 
-The user-facing concept is a single "active task". Trellis stores that pointer
+The user-facing concept is a single "active task". Suncode stores that pointer
 per AI session/window under `.trellis/.runtime/sessions/`; without a stable
 session key there is no active task.
 """

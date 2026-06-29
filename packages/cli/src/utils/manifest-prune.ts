@@ -9,16 +9,16 @@
  *
  * `pruneOrphanManifestKeys` removes any manifest entry that no current
  * platform configurator owns. The two entry points that consume it are
- * `trellis update` (before migration classification) and `trellis uninstall`
+ * `suncode update` (before migration classification) and `suncode uninstall`
  * (before plan building). Together they ensure existing poisoned manifests
  * self-correct on the next routine command.
  *
  * Rules:
- *   - `.trellis/*` entries are ALWAYS kept. `trellis uninstall` removes
+ *   - `.trellis/*` entries are ALWAYS kept. `suncode uninstall` removes
  *     `.trellis/` wholesale via `fs.rmSync(..., { recursive: true })`, so
  *     manifest accuracy there doesn't affect uninstall data-loss. `update`
  *     also relies on these entries to detect user-modified workflow files.
- *   - Root-level `AGENTS.md` is kept only when it still looks Trellis-managed
+ *   - Root-level `AGENTS.md` is kept only when it still looks Suncode-managed
  *     (contains the managed block markers) or is missing on disk. This
  *     self-heals old poisoned manifests for user-owned AGENTS.md files that
  *     predated init and were skipped.

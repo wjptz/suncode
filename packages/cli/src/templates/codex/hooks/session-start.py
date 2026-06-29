@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Codex Session Start Hook - Inject Trellis context into Codex sessions.
+Codex Session Start Hook - Inject Suncode context into Codex sessions.
 
 Output format follows Codex hook protocol:
   stdout JSON → { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "..." } }
@@ -93,7 +93,7 @@ warnings.filterwarnings("ignore")
 
 FIRST_REPLY_NOTICE = """<first-reply-notice>
 On the first visible assistant reply in this session, begin with exactly one short Chinese sentence:
-Trellis SessionStart 已注入：workflow、当前任务状态、开发者身份、git 状态、active tasks、spec 索引已加载。
+Suncode SessionStart 已注入：workflow、当前任务状态、开发者身份、git 状态、active tasks、spec 索引已加载。
 Then continue directly with the user's request. This notice is one-shot: do not repeat it after the first assistant reply in the same session.
 </first-reply-notice>"""
 
@@ -106,7 +106,7 @@ def should_skip_injection() -> bool:
 
 
 def configure_project_encoding(project_dir: Path) -> None:
-    """Reuse Trellis' shared Windows stdio encoding helper before JSON output."""
+    """Reuse Suncode' shared Windows stdio encoding helper before JSON output."""
     scripts_dir = project_dir / ".trellis" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
@@ -226,7 +226,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
         return (
             "Status: NO ACTIVE TASK\n"
             "Next: Classify the current turn and ask for task-creation consent "
-            "before creating any Trellis task."
+            "before creating any Suncode task."
         )
 
     task_ref = active.task_path
@@ -268,7 +268,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if not has_prd:
         return (
             f"Status: PLANNING\nTask: {task_title}\nPresent: {present_line}\n"
-            "Next: Load trellis-brainstorm and write prd.md. Stay in planning."
+            "Next: Load suncode-brainstorm and write prd.md. Stay in planning."
         )
 
     if task_status == "planning":
@@ -487,7 +487,7 @@ def main() -> None:
     output = StringIO()
 
     output.write("""<session-context>
-Trellis compact SessionStart context. Use it to orient the session; load details on demand.
+Suncode compact SessionStart context. Use it to orient the session; load details on demand.
 </session-context>
 
 """)
@@ -531,7 +531,7 @@ Context loaded. Follow <task-status>. Load workflow/spec/task details only when 
     context = output.getvalue()
     result = {
         "suppressOutput": True,
-        "systemMessage": f"Trellis context injected ({len(context)} chars)",
+        "systemMessage": f"Suncode context injected ({len(context)} chars)",
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": context,

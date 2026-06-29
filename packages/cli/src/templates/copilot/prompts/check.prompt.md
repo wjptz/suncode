@@ -1,5 +1,5 @@
 ---
-description: "Trellis Copilot prompt: check.prompt"
+description: "Suncode Copilot prompt: check.prompt"
 ---
 
 # Code Quality Check

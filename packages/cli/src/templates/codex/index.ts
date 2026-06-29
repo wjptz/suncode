@@ -2,7 +2,7 @@
  * Codex templates
  *
  * These are GENERIC templates for user projects.
- * Do NOT use Trellis project's own .agents/skills or .codex directories
+ * Do NOT use Suncode project's own .agents/skills or .codex directories
  * (which may be customized).
  *
  * Directory structure:

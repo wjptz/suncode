@@ -1,7 +1,7 @@
 """
-Common utilities for Trellis workflow scripts.
+Common utilities for Suncode workflow scripts.
 
-This module provides shared functionality used by other Trellis scripts.
+This module provides shared functionality used by other Suncode scripts.
 """
 
 import io

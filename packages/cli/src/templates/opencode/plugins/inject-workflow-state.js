@@ -1,10 +1,10 @@
 /* global process */
 /**
- * Trellis Workflow State Injection Plugin
+ * Suncode Workflow State Injection Plugin
  *
  * Per-turn UserPromptSubmit equivalent for OpenCode.
  *
- * On every chat.message, if a Trellis task is active, inject a short
+ * On every chat.message, if a Suncode task is active, inject a short
  * <workflow-state> breadcrumb reminding the main AI what task is
  * active and its expected flow. Breadcrumb text is pulled exclusively
  * from the project's workflow.md [workflow-state:STATUS] tag blocks —
@@ -25,7 +25,7 @@
 
 import { existsSync, readFileSync } from "fs"
 import { join } from "path"
-import { TrellisContext, debugLog, isTrellisSubagent } from "../lib/trellis-context.js"
+import { SuncodeContext, debugLog, isSuncodeSubagent } from "../lib/suncode-context.js"
 
 // Supports STATUS values with letters, digits, underscores, hyphens
 // (so "in-review" / "blocked-by-team" work alongside "in_progress").
@@ -100,7 +100,7 @@ function buildBreadcrumb(id, status, templates) {
 
 // OpenCode 1.2.x expects plugins to be factory functions (see inject-subagent-context.js comment).
 export default async ({ directory }) => {
-  const ctx = new TrellisContext(directory)
+  const ctx = new SuncodeContext(directory)
   debugLog("workflow-state", "Plugin loaded, directory:", directory)
 
   return {
@@ -108,11 +108,11 @@ export default async ({ directory }) => {
       // so it persists in conversation history.
       "chat.message": async (input, output) => {
         try {
-          // Skip Trellis sub-agent turns — the per-turn breadcrumb is for the
+          // Skip Suncode sub-agent turns — the per-turn breadcrumb is for the
           // main session only; sub-agent context comes from the parent's
           // tool.execute.before injection.
-          if (isTrellisSubagent(input)) {
-            debugLog("workflow-state", "Skipping trellis subagent turn:", input?.agent)
+          if (isSuncodeSubagent(input)) {
+            debugLog("workflow-state", "Skipping suncode subagent turn:", input?.agent)
             return
           }
           if (process.env.TRELLIS_HOOKS === "0" || process.env.TRELLIS_DISABLE_HOOKS === "1") {
@@ -121,7 +121,7 @@ export default async ({ directory }) => {
           if (process.env.OPENCODE_NON_INTERACTIVE === "1") {
             return
           }
-          if (!ctx.isTrellisProject()) {
+          if (!ctx.isSuncodeProject()) {
             return
           }
           const templates = loadBreadcrumbs(directory)

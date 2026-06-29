@@ -12,7 +12,7 @@
 
 ---
 
-## Trellis System
+## Suncode System
 
 ### Developer Identity
 
@@ -135,7 +135,7 @@ python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>  # detailed 
   Editing checklist:
     - When you change a [workflow-state:STATUS] block, also check the
       matching phase's `[required · once]` walkthrough steps for sync
-    - Run `trellis update` after editing to push the new bodies to
+    - Run `suncode update` after editing to push the new bodies to
       downstream user projects (block-level managed replacement)
     - Full runtime contract:
       .trellis/spec/cli/backend/workflow-state-contract.md
@@ -151,8 +151,8 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 
 ### Request Triage
 
-- Simple conversation or small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
-- Complex task: ask whether you may create a Trellis task and enter planning. If the user says no, do not do broad inline implementation; explain, clarify scope, or suggest a smaller split.
+- Simple conversation or small task: ask only whether this turn should create a Suncode task. If the user says no, skip Suncode for this session.
+- Complex task: ask whether you may create a Suncode task and enter planning. If the user says no, do not do broad inline implementation; explain, clarify scope, or suggest a smaller split.
 - User approval to create a task is not approval to start implementation. Planning still happens first.
 
 ### Planning Artifacts
@@ -174,9 +174,9 @@ Create new children with `task.py create "<title>" --slug <name> --parent <paren
 <!-- Per-turn breadcrumb: shown when there is no active task (before Phase 1) -->
 
 [workflow-state:no_task]
-No active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.
-Simple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
-Complex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.
+No active task. First classify the current turn and ask for task-creation consent before creating any Suncode task.
+Simple conversation / small task: ask only whether this turn should create a Suncode task. If the user says no, skip Suncode for this session.
+Complex task: ask the user if you can create a Suncode task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.
 [/workflow-state:no_task]
 
 ### Phase 1: Plan
@@ -190,7 +190,7 @@ Complex task: ask the user if you can create a Trellis task and enter the planni
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
-Load `trellis-brainstorm`; stay in planning.
+Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
@@ -199,14 +199,14 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
 <!-- Per-turn breadcrumb: shown throughout Phase 1 when codex.dispatch_mode=inline.
      Codex-only opt-in alternate to [workflow-state:planning]. The main agent
      edits code directly in Phase 2, so jsonl curation is skipped —
-     the inline workflow loads `trellis-before-dev` instead of injecting JSONL
+     the inline workflow loads `suncode-before-dev` instead of injecting JSONL
      into a sub-agent. -->
 
 [workflow-state:planning-inline]
-Load `trellis-brainstorm`; stay in planning.
+Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
-Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-before-dev`.
+Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `suncode-before-dev`.
 [/workflow-state:planning-inline]
 
 ### Phase 2: Execute
@@ -220,12 +220,12 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-bef
      therefore must cover every required step from implementation through
      commit, including Phase 3.3 spec update and Phase 3.4 commit. -->
 
-Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Gemini/Qoder/Copilot/ZCode/Reasonix/Trae and `trellis-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
+Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Gemini/Qoder/Copilot/ZCode/Reasonix/Trae and `suncode-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
-Tools: `trellis-implement` / `trellis-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `trellis-update-spec` is a skill. `trellis-check` exists as both; prefer the Agent form when verifying after code changes.
-Flow: `trellis-implement` -> `trellis-check` -> `trellis-update-spec` -> commit (Phase 3.4) -> `/trellis:finish-work`.
-Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `trellis-implement`, do NOT spawn another `trellis-implement` or `trellis-check`; if already running as `trellis-check`, do NOT spawn another `trellis-check` or `trellis-implement`. Dispatch is main session only.
+Tools: `suncode-implement` / `suncode-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `suncode-update-spec` is a skill. `suncode-check` exists as both; prefer the Agent form when verifying after code changes.
+Flow: `suncode-implement` -> `suncode-check` -> `suncode-update-spec` -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `suncode-implement`, do NOT spawn another `suncode-implement` or `suncode-check`; if already running as `suncode-check`, do NOT spawn another `suncode-check` or `suncode-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 [/workflow-state:in_progress]
 
@@ -235,7 +235,7 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
      instead of dispatching sub-agents. -->
 
 [workflow-state:in_progress-inline]
-Flow: `trellis-before-dev` -> edit -> `trellis-check` -> validation -> `trellis-update-spec` -> commit (Phase 3.4) -> `/trellis:finish-work`.
+Flow: `suncode-before-dev` -> edit -> `suncode-check` -> validation -> `suncode-update-spec` -> commit (Phase 3.4) -> `/suncode:finish-work`.
 Do not dispatch implement/check sub-agents in inline mode.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
 [/workflow-state:in_progress-inline]
@@ -257,7 +257,7 @@ Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, p
      channel as the live blocks. -->
 
 [workflow-state:completed]
-Code committed. Run `/trellis:finish-work`; if dirty, return to Phase 3.4 first.
+Code committed. Run `/suncode:finish-work`; if dirty, return to Phase 3.4 first.
 [/workflow-state:completed]
 
 ### Rules
@@ -274,17 +274,17 @@ When a user request matches one of these intents inside an active task, route fi
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 
-- Planning or unclear requirements -> `trellis-brainstorm`.
-- `in_progress` implementation/check -> dispatch `trellis-implement` / `trellis-check`.
-- Repeated debugging -> `trellis-break-loop`; spec updates -> `trellis-update-spec`.
+- Planning or unclear requirements -> `suncode-brainstorm`.
+- `in_progress` implementation/check -> dispatch `suncode-implement` / `suncode-check`.
+- Repeated debugging -> `suncode-break-loop`; spec updates -> `suncode-update-spec`.
 
 [/Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 
 [codex-inline, Kilo, Antigravity, Devin]
 
-- Planning or unclear requirements -> `trellis-brainstorm`.
-- Before editing -> `trellis-before-dev`; after editing -> `trellis-check`.
-- Repeated debugging -> `trellis-break-loop`; spec updates -> `trellis-update-spec`.
+- Planning or unclear requirements -> `suncode-brainstorm`.
+- Before editing -> `suncode-before-dev`; after editing -> `suncode-check`.
+- Repeated debugging -> `suncode-break-loop`; spec updates -> `suncode-update-spec`.
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
@@ -329,7 +329,7 @@ Skip when `python3 ./.trellis/scripts/task.py current --source` already points t
 
 #### 1.1 Requirement exploration `[required · repeatable]`
 
-Load the `trellis-brainstorm` skill and explore requirements interactively with the user per the skill's guidance.
+Load the `suncode-brainstorm` skill and explore requirements interactively with the user per the skill's guidance.
 
 The brainstorm skill will guide you to:
 - Ask one question at a time
@@ -357,7 +357,7 @@ Research can happen at any time during requirement exploration. It isn't limited
 
 Spawn the research sub-agent:
 
-- **Agent type**: `trellis-research`
+- **Agent type**: `suncode-research`
 - **Task description**: Research <specific question>
 - **Key requirement**: Research output MUST be persisted to `{TASK_DIR}/research/`
 
@@ -365,7 +365,7 @@ Spawn the research sub-agent:
 
 [codex-inline, Kilo, Antigravity, Devin]
 
-Do the research in the main session directly and write findings into `{TASK_DIR}/research/`. (For `codex-inline` this avoids the `fork_turns="none"` isolation that prevents `trellis-research` sub-agents from resolving the active task path.)
+Do the research in the main session directly and write findings into `{TASK_DIR}/research/`. (For `codex-inline` this avoids the `fork_turns="none"` isolation that prevents `suncode-research` sub-agents from resolving the active task path.)
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
@@ -429,7 +429,7 @@ Skip this step only when both files already have real curated entries.
 
 [codex-inline, Kilo, Antigravity, Devin]
 
-Skip this step. Context is loaded directly by the `trellis-before-dev` skill in Phase 2.
+Skip this step. Context is loaded directly by the `suncode-before-dev` skill in Phase 2.
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
@@ -476,9 +476,9 @@ Goal: turn reviewed planning artifacts into code that passes quality checks.
 
 Spawn the implement sub-agent:
 
-- **Agent type**: `trellis-implement`
+- **Agent type**: `suncode-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `suncode-implement` sub-agent and must implement directly, not spawn another `suncode-implement` / `suncode-check`.
 
 The platform hook/plugin auto-handles:
 - Reads `implement.jsonl` and injects referenced spec/research files into the agent prompt
@@ -490,9 +490,9 @@ The platform hook/plugin auto-handles:
 
 Spawn the implement sub-agent:
 
-- **Agent type**: `trellis-implement`
+- **Agent type**: `suncode-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then explicitly say the spawned agent is already `trellis-implement` and must implement directly without spawning another `trellis-implement` / `trellis-check`.
+- **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then explicitly say the spawned agent is already `suncode-implement` and must implement directly without spawning another `suncode-implement` / `suncode-check`.
 
 The pull-based sub-agent definition auto-handles the context load requirement:
 - Resolves the active task with `task.py current --source`, then reads `prd.md`, `design.md` if present, and `implement.md` if present
@@ -504,9 +504,9 @@ The pull-based sub-agent definition auto-handles the context load requirement:
 
 Spawn the implement sub-agent:
 
-- **Agent type**: `trellis-implement`
+- **Agent type**: `suncode-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-implement` sub-agent and must implement directly, not spawn another `trellis-implement` / `trellis-check`.
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `suncode-implement` sub-agent and must implement directly, not spawn another `suncode-implement` / `suncode-check`.
 
 The platform prelude auto-handles the context load requirement:
 - Reads `implement.jsonl` and injects referenced spec/research files into the agent prompt
@@ -516,7 +516,7 @@ The platform prelude auto-handles the context load requirement:
 
 [codex-inline, Kilo, Antigravity, Devin]
 
-1. Load the `trellis-before-dev` skill to read project guidelines
+1. Load the `suncode-before-dev` skill to read project guidelines
 2. Read `{TASK_DIR}/prd.md`, then `design.md` if present, then `implement.md` if present
 3. Consult materials under `{TASK_DIR}/research/`
 4. Implement the code per reviewed artifacts
@@ -530,9 +530,9 @@ The platform prelude auto-handles the context load requirement:
 
 Spawn the check sub-agent:
 
-- **Agent type**: `trellis-check`
+- **Agent type**: `suncode-check`
 - **Task description**: Review all code changes against specs and task artifacts; fix any findings directly; ensure lint and type-check pass
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `trellis-check` sub-agent and must review/fix directly, not spawn another `trellis-check` / `trellis-implement`.
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `suncode-check` sub-agent and must review/fix directly, not spawn another `suncode-check` / `suncode-implement`.
 
 The check agent's job:
 - Review code changes against specs
@@ -544,7 +544,7 @@ The check agent's job:
 
 [codex-inline, Kilo, Antigravity, Devin]
 
-Load the `trellis-check` skill and verify the code per its guidance:
+Load the `suncode-check` skill and verify the code per its guidance:
 - Spec compliance
 - lint / type-check / tests
 - Cross-layer consistency (when changes span layers)
@@ -569,7 +569,7 @@ Goal: ensure code quality, capture lessons, record the work.
 
 #### 3.2 Debug retrospective `[on demand]`
 
-If this task involved repeated debugging (the same issue was fixed multiple times), load the `trellis-break-loop` skill to:
+If this task involved repeated debugging (the same issue was fixed multiple times), load the `suncode-break-loop` skill to:
 - Classify the root cause
 - Explain why earlier fixes failed
 - Propose prevention
@@ -578,7 +578,7 @@ The goal is to capture debugging lessons so the same class of issue doesn't recu
 
 #### 3.3 Spec update `[required · once]`
 
-Load the `trellis-update-spec` skill and review whether this task produced new knowledge worth recording:
+Load the `suncode-update-spec` skill and review whether this task produced new knowledge worth recording:
 - Newly discovered patterns or conventions
 - Pitfalls you hit
 - New technical decisions
@@ -643,16 +643,16 @@ After the above, remind the user they can run `/finish-work` to wrap up (archive
 
 ---
 
-## Customizing Trellis (for forks)
+## Customizing Suncode (for forks)
 
-This section is for developers who want to modify the Trellis workflow itself. All customization is done by editing this file; the scripts are parsers only.
+This section is for developers who want to modify the Suncode workflow itself. All customization is done by editing this file; the scripts are parsers only.
 
 ### Changing what a step means
 
 Edit the corresponding step's walkthrough body in the Phase 1 / 2 / 3 sections above. Critical invariants:
-- No active task must triage first and ask for task-creation consent before creating a Trellis task.
+- No active task must triage first and ask for task-creation consent before creating a Suncode task.
 - Planning must distinguish lightweight PRD-only tasks from complex tasks that require `prd.md`, `design.md`, and `implement.md` before start.
-- Every required execution path must keep the Phase 3.4 commit reminder reachable before `/trellis:finish-work`.
+- Every required execution path must keep the Phase 3.4 commit reminder reachable before `/suncode:finish-work`.
 
 All tag blocks live in the `## Phase Index` section above, immediately after each phase summary:
 
@@ -667,7 +667,7 @@ All tag blocks live in the `## Phase Index` section above, immediately after eac
 
 ### Changing the per-turn prompt text
 
-Directly edit the body of the corresponding `[workflow-state:STATUS]` block. After editing, run `trellis update` (if you're a template maintainer) or restart your AI session (if you're customizing your own project) — no script changes required.
+Directly edit the body of the corresponding `[workflow-state:STATUS]` block. After editing, run `suncode update` (if you're a template maintainer) or restart your AI session (if you're customizing your own project) — no script changes required.
 
 ### Adding a custom status
 

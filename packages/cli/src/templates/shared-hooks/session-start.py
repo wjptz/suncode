@@ -68,7 +68,7 @@ def _normalize_windows_shell_path(path_str: str) -> str:
 
 
 FIRST_REPLY_NOTICE = """<first-reply-notice>
-First visible reply: say once in Chinese that Trellis SessionStart context is loaded, then answer directly.
+First visible reply: say once in Chinese that Suncode SessionStart context is loaded, then answer directly.
 This notice is one-shot: do not repeat it after the first assistant reply in the same session.
 </first-reply-notice>"""
 
@@ -121,7 +121,7 @@ def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
 
 
 def should_skip_injection() -> bool:
-    """Check if any platform's non-interactive flag is set, or if Trellis
+    """Check if any platform's non-interactive flag is set, or if Suncode
     hooks are explicitly disabled via TRELLIS_HOOKS=0 / TRELLIS_DISABLE_HOOKS=1.
     """
     if os.environ.get("TRELLIS_HOOKS") == "0":
@@ -233,7 +233,7 @@ def _resolve_context_key(trellis_dir: Path, input_data: dict) -> str | None:
 
 
 def _persist_context_key_for_bash(context_key: str | None) -> None:
-    """Expose Trellis session identity to later Claude Code Bash commands.
+    """Expose Suncode session identity to later Claude Code Bash commands.
 
     Claude Code SessionStart hooks can append exports to CLAUDE_ENV_FILE; those
     variables are then available to Bash tools in the same conversation. Without
@@ -331,8 +331,8 @@ def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
     if not active.task_path:
         return (
             "Status: NO ACTIVE TASK\n"
-            "Next-Action: Classify the current turn before creating any Trellis task. "
-            "Simple conversation / small task asks only whether this turn should create a Trellis task. "
+            "Next-Action: Classify the current turn before creating any Suncode task. "
+            "Simple conversation / small task asks only whether this turn should create a Suncode task. "
             "Complex task asks whether task creation and planning are allowed."
         )
 
@@ -365,7 +365,7 @@ def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
         return (
             f"Status: COMPLETED\nTask: {task_title}\n"
             f"Present: {present_line}\n"
-            "Next-Action: Run `/trellis:finish-work`. If the working tree is dirty, return to Phase 3.4 first."
+            "Next-Action: Run `/suncode:finish-work`. If the working tree is dirty, return to Phase 3.4 first."
         )
 
     has_prd = (task_dir / "prd.md").is_file()
@@ -382,7 +382,7 @@ def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
         return (
             f"Status: PLANNING\nTask: {task_title}\n"
             f"Present: {present_line}\n"
-            "Next-Action: Load `trellis-brainstorm` and write `prd.md`. Stay in planning."
+            "Next-Action: Load `suncode-brainstorm` and write `prd.md`. Stay in planning."
         )
 
     if task_status == "planning":
@@ -418,7 +418,7 @@ def _get_task_status(trellis_dir: Path, input_data: dict) -> str:
 
 
 def _load_trellis_config(trellis_dir: Path, input_data: dict) -> tuple:
-    """Load Trellis config for session-start decisions.
+    """Load Suncode config for session-start decisions.
 
     Returns:
         (is_mono, packages_dict, spec_scope, task_pkg, default_pkg)
@@ -770,7 +770,7 @@ def main():
     spec_index_paths = _collect_spec_index_paths(trellis_dir, allowed_pkgs)
 
     output.write("""<session-context>
-Trellis compact SessionStart context. Use it to orient the session; load details on demand.
+Suncode compact SessionStart context. Use it to orient the session; load details on demand.
 </session-context>
 
 """)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Copilot Session Start Hook - Emit Trellis session-start context.
+Copilot Session Start Hook - Emit Suncode session-start context.
 
 Microsoft VS Code Agent hooks are in preview and have been documented since
 VS Code 1.110 (February 2026). The official documentation
@@ -11,7 +11,7 @@ additional context into the agent's conversation.
 
 This script emits the spec-compliant SessionStart payload. Whether Copilot
 actually consumes `additionalContext` depends on the user's installed VS Code
-and Copilot versions, which is outside Trellis's control. UserPromptSubmit
+and Copilot versions, which is outside Suncode's control. UserPromptSubmit
 breadcrumbs remain available as a per-turn complement.
 """
 
@@ -111,7 +111,7 @@ def should_skip_injection() -> bool:
 
 
 def configure_project_encoding(project_dir: Path) -> None:
-    """Reuse Trellis' shared Windows stdio encoding helper before JSON output."""
+    """Reuse Suncode' shared Windows stdio encoding helper before JSON output."""
     scripts_dir = project_dir / ".trellis" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
@@ -231,7 +231,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
         return (
             "Status: NO ACTIVE TASK\n"
             "Next: Classify the current turn and ask for task-creation consent "
-            "before creating any Trellis task."
+            "before creating any Suncode task."
         )
 
     task_ref = active.task_path
@@ -273,7 +273,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if not has_prd:
         return (
             f"Status: PLANNING\nTask: {task_title}\nPresent: {present_line}\n"
-            "Next: Load trellis-brainstorm and write prd.md. Stay in planning."
+            "Next: Load suncode-brainstorm and write prd.md. Stay in planning."
         )
 
     if task_status == "planning":
@@ -492,7 +492,7 @@ def main() -> None:
     output = StringIO()
 
     output.write("""<session-context>
-Trellis compact SessionStart context. Use it to orient the session; load details on demand.
+Suncode compact SessionStart context. Use it to orient the session; load details on demand.
 </session-context>
 
 """)

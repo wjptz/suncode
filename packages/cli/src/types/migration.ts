@@ -31,7 +31,7 @@ export interface MigrationItem {
 /**
  * A new top-level config.yaml section introduced by this release.
  *
- * Used by `trellis update` to append the section to existing user config files
+ * Used by `suncode update` to append the section to existing user config files
  * that pre-date the release, without overwriting their other customizations.
  * Append is gated on `sentinel`: if the user file already contains the sentinel
  * substring (live or commented), the section is treated as already present.

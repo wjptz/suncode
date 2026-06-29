@@ -29,7 +29,7 @@ export function getWriteMode(): WriteMode {
 // ---------------------------------------------------------------------------
 // Write recording
 //
-// `trellis init` uses recording to capture exactly which files were actually
+// `suncode init` uses recording to capture exactly which files were actually
 // written this run (vs skipped because they already existed). The captured
 // set is what `.template-hashes.json` should contain — NOT a blind directory
 // walk of `.codex/` / `.claude/` / etc, which would include user-owned files

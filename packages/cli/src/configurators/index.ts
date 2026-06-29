@@ -171,7 +171,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
       const ctx = AI_TOOLS["claude-code"].templateContext;
       const files = collectBothTemplates(
         ctx,
-        (n) => `.claude/commands/trellis/${n}.md`,
+        (n) => `.claude/commands/suncode/${n}.md`,
         ".claude/skills",
       );
       for (const agent of getClaudeAgents()) {
@@ -193,7 +193,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     collectTemplates: () => {
       const files = collectBothTemplates(
         AI_TOOLS.cursor.templateContext,
-        (n) => `.cursor/commands/trellis-${n}.md`,
+        (n) => `.cursor/commands/suncode-${n}.md`,
         ".cursor/skills",
       );
       for (const agent of getCursorAgents()) {
@@ -292,8 +292,8 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
       const ctx = AI_TOOLS.gemini.templateContext;
       const files = new Map<string, string>();
       for (const cmd of resolveCommands(ctx)) {
-        const toml = `description = "Trellis: ${cmd.name}"\n\nprompt = """\n${cmd.content}\n"""\n`;
-        files.set(`.gemini/commands/trellis/${cmd.name}.toml`, toml);
+        const toml = `description = "Suncode: ${cmd.name}"\n\nprompt = """\n${cmd.content}\n"""\n`;
+        files.set(`.gemini/commands/suncode/${cmd.name}.toml`, toml);
       }
       // Shared skills written to `.agents/skills/` (Gemini CLI 0.40+ workspace
       // alias). Neutral resolver keeps content byte-identical to Codex's writes
@@ -332,7 +332,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     collectTemplates: () =>
       collectBothTemplates(
         AI_TOOLS.devin.templateContext,
-        (n) => `.devin/workflows/trellis-${n}.md`,
+        (n) => `.devin/workflows/suncode-${n}.md`,
         ".devin/skills",
       ),
   },
@@ -341,7 +341,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     collectTemplates: () => {
       const files = collectBothTemplates(
         AI_TOOLS.qoder.templateContext,
-        (n) => `.qoder/commands/trellis-${n}.md`,
+        (n) => `.qoder/commands/suncode-${n}.md`,
         ".qoder/skills",
         (filePath, content) => {
           const name = path.basename(filePath, ".md");
@@ -367,7 +367,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     collectTemplates: () => {
       const files = collectBothTemplates(
         AI_TOOLS.codebuddy.templateContext,
-        (n) => `.codebuddy/commands/trellis/${n}.md`,
+        (n) => `.codebuddy/commands/suncode/${n}.md`,
         ".codebuddy/skills",
       );
       for (const agent of getCodebuddyAgents()) {
@@ -423,7 +423,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
       }
       const hooksConfig = resolvePlaceholders(getCopilotHooksConfig());
       files.set(".github/copilot/hooks.json", hooksConfig);
-      files.set(".github/hooks/trellis.json", hooksConfig);
+      files.set(".github/hooks/suncode.json", hooksConfig);
       return files;
     },
   },
@@ -432,7 +432,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     collectTemplates: () => {
       const files = collectBothTemplates(
         AI_TOOLS.droid.templateContext,
-        (n) => `.factory/commands/trellis/${n}.md`,
+        (n) => `.factory/commands/suncode/${n}.md`,
         ".factory/skills",
       );
       for (const droid of getDroidDroids()) {
@@ -466,7 +466,7 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     collectTemplates: () => {
       const files = collectBothTemplates(
         AI_TOOLS.trae.templateContext,
-        (n) => `.trae/commands/trellis-${n}.md`,
+        (n) => `.trae/commands/suncode-${n}.md`,
         ".trae/skills",
         (filePath, content) => {
           const name = path.basename(filePath, ".md");

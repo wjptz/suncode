@@ -193,7 +193,7 @@ describe("init + uninstall: manifest accuracy + homedir guard", () => {
 
   it("#R3.2 uninstall self-heals + preserves user file even without prior update", async () => {
     // Most catastrophic path: user has poisoned manifest from old install
-    // and runs `trellis uninstall` directly. Prune must fire before plan
+    // and runs `suncode uninstall` directly. Prune must fire before plan
     // build, otherwise the user file gets unlinked.
     await init({ yes: true, claude: true, force: true });
 

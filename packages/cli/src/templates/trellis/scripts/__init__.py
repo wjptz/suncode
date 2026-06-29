@@ -1,5 +1,5 @@
 """
-Trellis Python Scripts
+Suncode Python Scripts
 
-This module provides Python implementations of Trellis workflow scripts.
+This module provides Python implementations of Suncode workflow scripts.
 """

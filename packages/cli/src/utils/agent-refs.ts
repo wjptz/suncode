@@ -2,17 +2,17 @@
  * Discover channel runtime agent names referenced by a workflow.md body.
  *
  * Channel-driven workflows tell the main session to run
- * `trellis channel spawn --agent <name>`, which loads `.trellis/agents/<name>.md`
+ * `suncode channel spawn --agent <name>`, which loads `.trellis/agents/<name>.md`
  * via `packages/cli/src/commands/channel/agent-loader.ts`. If a workflow
  * references an agent name that is not on disk, the spawn call fails at
- * runtime. We surface that mismatch eagerly (at `trellis init --workflow` /
- * `trellis workflow --template` time) so users can run `trellis update` before
+ * runtime. We surface that mismatch eagerly (at `suncode init --workflow` /
+ * `suncode workflow --template` time) so users can run `suncode update` before
  * the first spawn.
  *
  * Detection is intentionally lexical — we accept false positives over
  * shipping a markdown parser. We pick names from two surface forms:
  *
- *   1. `--agent <name>` flag on a `trellis channel spawn ...` command
+ *   1. `--agent <name>` flag on a `suncode channel spawn ...` command
  *   2. `.trellis/agents/<name>.md` literal path reference
  *
  * Both forms gate on the same `SAFE_AGENT_NAME` charset that `agent-loader.ts`

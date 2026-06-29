@@ -97,7 +97,7 @@ export async function configureCodex(cwd: string): Promise<void> {
   // accepts `codex_hooks`. Without this flag the hooks.json is ignored and
   // inject-workflow-state.py will never fire. Codex 0.129+ also gates each
   // installed hook behind a one-time `/hooks` review — until the user approves
-  // it the workflow breadcrumb won't auto-inject (the trellis-bootstrap
+  // it the workflow breadcrumb won't auto-inject (the bootstrap
   // fallback in inject-workflow-state.py covers this case). Documented in
   // spec/cli/backend/platform-integration.md.
   if (!process.env.VITEST && !process.env.TRELLIS_QUIET) {
@@ -105,7 +105,7 @@ export async function configureCodex(cwd: string): Promise<void> {
       "⚠️  Codex hooks require `features.hooks = true` in your " +
         "~/.codex/config.toml (Codex 0.129+; older versions: `codex_hooks = true`). " +
         "On Codex 0.129+ also run `/hooks` once to approve the Trellis " +
-        "UserPromptSubmit hook. Without these the Trellis workflow breadcrumb " +
+        "UserPromptSubmit hook. Without these the Suncode workflow breadcrumb " +
         "won't auto-inject. See Trellis docs for details.\n",
     );
   }

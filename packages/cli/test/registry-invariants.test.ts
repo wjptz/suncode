@@ -162,9 +162,9 @@ describe("UserPromptSubmit hook wiring", () => {
     });
   }
 
-  it("kiro main `trellis` agent wires userPromptSubmit; sub-agents do not", async () => {
+  it("kiro main `suncode` agent wires userPromptSubmit; sub-agents do not", async () => {
     // Kiro DOES support per-turn hooks (official docs: CLI agent
-    // `hooks.userPromptSubmit`). The main `trellis` agent wires the per-turn
+    // `hooks.userPromptSubmit`). The main `suncode` agent wires the per-turn
     // breadcrumb; the 3 sub-agents only inject sub-agent context on spawn.
     const fs = await import("node:fs");
     const { dirname, join } = await import("node:path");
@@ -184,7 +184,7 @@ describe("UserPromptSubmit hook wiring", () => {
       const parsed = JSON.parse(content) as {
         hooks?: Record<string, unknown>;
       };
-      if (entry === "trellis.json") {
+      if (entry === "suncode.json") {
         expect(Object.keys(parsed.hooks ?? {})).toContain("userPromptSubmit");
         expect(content).toContain("inject-workflow-state.py");
       } else {

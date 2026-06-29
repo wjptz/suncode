@@ -1,6 +1,6 @@
 /* global process */
 /**
- * Trellis Context Injection Plugin
+ * Suncode Context Injection Plugin
  *
  * Injects context when Task tool is called with supported subagent types.
  * Uses OpenCode's tool.execute.before hook.
@@ -8,7 +8,7 @@
 
 import { existsSync, readdirSync } from "fs"
 import { join } from "path"
-import { TrellisContext, debugLog } from "../lib/trellis-context.js"
+import { SuncodeContext, debugLog } from "../lib/suncode-context.js"
 
 // Supported subagent types
 const AGENTS_ALL = ["implement", "check", "research"]
@@ -322,7 +322,7 @@ function isWindowsPosixShell(env = process.env) {
   return /^(bash|sh|zsh)(\.exe)?$/.test(shell)
 }
 
-function buildTrellisContextPrefix(contextKey, hostPlatform = process.platform, env = process.env) {
+function buildSuncodeContextPrefix(contextKey, hostPlatform = process.platform, env = process.env) {
   if (hostPlatform === "win32" && !isWindowsPosixShell(env)) {
     return `$env:TRELLIS_CONTEXT_ID = ${powershellQuote(contextKey)}; `
   }
@@ -337,7 +337,7 @@ function getBashCommandKey(args) {
   return null
 }
 
-function commandStartsWithTrellisContext(command) {
+function commandStartsWithSuncodeContext(command) {
   const firstCommand = command.trimStart().split(/[;&|]/, 1)[0].trimStart()
   return (
     /^TRELLIS_CONTEXT_ID\s*=/.test(firstCommand) ||
@@ -351,19 +351,19 @@ function commandStartsWithTrellisContext(command) {
  * OpenCode TUI may not expose OPENCODE_RUN_ID to Bash. The plugin hook still
  * receives session identity, so inject it into Bash commands before execution.
  */
-function injectTrellisContextIntoBash(ctx, input, output, hostPlatform, env) {
+function injectSuncodeContextIntoBash(ctx, input, output, hostPlatform, env) {
   const args = output?.args
   const commandKey = getBashCommandKey(args)
   if (!commandKey) return false
 
   const command = args[commandKey]
   if (!command.trim()) return false
-  if (commandStartsWithTrellisContext(command)) return false
+  if (commandStartsWithSuncodeContext(command)) return false
 
   const contextKey = ctx.getContextKey(input)
   if (!contextKey) return false
 
-  args[commandKey] = `${buildTrellisContextPrefix(contextKey, hostPlatform, env)}${command}`
+  args[commandKey] = `${buildSuncodeContextPrefix(contextKey, hostPlatform, env)}${command}`
   return true
 }
 
@@ -373,7 +373,7 @@ function injectTrellisContextIntoBash(ctx, input, output, hostPlatform, env) {
 // the previous `{ id, server }` object shape failed with
 // `TypeError: fn is not a function` in 1.2.x.
 export default async ({ directory, platform: hostPlatform = process.platform, env = process.env }) => {
-  const ctx = new TrellisContext(directory)
+  const ctx = new SuncodeContext(directory)
   debugLog("inject", "Plugin loaded, directory:", directory)
 
   return {
@@ -386,7 +386,7 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
 
           const toolName = input?.tool?.toLowerCase()
           if (toolName === "bash") {
-            if (injectTrellisContextIntoBash(ctx, input, output, hostPlatform, env)) {
+            if (injectSuncodeContextIntoBash(ctx, input, output, hostPlatform, env)) {
               debugLog("inject", "Injected TRELLIS_CONTEXT_ID into Bash command")
             }
             return
@@ -400,8 +400,8 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
           if (!args) return
 
           const rawSubagentType = args.subagent_type
-          // Strip "trellis-" prefix added by v0.5.0-beta.5 agent rename migration
-          const subagentType = (rawSubagentType || "").replace(/^trellis-/, "")
+          // Strip Suncode's interaction namespace before matching role names.
+          const subagentType = (rawSubagentType || "").replace(/^suncode-/, "")
           const originalPrompt = args.prompt || ""
 
           debugLog("inject", "Task tool called, subagent_type:", rawSubagentType)
@@ -461,7 +461,7 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
 
           // Agents requiring task directory
           if (AGENTS_REQUIRE_TASK.includes(subagentType)) {
-            // subagentType is already stripped of "trellis-" prefix above
+            // subagentType is already stripped of the "suncode-" prefix above.
             if (!taskDir) {
               debugLog("inject", "Skipping - no current task")
               return

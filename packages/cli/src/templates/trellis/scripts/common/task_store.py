@@ -301,7 +301,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     # Seed implement.jsonl / check.jsonl for sub-agent-capable platforms.
     # Agent curates real entries during planning when the task needs them.
     # Agent-less platforms (Kilo / Antigravity / Devin) skip this — they
-    # load specs via the trellis-before-dev skill instead of JSONL.
+    # load specs via the suncode-before-dev skill instead of JSONL.
     seeded_jsonl = False
     if _has_subagent_platform(repo_root):
         for jsonl_name in ("implement.jsonl", "check.jsonl"):
@@ -359,7 +359,7 @@ def cmd_create(args: argparse.Namespace) -> int:
             "  - Curate implement.jsonl / check.jsonl as spec/research manifests when sub-agents need context",
             file=sys.stderr,
         )
-    print("  - Use /trellis:continue or phase context to decide the next step", file=sys.stderr)
+    print("  - Use /suncode:continue or phase context to decide the next step", file=sys.stderr)
     print("", file=sys.stderr)
 
     # Output relative path for script chaining
@@ -470,7 +470,7 @@ def _auto_commit_archive(
     repo_root: Path,
     modified_children: list[str] | None = None,
 ) -> bool:
-    """Stage Trellis-owned task paths and commit after archive.
+    """Stage Suncode-owned task paths and commit after archive.
 
     Scoped narrowly to the archived task's source + destination paths
     plus any child task dirs whose ``task.json`` was edited (parent →
