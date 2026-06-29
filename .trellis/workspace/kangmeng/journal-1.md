@@ -142,3 +142,37 @@ Renamed generated commands, workflow skills, bundled skills, sub-agents, Pi/Open
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Suncode runtime identity migration
+
+**Date**: 2026-06-30
+**Task**: Suncode runtime identity migration
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Completed Suncode runtime isolation: fresh installs now use .suncode paths, SUNCODE_* env vars, Suncode hook/protocol markers, Suncode channel storage, updated generated templates/tests, and marketplace Suncode skills while leaving historical Trellis artifacts as explicit exceptions.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `45e8c6f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
