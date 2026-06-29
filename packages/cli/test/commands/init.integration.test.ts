@@ -13,7 +13,7 @@ import path from "node:path";
 // === External dependency mocks (hoisted by vitest) ===
 
 vi.mock("figlet", () => ({
-  default: { textSync: vi.fn(() => "TRELLIS") },
+  default: { textSync: vi.fn(() => "SUNCODE") },
 }));
 
 vi.mock("inquirer", () => ({
@@ -60,7 +60,7 @@ describe("init() integration", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-init-int-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-init-int-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
     vi.spyOn(console, "log").mockImplementation(noop);
     vi.spyOn(console, "error").mockImplementation(noop);
@@ -203,7 +203,7 @@ describe("init() integration", () => {
 
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(true);
     // Codex SessionStart hook was removed (de-recursion fix); the
-    // <trellis-bootstrap> notice in inject-workflow-state.py invokes
+    // <suncode-bootstrap> notice in inject-workflow-state.py invokes
     // `$suncode-start` to load workflow context, so the skill is emitted.
     expect(
       fs.existsSync(
@@ -506,7 +506,7 @@ describe("init() integration", () => {
         path.join(tmpDir, ".factory", "commands", "suncode", "continue.md"),
       ),
     ).toBe(true);
-    // Skills (trellis- prefix)
+    // Skills (suncode- prefix)
     expect(
       fs.existsSync(
         path.join(tmpDir, ".factory", "skills", "suncode-check", "SKILL.md"),
@@ -935,8 +935,8 @@ describe("init() integration", () => {
 
   it("#14 monorepo: writes packages section to config.yaml", async () => {
     setupPnpmWorkspace(tmpDir, [
-      { rel: "packages/cli", name: "@trellis/cli" },
-      { rel: "packages/docs", name: "@trellis/docs" },
+      { rel: "packages/cli", name: "@suncode/cli" },
+      { rel: "packages/docs", name: "@suncode/docs" },
     ]);
 
     await init({ yes: true });
@@ -978,8 +978,8 @@ describe("init() integration", () => {
     expect(taskJson.next_action).toBeUndefined();
 
     // relatedFiles point to spec/<name>/
-    expect(taskJson.relatedFiles).toContain(".trellis/spec/core/");
-    expect(taskJson.relatedFiles).toContain(".trellis/spec/ui/");
+    expect(taskJson.relatedFiles).toContain(".suncode/spec/core/");
+    expect(taskJson.relatedFiles).toContain(".suncode/spec/ui/");
 
     // prd.md mentions packages + renders per-package checklist items
     const prd = fs.readFileSync(path.join(taskDir, "prd.md"), "utf-8");
@@ -991,10 +991,10 @@ describe("init() integration", () => {
     expect(prd).toContain("- [ ] Fill guidelines for core");
     expect(prd).toContain("- [ ] Fill guidelines for ui");
     expect(prd).toContain(
-      `${expectedPythonCmd} ./.trellis/scripts/task.py finish`,
+      `${expectedPythonCmd} ./.suncode/scripts/task.py finish`,
     );
     expect(prd).toContain(
-      `${expectedPythonCmd} ./.trellis/scripts/task.py archive 00-bootstrap-guidelines`,
+      `${expectedPythonCmd} ./.suncode/scripts/task.py archive 00-bootstrap-guidelines`,
     );
   });
 
@@ -1039,7 +1039,7 @@ describe("init() integration", () => {
     );
     expect(guideCall).toBeDefined();
 
-    // Should NOT create .trellis/ (early return)
+    // Should NOT create .suncode/ (early return)
     expect(fs.existsSync(path.join(tmpDir, DIR_NAMES.WORKFLOW))).toBe(false);
   });
 
@@ -1091,7 +1091,7 @@ describe("init() integration", () => {
         "utf-8",
       ),
     ) as { hashes?: Record<string, string> };
-    expect(hashFile.hashes?.[".trellis/spec/index.md"]).toBe(
+    expect(hashFile.hashes?.[".suncode/spec/index.md"]).toBe(
       computeHash("# remote spec\n"),
     );
   });
@@ -1139,7 +1139,7 @@ describe("init() integration", () => {
         "utf-8",
       ),
     ) as { hashes?: Record<string, string> };
-    expect(hashFile.hashes?.[".trellis/spec/index.md"]).toBe(
+    expect(hashFile.hashes?.[".suncode/spec/index.md"]).toBe(
       computeHash("# golang spec\n"),
     );
   });
@@ -1191,7 +1191,7 @@ describe("init() integration", () => {
         "utf-8",
       ),
     ) as { hashes?: Record<string, string> };
-    expect(hashFile.hashes?.[".trellis/spec/index.md"]).toBe(
+    expect(hashFile.hashes?.[".suncode/spec/index.md"]).toBe(
       computeHash("# refreshed golang spec\n"),
     );
   });

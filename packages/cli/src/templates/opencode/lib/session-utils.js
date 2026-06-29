@@ -48,7 +48,7 @@ function getTaskStatus(ctx, platformInput = null) {
   const taskDir = ctx.resolveTaskDir(taskRef)
 
   if (active.stale || !taskDir || !existsSync(taskDir)) {
-    return `Status: STALE POINTER\nTask: ${taskRef}\nNext-Action: Task directory not found. Run: python3 ./.trellis/scripts/task.py finish`
+    return `Status: STALE POINTER\nTask: ${taskRef}\nNext-Action: Task directory not found. Run: python3 ./.suncode/scripts/task.py finish`
   }
 
   let taskData = {}
@@ -112,7 +112,7 @@ function getTaskStatus(ctx, platformInput = null) {
 }
 
 function loadSuncodeConfig(directory, contextKey = null) {
-  const scriptPath = join(directory, ".trellis", "scripts", "get_context.py")
+  const scriptPath = join(directory, ".suncode", "scripts", "get_context.py")
   if (!existsSync(scriptPath)) {
     return { isMonorepo: false, packages: {}, specScope: null, activeTaskPackage: null, defaultPackage: null }
   }
@@ -124,7 +124,7 @@ function loadSuncodeConfig(directory, contextKey = null) {
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
-        ...(contextKey ? { TRELLIS_CONTEXT_ID: contextKey } : {}),
+        ...(contextKey ? { SUNCODE_CONTEXT_ID: contextKey } : {}),
       },
     })
     const data = JSON.parse(output)
@@ -153,7 +153,7 @@ function checkLegacySpec(directory, config) {
     return null
   }
 
-  const specDir = join(directory, ".trellis", "spec")
+  const specDir = join(directory, ".suncode", "spec")
   if (!existsSync(specDir)) return null
 
   let hasLegacy = false
@@ -216,12 +216,12 @@ function resolveSpecScope(config) {
 }
 
 function collectSpecIndexPaths(directory, allowedPkgs) {
-  const specDir = join(directory, ".trellis", "spec")
+  const specDir = join(directory, ".suncode", "spec")
   const paths = []
 
   const guidesIndex = join(specDir, "guides", "index.md")
   if (existsSync(guidesIndex)) {
-    paths.push(".trellis/spec/guides/index.md")
+    paths.push(".suncode/spec/guides/index.md")
   }
 
   if (!existsSync(specDir)) return paths
@@ -239,7 +239,7 @@ function collectSpecIndexPaths(directory, allowedPkgs) {
     for (const sub of subs) {
       const indexFile = join(specDir, sub, "index.md")
       if (existsSync(indexFile)) {
-        paths.push(`.trellis/spec/${sub}/index.md`)
+        paths.push(`.suncode/spec/${sub}/index.md`)
       } else {
         if (allowedPkgs !== null && !allowedPkgs.has(sub)) continue
         try {
@@ -253,7 +253,7 @@ function collectSpecIndexPaths(directory, allowedPkgs) {
           for (const layer of nested) {
             const nestedIndex = join(specDir, sub, layer, "index.md")
             if (existsSync(nestedIndex)) {
-              paths.push(`.trellis/spec/${sub}/${layer}/index.md`)
+              paths.push(`.suncode/spec/${sub}/${layer}/index.md`)
             }
           }
         } catch {
@@ -270,7 +270,7 @@ function collectSpecIndexPaths(directory, allowedPkgs) {
 
 function readDeveloper(directory) {
   try {
-    const content = readFileSync(join(directory, ".trellis", ".developer"), "utf-8")
+    const content = readFileSync(join(directory, ".suncode", ".developer"), "utf-8")
     for (const line of content.split(/\r?\n/)) {
       if (line.startsWith("name=")) return line.slice("name=".length).trim()
     }
@@ -321,19 +321,19 @@ function buildCompactCurrentState(ctx, platformInput, specIndexPaths) {
     lines.push("Current task: none.")
   }
 
-  const tasksDir = join(directory, ".trellis", "tasks")
+  const tasksDir = join(directory, ".suncode", "tasks")
   if (existsSync(tasksDir)) {
     try {
       const activeTasks = readdirSync(tasksDir, { withFileTypes: true })
         .filter(entry => entry.isDirectory() && entry.name !== "archive" && existsSync(join(tasksDir, entry.name, "task.json")))
-      lines.push(`Active tasks: ${activeTasks.length} total. Use \`python3 ./.trellis/scripts/task.py list --mine\` only if needed.`)
+      lines.push(`Active tasks: ${activeTasks.length} total. Use \`python3 ./.suncode/scripts/task.py list --mine\` only if needed.`)
     } catch {
       // Ignore task list errors
     }
   }
 
   const developer = readDeveloper(directory)
-  const workspaceDir = join(directory, ".trellis", "workspace", developer)
+  const workspaceDir = join(directory, ".suncode", "workspace", developer)
   if (developer !== "(not initialized)" && existsSync(workspaceDir)) {
     try {
       const journals = readdirSync(workspaceDir)
@@ -343,7 +343,7 @@ function buildCompactCurrentState(ctx, platformInput, specIndexPaths) {
       if (journal) {
         const journalPath = join(workspaceDir, journal)
         const lineCount = readFileSync(journalPath, "utf-8").split(/\r?\n/).length
-        lines.push(`Journal: .trellis/workspace/${developer}/${journal}, ${lineCount} / 2000 lines.`)
+        lines.push(`Journal: .suncode/workspace/${developer}/${journal}, ${lineCount} / 2000 lines.`)
       }
     } catch {
       // Ignore journal errors
@@ -383,12 +383,12 @@ Suncode compact SessionStart context. Use it to orient the session; load details
   parts.push(buildCompactCurrentState(ctx, platformInput, paths))
   parts.push("</current-state>")
 
-  const workflowContent = ctx.readProjectFile(".trellis/workflow.md")
+  const workflowContent = ctx.readProjectFile(".suncode/workflow.md")
   if (workflowContent) {
     const allLines = workflowContent.split("\n")
     const overviewLines = [
       "# Development Workflow - Session Summary",
-      "Full guide: .trellis/workflow.md. Step detail: `python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
+      "Full guide: .suncode/workflow.md. Step detail: `python3 ./.suncode/scripts/get_context.py --mode phase --step <X.Y>`.",
       "",
     ]
 
@@ -414,9 +414,9 @@ Suncode compact SessionStart context. Use it to orient the session; load details
       overviewLines.push(strippedStateBlocks.trimEnd())
     }
 
-    parts.push("<trellis-workflow>")
+    parts.push("<suncode-workflow>")
     parts.push(overviewLines.join("\n").trimEnd())
-    parts.push("</trellis-workflow>")
+    parts.push("</suncode-workflow>")
   }
 
   parts.push("<guidelines>")
@@ -436,7 +436,7 @@ Suncode compact SessionStart context. Use it to orient the session; load details
 
   parts.push(
     "Discover more via: " +
-    "`python3 ./.trellis/scripts/get_context.py --mode packages`"
+    "`python3 ./.suncode/scripts/get_context.py --mode packages`"
   )
   parts.push("</guidelines>")
 
@@ -455,12 +455,12 @@ function getSuncodeMetadata(metadata) {
     return {}
   }
 
-  const trellis = metadata.trellis
-  if (!trellis || typeof trellis !== "object") {
+  const suncode = metadata.suncode
+  if (!suncode || typeof suncode !== "object") {
     return {}
   }
 
-  return trellis
+  return suncode
 }
 
 function markPartAsSessionStart(part) {
@@ -469,7 +469,7 @@ function markPartAsSessionStart(part) {
     : {}
   part.metadata = {
     ...metadata,
-    trellis: {
+    suncode: {
       ...getSuncodeMetadata(metadata),
       sessionStart: true,
     },

@@ -74,8 +74,8 @@ Codex writes the shared `.agents/skills/` layer. Some tools that support agentsk
 1. User specified a platform: modify only that platform directory unless shared workflow/spec files must also change.
 2. User says "all platforms should do this": synchronize equivalent entry points platform by platform; do not modify only one directory.
 3. User only says "my AI": inspect the configuration directories that actually exist in the project and infer the current AI platform.
-4. User wants project rules: prefer `.trellis/spec/` or a project-local skill.
-5. User wants Suncode behavior: edit `.trellis/workflow.md` plus platform hooks/agents/skills/commands.
+4. User wants project rules: prefer `.suncode/spec/` or a project-local skill.
+5. User wants Suncode behavior: edit `.suncode/workflow.md` plus platform hooks/agents/skills/commands.
 
 ## When Paths Differ
 

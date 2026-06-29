@@ -7,7 +7,7 @@
   "migrations": [],
   "configSectionsAdded": [
     {
-      "file": ".trellis/config.yaml",
+      "file": ".suncode/config.yaml",
       "sentinel": "codex:",
       "sectionHeading": "Codex (dispatch behavior)"
     }

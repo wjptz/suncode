@@ -1,10 +1,10 @@
 # Local Suncode Architecture Overview
 
-`suncode-meta` is for user projects that have already run `suncode init`. The user's machine usually has only the npm-installed `trellis` command plus the Suncode files generated inside the project; it may not have the Suncode CLI source code.
+`suncode-meta` is for user projects that have already run `suncode init`. The user's machine usually has only the npm-installed `suncode` command plus the Suncode files generated inside the project; it may not have the Suncode CLI source code.
 
 Therefore, when an AI uses this skill, the default customization target is local files inside the user project:
 
-- `.trellis/`: workflow, tasks, specs, memory, scripts, and runtime state.
+- `.suncode/`: workflow, tasks, specs, memory, scripts, and runtime state.
 - Platform directories: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`, `.kiro/`, `.gemini/`, `.qoder/`, `.codebuddy/`, `.github/`, `.factory/`, `.pi/`, `.kilocode/`, `.agent/`, `.devin/`, `.reasonix/`, `.zcode/`, and similar directories.
 - Shared skill layer: `.agents/skills/`.
 
@@ -14,8 +14,8 @@ Do not default to guiding the user to fork the Suncode CLI repository. Treat ups
 
 Suncode provides three layers inside a user project:
 
-1. **Workflow layer**: `.trellis/workflow.md` defines phases, routing, next actions, and prompt blocks.
-2. **Persistence layer**: `.trellis/tasks/`, `.trellis/spec/`, and `.trellis/workspace/` store tasks, specs, and session memory.
+1. **Workflow layer**: `.suncode/workflow.md` defines phases, routing, next actions, and prompt blocks.
+2. **Persistence layer**: `.suncode/tasks/`, `.suncode/spec/`, and `.suncode/workspace/` store tasks, specs, and session memory.
 3. **Platform integration layer**: hooks, settings, agents, skills, commands, prompts, and workflows in platform directories connect the Suncode workflow to different AI tools.
 
 All three layers live inside the user project, so an AI can read and modify them directly.
@@ -24,21 +24,21 @@ All three layers live inside the user project, so an AI can read and modify them
 
 | Path | Purpose |
 | --- | --- |
-| `.trellis/workflow.md` | Workflow phases, skill routing, and workflow-state prompt blocks. |
-| `.trellis/config.yaml` | Project configuration, task lifecycle hooks, monorepo package configuration, and journal configuration. |
-| `.trellis/spec/` | The user's project-specific coding conventions and thinking guides. |
-| `.trellis/tasks/` | Each task's PRD, technical notes, research files, and JSONL context. |
-| `.trellis/workspace/` | Per-developer journals and cross-session memory. |
-| `.trellis/scripts/` | Local Python runtime used by commands, hooks, and context injection. |
-| `.trellis/.runtime/` | Session-level runtime state, such as the current task pointer. |
-| `.trellis/.template-hashes.json` | Template hashes for Suncode-managed files, used by update to determine whether local files were modified by the user. |
+| `.suncode/workflow.md` | Workflow phases, skill routing, and workflow-state prompt blocks. |
+| `.suncode/config.yaml` | Project configuration, task lifecycle hooks, monorepo package configuration, and journal configuration. |
+| `.suncode/spec/` | The user's project-specific coding conventions and thinking guides. |
+| `.suncode/tasks/` | Each task's PRD, technical notes, research files, and JSONL context. |
+| `.suncode/workspace/` | Per-developer journals and cross-session memory. |
+| `.suncode/scripts/` | Local Python runtime used by commands, hooks, and context injection. |
+| `.suncode/.runtime/` | Session-level runtime state, such as the current task pointer. |
+| `.suncode/.template-hashes.json` | Template hashes for Suncode-managed files, used by update to determine whether local files were modified by the user. |
 
 ## AI Customization Principles
 
-1. **Find the local source of truth first**: Do not edit from memory. Read `.trellis/workflow.md`, `.trellis/config.yaml`, the relevant platform directory, and related task files first.
+1. **Find the local source of truth first**: Do not edit from memory. Read `.suncode/workflow.md`, `.suncode/config.yaml`, the relevant platform directory, and related task files first.
 2. **Edit the user project, not the npm package cache**: Modify generated files inside the project, not `node_modules` or the global npm install directory.
-3. **Keep platform files aligned with `.trellis/`**: If workflow routing changes, also check whether platform skills or commands still describe the same flow.
-4. **Put project-specific rules in `.trellis/spec/` or a local skill**: Do not put team conventions into `suncode-meta`.
+3. **Keep platform files aligned with `.suncode/`**: If workflow routing changes, also check whether platform skills or commands still describe the same flow.
+4. **Put project-specific rules in `.suncode/spec/` or a local skill**: Do not put team conventions into `suncode-meta`.
 5. **Preserve user changes**: If a file was already modified locally, work from the current content instead of overwriting it with a default template.
 
 ## How To Use This Directory

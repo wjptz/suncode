@@ -40,10 +40,10 @@ export const DEFAULT_IDLE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_MAX_LIVE_WORKERS = 6;
 
 /** Env var override for the idle-cleanup TTL. */
-export const ENV_IDLE_TIMEOUT = "TRELLIS_CHANNEL_WORKER_IDLE_TIMEOUT";
+export const ENV_IDLE_TIMEOUT = "SUNCODE_CHANNEL_WORKER_IDLE_TIMEOUT";
 
 /** Env var override for the live-worker budget. */
-export const ENV_MAX_LIVE_WORKERS = "TRELLIS_CHANNEL_MAX_LIVE_WORKERS";
+export const ENV_MAX_LIVE_WORKERS = "SUNCODE_CHANNEL_MAX_LIVE_WORKERS";
 
 export interface WorkerGuardConfig {
   /** Idle-cleanup TTL in ms. `0` disables idle cleanup for new spawns. */
@@ -67,7 +67,7 @@ export interface ResolveGuardOptions {
  * Resolve the effective guard policy. Precedence:
  *   1. CLI flag (`flag*Ms` / `flagMaxLiveWorkers`)
  *   2. environment variable
- *   3. `.trellis/config.yaml` `channel.worker_guard`
+ *   3. `.suncode/config.yaml` `channel.worker_guard`
  *   4. built-in default constant
  */
 export function resolveWorkerGuardConfig(
@@ -151,7 +151,7 @@ interface ProjectGuardConfig {
 }
 
 /**
- * Parse the `channel.worker_guard` section out of `.trellis/config.yaml`.
+ * Parse the `channel.worker_guard` section out of `.suncode/config.yaml`.
  * Mirrors the lightweight line-scanner used elsewhere in update.ts so we
  * don't pull in a YAML dependency just for this two-field section.
  */
@@ -637,7 +637,7 @@ export function formatBudgetOverflowError(args: {
     `  suncode channel kill <channel> --as <worker>`,
     "Or override per spawn:",
     `  suncode channel spawn ... --max-live-workers ${live.length + 1}`,
-    "Or raise the default in .trellis/config.yaml under channel.worker_guard.max_live_workers.",
+    "Or raise the default in .suncode/config.yaml under channel.worker_guard.max_live_workers.",
   ].join("\n");
   return [header, rows, hint].join("\n");
 }

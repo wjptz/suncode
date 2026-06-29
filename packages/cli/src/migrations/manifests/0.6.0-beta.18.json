@@ -7,7 +7,7 @@
   "migrations": [],
   "configSectionsAdded": [
     {
-      "file": ".trellis/config.yaml",
+      "file": ".suncode/config.yaml",
       "sentinel": "worker_guard:",
       "sectionHeading": "Channel worker OOM guard"
     }

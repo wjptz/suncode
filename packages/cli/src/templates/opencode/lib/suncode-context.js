@@ -92,11 +92,11 @@ export class SuncodeContext {
   // ============================================================
 
   isSuncodeProject() {
-    return existsSync(join(this.directory, ".trellis"))
+    return existsSync(join(this.directory, ".suncode"))
   }
 
   getContextKey(platformInput = null) {
-    const override = stringValue(process.env.TRELLIS_CONTEXT_ID)
+    const override = stringValue(process.env.SUNCODE_CONTEXT_ID)
     if (override) {
       return sanitizeKey(override) || hashValue(override)
     }
@@ -121,7 +121,7 @@ export class SuncodeContext {
 
   readContext(contextKey) {
     try {
-      const contextPath = join(this.directory, ".trellis", ".runtime", "sessions", `${contextKey}.json`)
+      const contextPath = join(this.directory, ".suncode", ".runtime", "sessions", `${contextKey}.json`)
       if (!existsSync(contextPath)) return null
       return JSON.parse(readFileSync(contextPath, "utf-8"))
     } catch {
@@ -167,7 +167,7 @@ export class SuncodeContext {
    * else null.
    */
   _resolveSingleSessionFallback() {
-    const sessionsDir = join(this.directory, ".trellis", ".runtime", "sessions")
+    const sessionsDir = join(this.directory, ".suncode", ".runtime", "sessions")
     if (!existsSync(sessionsDir)) return null
 
     let files
@@ -218,7 +218,7 @@ export class SuncodeContext {
     }
 
     if (normalized.startsWith("tasks/")) {
-      return `.trellis/${normalized}`
+      return `.suncode/${normalized}`
     }
 
     return normalized
@@ -234,11 +234,11 @@ export class SuncodeContext {
       return normalized
     }
 
-    if (normalized.startsWith(".trellis/")) {
+    if (normalized.startsWith(".suncode/")) {
       return join(this.directory, normalized)
     }
 
-    return join(this.directory, ".trellis", "tasks", normalized)
+    return join(this.directory, ".suncode", "tasks", normalized)
   }
 
   // ============================================================
@@ -269,7 +269,7 @@ export class SuncodeContext {
         stdio: ["pipe", "pipe", "pipe"],
         env: {
           ...process.env,
-          ...(contextKey ? { TRELLIS_CONTEXT_ID: contextKey } : {}),
+          ...(contextKey ? { SUNCODE_CONTEXT_ID: contextKey } : {}),
         },
       })
       return result || ""

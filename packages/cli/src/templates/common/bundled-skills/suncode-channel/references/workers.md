@@ -11,7 +11,7 @@ and translates its output back into channel events.
 suncode channel create impl-task --by dispatcher --cwd /path/to/repo
 suncode channel spawn impl-task --provider codex --as codex-impl --timeout 30m
 
-echo "Implement the schema for table X per .trellis/.../prd.md" \
+echo "Implement the schema for table X per .suncode/.../prd.md" \
   | suncode channel send impl-task --as dispatcher --to codex-impl --stdin
 
 suncode channel wait impl-task --as dispatcher --from codex-impl --kind done --timeout 30m
@@ -24,7 +24,7 @@ inbox-idle until a `send --to <worker>` (or a broadcast when
 
 Key `spawn` flags:
 
-- `--agent <name>` — load `.trellis/agents/<name>.md` (provider/model/as/system prompt defaults).
+- `--agent <name>` — load `.suncode/agents/<name>.md` (provider/model/as/system prompt defaults).
 - `--provider <claude|codex>` — overrides the agent card; validated against the adapter registry.
 - `--as <name>` — channel worker handle; defaults to the agent name.
 - `--cwd <path>` — worker working directory (also the jail root for `--file`/`--jsonl`).
@@ -34,7 +34,7 @@ Key `spawn` flags:
 - `--warn-before <duration>` — supervisor_warning lead time (default `5m`; `0ms` disables).
 - `--file <path>` (repeatable, glob-supported) — inject file content into the system prompt.
 - `--jsonl <path>` (repeatable) — Suncode jsonl manifest (`{file, reason}` per line).
-- `--by <agent>` — author of the `spawned` event (defaults to `$TRELLIS_CHANNEL_AS` or `main`).
+- `--by <agent>` — author of the `spawned` event (defaults to `$SUNCODE_CHANNEL_AS` or `main`).
 - `--inbox-policy <explicitOnly|broadcastAndExplicit>` — default `explicitOnly`.
 - `--idle-timeout <duration>` — OOM guard idle TTL (default `5m`; `0` disables).
 - `--max-live-workers <n>` — spawn-time live-worker budget (default `6`; `0` disables).
@@ -44,11 +44,11 @@ The success event `spawned` records `pid`, `provider`, `agent`, the injected
 
 ## Agent Cards
 
-`--agent <name>` resolves to `.trellis/agents/<name>.md`. The card name must
+`--agent <name>` resolves to `.suncode/agents/<name>.md`. The card name must
 match `[A-Za-z0-9._-]+`. The default Suncode install ships two cards:
 
-- `.trellis/agents/check.md` — code-quality reviewer.
-- `.trellis/agents/implement.md` — coding worker for implementation runs.
+- `.suncode/agents/check.md` — code-quality reviewer.
+- `.suncode/agents/implement.md` — coding worker for implementation runs.
 
 ```yaml
 ---
@@ -66,8 +66,8 @@ below).
 Always inspect project cards before spawning a named agent:
 
 ```bash
-ls .trellis/agents
-sed -n '1,100p' .trellis/agents/check.md
+ls .suncode/agents
+sed -n '1,100p' .suncode/agents/check.md
 ```
 
 ## Context Injection
@@ -91,7 +91,7 @@ Limits enforced by the loader:
 Example spawning a check agent against a task directory:
 
 ```bash
-TASK=.trellis/tasks/05-13-example
+TASK=.suncode/tasks/05-13-example
 suncode channel spawn cr-example --agent check --provider codex --as check-cx \
   --file "$TASK/prd.md" \
   --file "$TASK/design.md" \
@@ -171,7 +171,7 @@ truthful.
 ```bash
 suncode channel kill impl-task --as codex-impl
 suncode channel spawn impl-task --as codex-impl --provider codex \
-  --resume "$(cat ~/.trellis/channels/<bucket>/impl-task/worker.session-id)"
+  --resume "$(cat ~/.suncode/channels/<bucket>/impl-task/worker.session-id)"
 
 echo "STOP — new instructions: ..." \
   | suncode channel send impl-task --as dispatcher --to codex-impl --stdin
@@ -203,9 +203,9 @@ project bucket:
 Precedence (highest first):
 
 1. CLI flags: `--idle-timeout`, `--max-live-workers` on `spawn`.
-2. Environment variables: `TRELLIS_CHANNEL_WORKER_IDLE_TIMEOUT`,
-   `TRELLIS_CHANNEL_MAX_LIVE_WORKERS`.
-3. `.trellis/config.yaml` under `channel.worker_guard`.
+2. Environment variables: `SUNCODE_CHANNEL_WORKER_IDLE_TIMEOUT`,
+   `SUNCODE_CHANNEL_MAX_LIVE_WORKERS`.
+3. `.suncode/config.yaml` under `channel.worker_guard`.
 4. Built-in defaults (`5m`, `6`).
 
 Cleanup notices are written to stderr at spawn time so operators can see which
@@ -215,7 +215,7 @@ the same idle TTL and budget.
 
 To audit current state, list workers via `channel list` (the `WORKERS`
 column) and inspect per-channel `pid` / `worker-pid` sidecar files under
-`~/.trellis/channels/<bucket>/<channel>/`.
+`~/.suncode/channels/<bucket>/<channel>/`.
 
 ## Worker Inbox APIs
 

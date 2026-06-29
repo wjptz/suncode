@@ -2,7 +2,7 @@
  * Unit tests for uninstall-scrubbers.
  *
  * Each scrubber gets coverage for:
- *  - Strips trellis content
+ *  - Strips suncode content
  *  - Preserves user-added content
  *  - Reports `fullyEmpty: true` when nothing meaningful remains
  */
@@ -29,7 +29,7 @@ const CURSOR_DELETE_PATHS = [
 ];
 
 describe("scrubHooksJson — nested schema", () => {
-  it("strips trellis hook entries from a Claude-style file", () => {
+  it("strips suncode hook entries from a Claude-style file", () => {
     const input = {
       env: { CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR: "1" },
       hooks: {
@@ -109,7 +109,7 @@ describe("scrubHooksJson — nested schema", () => {
     expect(fullyEmpty).toBe(false);
   });
 
-  it("reports fullyEmpty when only trellis hooks existed", () => {
+  it("reports fullyEmpty when only suncode hooks existed", () => {
     const input = {
       hooks: {
         SessionStart: [
@@ -202,7 +202,7 @@ describe("scrubHooksJson — nested schema", () => {
 });
 
 describe("scrubHooksJson — flat schema", () => {
-  it("strips trellis hook entries from a Cursor-style file", () => {
+  it("strips suncode hook entries from a Cursor-style file", () => {
     const input = {
       version: 1,
       hooks: {
@@ -285,7 +285,7 @@ describe("scrubHooksJson — flat schema", () => {
     expect(JSON.parse(content)).toEqual({});
   });
 
-  it("reports fullyEmpty when only trellis hooks existed", () => {
+  it("reports fullyEmpty when only suncode hooks existed", () => {
     const input = {
       hooks: {
         sessionStart: [
@@ -331,7 +331,7 @@ describe("scrubOpencodePackageJson", () => {
 });
 
 describe("scrubPiSettings", () => {
-  it("strips trellis entries and reports fullyEmpty", () => {
+  it("strips suncode entries and reports fullyEmpty", () => {
     const input = {
       enableSkillCommands: true,
       extensions: ["./extensions/suncode/index.ts"],
@@ -401,18 +401,18 @@ describe("scrubCodexConfigToml", () => {
 # Keep AGENTS.md as the primary project instruction file.
 project_doc_fallback_filenames = ["AGENTS.md"]
 
-# NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.
+# NOTE: Suncode's SessionStart + UserPromptSubmit hooks require opt-in.
 # Add the following to your USER-level config at ~/.codex/config.toml
 # (not this project file — features.* must be enabled globally):
 #
 #   [features]
 #   codex_hooks = true
 #
-# Without this flag, hooks.json is ignored and Trellis context won't
+# Without this flag, hooks.json is ignored and Suncode context won't
 # be injected into Codex sessions.
 `;
 
-  it("removes the entire trellis-shipped file and reports fullyEmpty", () => {
+  it("removes the entire suncode-shipped file and reports fullyEmpty", () => {
     const { content, fullyEmpty } = scrubCodexConfigToml(TEMPLATE);
     expect(fullyEmpty).toBe(true);
     expect(content.trim()).toBe("");
@@ -429,7 +429,7 @@ my_key = "value"
     expect(content).toContain("[my_section]");
     expect(content).toContain('my_key = "value"');
     expect(content).not.toContain("project_doc_fallback_filenames");
-    expect(content).not.toContain("Trellis's SessionStart");
+    expect(content).not.toContain("Suncode's SessionStart");
   });
 
   it("strips just the assignment line when comments are absent", () => {
@@ -450,7 +450,7 @@ key = 1
 # Keep AGENTS.md as the primary project instruction file.
 project_doc_fallback_filenames = ["AGENTS.md"]
 
-# NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.
+# NOTE: Suncode's SessionStart + UserPromptSubmit hooks require opt-in.
 # Add the following to your USER-level config at ~/.codex/config.toml
 # (not this project file — features.* must be enabled globally):
 #
@@ -458,7 +458,7 @@ project_doc_fallback_filenames = ["AGENTS.md"]
 #   hooks = true
 #   codex_hooks = true
 #
-# Without this flag, hooks.json is ignored and Trellis context won't
+# Without this flag, hooks.json is ignored and Suncode context won't
 # be injected into Codex sessions.
 `;
     const { content, fullyEmpty } = scrubCodexConfigToml(newTemplate);

@@ -1,12 +1,12 @@
-import type { TrellisTaskRecord } from "./schema.js";
+import type { SuncodeTaskRecord } from "./schema.js";
 
 /**
- * Coarse-grained Trellis task phase derived from task status.
+ * Coarse-grained Suncode task phase derived from task status.
  *
- * Phase is a projection of {@link TrellisTaskRecord.status} only. There is
+ * Phase is a projection of {@link SuncodeTaskRecord.status} only. There is
  * no separate `current_phase` field stored on disk — `inferTaskPhase`
  * exists so consumers can render the workflow phase without depending on
- * `.trellis/workflow.md` parsing.
+ * `.suncode/workflow.md` parsing.
  *
  * Mapping:
  *
@@ -18,7 +18,7 @@ import type { TrellisTaskRecord } from "./schema.js";
  *   completed | done    | completed
  *   <anything else>     | unknown
  */
-export type TrellisTaskPhase =
+export type SuncodeTaskPhase =
   | "plan"
   | "implement"
   | "review"
@@ -31,8 +31,8 @@ export type TrellisTaskPhase =
  * need to re-pluck `status` first.
  */
 export function inferTaskPhase(
-  recordOrStatus: TrellisTaskRecord | string | null | undefined,
-): TrellisTaskPhase {
+  recordOrStatus: SuncodeTaskRecord | string | null | undefined,
+): SuncodeTaskPhase {
   const status =
     typeof recordOrStatus === "string"
       ? recordOrStatus

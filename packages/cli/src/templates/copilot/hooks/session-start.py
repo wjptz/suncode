@@ -103,16 +103,16 @@ warnings.filterwarnings("ignore")
 
 
 def should_skip_injection() -> bool:
-    if os.environ.get("TRELLIS_HOOKS") == "0":
+    if os.environ.get("SUNCODE_HOOKS") == "0":
         return True
-    if os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+    if os.environ.get("SUNCODE_DISABLE_HOOKS") == "1":
         return True
     return os.environ.get("COPILOT_NON_INTERACTIVE") == "1"
 
 
 def configure_project_encoding(project_dir: Path) -> None:
     """Reuse Suncode' shared Windows stdio encoding helper before JSON output."""
-    scripts_dir = project_dir / ".trellis" / "scripts"
+    scripts_dir = project_dir / ".suncode" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
 
@@ -155,7 +155,7 @@ def read_file(path: Path, fallback: str = "") -> str:
 
 
 def _resolve_context_key(project_dir: Path, hook_input: dict) -> str | None:
-    scripts_dir = project_dir / ".trellis" / "scripts"
+    scripts_dir = project_dir / ".suncode" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     try:
@@ -165,13 +165,13 @@ def _resolve_context_key(project_dir: Path, hook_input: dict) -> str | None:
     return resolve_context_key(hook_input, platform="copilot")
 
 
-def _resolve_active_task(trellis_dir: Path, hook_input: dict):
-    scripts_dir = trellis_dir / "scripts"
+def _resolve_active_task(suncode_dir: Path, hook_input: dict):
+    scripts_dir = suncode_dir / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     from common.active_task import resolve_active_task  # type: ignore[import-not-found]
 
-    return resolve_active_task(trellis_dir.parent, hook_input, platform="copilot")
+    return resolve_active_task(suncode_dir.parent, hook_input, platform="copilot")
 
 
 def run_script(script_path: Path, context_key: str | None = None) -> str:
@@ -179,7 +179,7 @@ def run_script(script_path: Path, context_key: str | None = None) -> str:
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
         if context_key:
-            env["TRELLIS_CONTEXT_ID"] = context_key
+            env["SUNCODE_CONTEXT_ID"] = context_key
         cmd = [sys.executable, "-W", "ignore", str(script_path)]
         result = subprocess.run(
             cmd,
@@ -210,23 +210,23 @@ def _normalize_task_ref(task_ref: str) -> str:
         normalized = normalized[2:]
 
     if normalized.startswith("tasks/"):
-        return f".trellis/{normalized}"
+        return f".suncode/{normalized}"
 
     return normalized
 
 
-def _resolve_task_dir(trellis_dir: Path, task_ref: str) -> Path:
+def _resolve_task_dir(suncode_dir: Path, task_ref: str) -> Path:
     normalized = _normalize_task_ref(task_ref)
     path_obj = Path(normalized)
     if path_obj.is_absolute():
         return path_obj
-    if normalized.startswith(".trellis/"):
-        return trellis_dir.parent / path_obj
-    return trellis_dir / "tasks" / path_obj
+    if normalized.startswith(".suncode/"):
+        return suncode_dir.parent / path_obj
+    return suncode_dir / "tasks" / path_obj
 
 
-def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
-    active = _resolve_active_task(trellis_dir, hook_input)
+def _get_task_status(suncode_dir: Path, hook_input: dict) -> str:
+    active = _resolve_active_task(suncode_dir, hook_input)
     if not active.task_path:
         return (
             "Status: NO ACTIVE TASK\n"
@@ -235,11 +235,11 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
         )
 
     task_ref = active.task_path
-    task_dir = _resolve_task_dir(trellis_dir, task_ref)
+    task_dir = _resolve_task_dir(suncode_dir, task_ref)
     if active.stale or not task_dir.is_dir():
         return (
             f"Status: STALE POINTER\nTask: {task_ref}\n"
-            "Next: Task directory not found. Run: python3 ./.trellis/scripts/task.py finish"
+            "Next: Task directory not found. Run: python3 ./.suncode/scripts/task.py finish"
         )
 
     task_json_path = task_dir / "task.json"
@@ -256,7 +256,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if task_status == "completed":
         return (
             f"Status: COMPLETED\nTask: {task_title}\n"
-            f"Next: Archive with `python3 ./.trellis/scripts/task.py archive {task_dir.name}` "
+            f"Next: Archive with `python3 ./.suncode/scripts/task.py archive {task_dir.name}` "
             "or start a new task."
         )
 
@@ -331,13 +331,13 @@ def _repo_relative(repo_root: Path, path: Path) -> str:
         return str(path)
 
 
-def _collect_spec_index_paths(trellis_dir: Path) -> list[str]:
+def _collect_spec_index_paths(suncode_dir: Path) -> list[str]:
     paths: list[str] = []
-    guides_index = trellis_dir / "spec" / "guides" / "index.md"
+    guides_index = suncode_dir / "spec" / "guides" / "index.md"
     if guides_index.is_file():
-        paths.append(".trellis/spec/guides/index.md")
+        paths.append(".suncode/spec/guides/index.md")
 
-    spec_dir = trellis_dir / "spec"
+    spec_dir = suncode_dir / "spec"
     if not spec_dir.is_dir():
         return paths
 
@@ -346,24 +346,24 @@ def _collect_spec_index_paths(trellis_dir: Path) -> list[str]:
             continue
         index_file = sub / "index.md"
         if index_file.is_file():
-            paths.append(f".trellis/spec/{sub.name}/index.md")
+            paths.append(f".suncode/spec/{sub.name}/index.md")
             continue
         for nested in sorted(sub.iterdir()):
             if not nested.is_dir():
                 continue
             nested_index = nested / "index.md"
             if nested_index.is_file():
-                paths.append(f".trellis/spec/{sub.name}/{nested.name}/index.md")
+                paths.append(f".suncode/spec/{sub.name}/{nested.name}/index.md")
 
     return paths
 
 
 def _build_compact_current_state(
-    trellis_dir: Path,
+    suncode_dir: Path,
     hook_input: dict,
     spec_index_paths: list[str],
 ) -> str:
-    repo_root = trellis_dir.parent
+    repo_root = suncode_dir.parent
     lines: list[str] = []
 
     try:
@@ -380,9 +380,9 @@ def _build_compact_current_state(
     lines.append(f"Developer: {developer or '(not initialized)'}")
     lines.append(_format_git_state(repo_root))
 
-    active = _resolve_active_task(trellis_dir, hook_input)
+    active = _resolve_active_task(suncode_dir, hook_input)
     if active.task_path:
-        task_dir = _resolve_task_dir(trellis_dir, active.task_path)
+        task_dir = _resolve_task_dir(suncode_dir, active.task_path)
         status = "unknown"
         task_json = task_dir / "task.json"
         if task_json.is_file():
@@ -400,7 +400,7 @@ def _build_compact_current_state(
         try:
             task_count = sum(1 for _ in iter_active_tasks(get_tasks_dir(repo_root)))
             lines.append(
-                f"Active tasks: {task_count} total. Use `python3 ./.trellis/scripts/task.py list --mine` only if needed."
+                f"Active tasks: {task_count} total. Use `python3 ./.suncode/scripts/task.py list --mine` only if needed."
             )
         except Exception:
             pass
@@ -459,7 +459,7 @@ def _build_workflow_toc(workflow_path: Path) -> str:
 
     out_lines = [
         "# Development Workflow - Session Summary",
-        "Full guide: .trellis/workflow.md. Step detail: `python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
+        "Full guide: .suncode/workflow.md. Step detail: `python3 ./.suncode/scripts/get_context.py --mode phase --step <X.Y>`.",
         "",
     ]
 
@@ -486,8 +486,8 @@ def main() -> None:
 
     configure_project_encoding(project_dir)
 
-    trellis_dir = project_dir / ".trellis"
-    spec_index_paths = _collect_spec_index_paths(trellis_dir)
+    suncode_dir = project_dir / ".suncode"
+    spec_index_paths = _collect_spec_index_paths(suncode_dir)
 
     output = StringIO()
 
@@ -498,12 +498,12 @@ Suncode compact SessionStart context. Use it to orient the session; load details
 """)
 
     output.write("<current-state>\n")
-    output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))
+    output.write(_build_compact_current_state(suncode_dir, hook_input, spec_index_paths))
     output.write("\n</current-state>\n\n")
 
-    output.write("<trellis-workflow>\n")
-    output.write(_build_workflow_toc(trellis_dir / "workflow.md"))
-    output.write("\n</trellis-workflow>\n\n")
+    output.write("<suncode-workflow>\n")
+    output.write(_build_workflow_toc(suncode_dir / "workflow.md"))
+    output.write("\n</suncode-workflow>\n\n")
 
     output.write("<guidelines>\n")
     output.write(
@@ -520,11 +520,11 @@ Suncode compact SessionStart context. Use it to orient the session; load details
 
     output.write(
         "Discover more via: "
-        "`python3 ./.trellis/scripts/get_context.py --mode packages`\n"
+        "`python3 ./.suncode/scripts/get_context.py --mode packages`\n"
     )
     output.write("</guidelines>\n\n")
 
-    task_status = _get_task_status(trellis_dir, hook_input)
+    task_status = _get_task_status(suncode_dir, hook_input)
     output.write(f"<task-status>\n{task_status}\n</task-status>\n\n")
 
     output.write("""<ready>

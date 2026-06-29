@@ -43,7 +43,7 @@ import {
   configYamlTemplate,
   gitignoreTemplate,
   workflowMdTemplate,
-} from "../templates/trellis/index.js";
+} from "../templates/suncode/index.js";
 import { agentsMdContent } from "../templates/markdown/index.js";
 
 import {
@@ -94,8 +94,8 @@ interface ChangeAnalysis {
 type ConflictAction = "overwrite" | "skip" | "create-new";
 
 const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
-const TRELLIS_BLOCK_START = "<!-- TRELLIS:START -->";
-const TRELLIS_BLOCK_END = "<!-- TRELLIS:END -->";
+const SUNCODE_BLOCK_START = "<!-- SUNCODE:START -->";
+const SUNCODE_BLOCK_END = "<!-- SUNCODE:END -->";
 const LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES = new Set<string>([
   // v0.5.0-beta.17 and earlier wrote AGENTS.md but did not hash-track it.
   // This hash is the pristine Suncode-managed block before the Subagents
@@ -114,35 +114,35 @@ const PROTECTED_PATHS = [
   `${DIR_NAMES.WORKFLOW}/.current-task`,
 ];
 
-function getTrellisManagedBlock(content: string): string | null {
-  const start = content.indexOf(TRELLIS_BLOCK_START);
+function getSuncodeManagedBlock(content: string): string | null {
+  const start = content.indexOf(SUNCODE_BLOCK_START);
   if (start === -1) {
     return null;
   }
 
-  const end = content.indexOf(TRELLIS_BLOCK_END, start);
+  const end = content.indexOf(SUNCODE_BLOCK_END, start);
   if (end === -1) {
     return null;
   }
 
-  return content.slice(start, end + TRELLIS_BLOCK_END.length);
+  return content.slice(start, end + SUNCODE_BLOCK_END.length);
 }
 
-function replaceTrellisManagedBlock(
+function replaceSuncodeManagedBlock(
   existingContent: string,
   templateContent: string,
 ): string | null {
-  const existingStart = existingContent.indexOf(TRELLIS_BLOCK_START);
+  const existingStart = existingContent.indexOf(SUNCODE_BLOCK_START);
   if (existingStart === -1) {
     return null;
   }
 
-  const existingEnd = existingContent.indexOf(TRELLIS_BLOCK_END, existingStart);
+  const existingEnd = existingContent.indexOf(SUNCODE_BLOCK_END, existingStart);
   if (existingEnd === -1) {
     return null;
   }
 
-  const templateBlock = getTrellisManagedBlock(templateContent);
+  const templateBlock = getSuncodeManagedBlock(templateContent);
   if (!templateBlock) {
     return null;
   }
@@ -150,7 +150,7 @@ function replaceTrellisManagedBlock(
   return (
     existingContent.slice(0, existingStart) +
     templateBlock +
-    existingContent.slice(existingEnd + TRELLIS_BLOCK_END.length)
+    existingContent.slice(existingEnd + SUNCODE_BLOCK_END.length)
   );
 }
 
@@ -162,18 +162,18 @@ function buildAgentsMdTemplate(cwd: string): string {
 
   const existingContent = fs.readFileSync(fullPath, "utf-8");
 
-  // Existing file already has TRELLIS:START/END markers — replace just the
+  // Existing file already has SUNCODE:START/END markers — replace just the
   // managed block, preserving everything outside it.
-  const replaced = replaceTrellisManagedBlock(existingContent, agentsMdContent);
+  const replaced = replaceSuncodeManagedBlock(existingContent, agentsMdContent);
   if (replaced !== null) {
     return replaced;
   }
 
   // Existing file has no managed-block markers (pre-0.5.0-beta.18 project, or
-  // user hand-wrote AGENTS.md without ever running through Trellis). Append
+  // user hand-wrote AGENTS.md without ever running through Suncode). Append
   // the template's managed block at the end so user content is preserved
   // instead of clobbered.
-  const templateBlock = getTrellisManagedBlock(agentsMdContent);
+  const templateBlock = getSuncodeManagedBlock(agentsMdContent);
   if (!templateBlock) {
     return agentsMdContent;
   }
@@ -189,7 +189,7 @@ function isKnownUntrackedTemplate(
     return false;
   }
 
-  const managedBlock = getTrellisManagedBlock(existingContent);
+  const managedBlock = getSuncodeManagedBlock(existingContent);
   if (!managedBlock) {
     return false;
   }
@@ -364,7 +364,7 @@ function executeSafeFileDeletes(
 }
 
 /**
- * Load update.skip paths from .trellis/config.yaml
+ * Load update.skip paths from .suncode/config.yaml
  *
  * Parses simple YAML structure:
  *   update:
@@ -548,11 +548,11 @@ export function applyConfigSectionsAdded(
 /**
  * Detect if legacy Codex upgrade is needed.
  *
- * Old Trellis versions used `.agents/skills/` as codex's configDir.
+ * Old Suncode versions used `.agents/skills/` as codex's configDir.
  * New versions use `.codex/` for Codex-specific config and `.agents/skills/`
  * as a shared layer.
  *
- * Detection: Trellis-tracked hashes contain `.agents/skills/` entries
+ * Detection: Suncode-tracked hashes contain `.agents/skills/` entries
  * but `.codex/` does not exist. This avoids misclassifying repos that
  * have `.agents/skills/` from other tools (Kimi CLI, Amp, etc.).
  *
@@ -641,7 +641,7 @@ function preserveExistingRegistryConfig(cwd: string, template: string): string {
     "#-------------------------------------------------------------------------------\n" +
     "# Registry\n" +
     "#-------------------------------------------------------------------------------\n\n" +
-    "# Source used to install .trellis/spec. suncode update refreshes this\n" +
+    "# Source used to install .suncode/spec. suncode update refreshes this\n" +
     "# hash-tracked spec template while preserving local edits through the\n" +
     "# normal update conflict flow.\n" +
     "registry:\n" +
@@ -663,7 +663,7 @@ async function collectRegistrySpecTemplates(
   } catch (error) {
     console.log(
       chalk.yellow(
-        `Warning: invalid registry.spec.source in .trellis/config.yaml: ${
+        `Warning: invalid registry.spec.source in .suncode/config.yaml: ${
           error instanceof Error ? error.message : String(error)
         }`,
       ),
@@ -696,7 +696,7 @@ async function collectRegistrySpecTemplates(
       return new Map();
     }
     const tempRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), "trellis-registry-template-"),
+      path.join(os.tmpdir(), "suncode-registry-template-"),
     );
     try {
       const result = await downloadTemplateById(
@@ -1359,7 +1359,7 @@ function classifyMigrations(
       continue;
     }
     // For non-rename types, also block writing TO protected paths
-    // rename/rename-dir are allowed to target protected paths (e.g., 0.2.0 renames into .trellis/workspace)
+    // rename/rename-dir are allowed to target protected paths (e.g., 0.2.0 renames into .suncode/workspace)
     if (
       item.to &&
       isProtectedPath(item.to) &&
@@ -1580,7 +1580,7 @@ async function promptMigrationAction(
 
 /**
  * Clean up empty directories after file migration
- * Recursively removes empty parent directories up to .trellis root
+ * Recursively removes empty parent directories up to .suncode root
  */
 /** @internal Exported for testing only */
 export function cleanupEmptyDirs(cwd: string, dirPath: string): void {
@@ -1591,7 +1591,7 @@ export function cleanupEmptyDirs(cwd: string, dirPath: string): void {
     return;
   }
 
-  // Safety: never delete managed root directories themselves (e.g., .claude, .trellis)
+  // Safety: never delete managed root directories themselves (e.g., .claude, .suncode)
   if (isManagedRootDir(dirPath)) {
     return;
   }
@@ -1760,7 +1760,7 @@ async function executeMigrations(
 
     // For `backup-rename`, leave an inline .backup copy of the user's modified
     // original next to the new location (for rename) or in place (for delete).
-    // This is in addition to the full project snapshot at .trellis/.backup-*/;
+    // This is in addition to the full project snapshot at .suncode/.backup-*/;
     // the inline copy is more discoverable when the user wants to diff or merge
     // their customizations against the new template.
     if (item.type === "rename" && item.to) {
@@ -1791,7 +1791,7 @@ async function executeMigrations(
 
       if (action === "backup-rename") {
         // Keep a .backup copy in place before deletion so the user can recover
-        // inline without digging through .trellis/.backup-*/.
+        // inline without digging through .suncode/.backup-*/.
         fs.copyFileSync(filePath, filePath + ".backup");
       }
 
@@ -1932,7 +1932,7 @@ export async function update(options: UpdateOptions): Promise<void> {
     );
   }
 
-  // Detect legacy Codex (has .agents/skills/ tracked by Trellis but no .codex/)
+  // Detect legacy Codex (has .agents/skills/ tracked by Suncode but no .codex/)
   // NOTE: this MUST happen before pruneOrphanManifestKeys below, since the
   // detector reads the raw manifest looking for .agents/skills/ markers that
   // the prune step would otherwise consider orphans (codex hasn't been added
@@ -2303,7 +2303,7 @@ export async function update(options: UpdateOptions): Promise<void> {
 
     // Hardcoded: Rename traces-*.md to journal-*.md in workspace directories
     // Why hardcoded: The migration system only supports fixed path renames, not pattern-based.
-    // traces-*.md files are in .trellis/workspace/{developer}/ with variable developer names
+    // traces-*.md files are in .suncode/workspace/{developer}/ with variable developer names
     // and variable file numbers (traces-1.md, traces-2.md, etc.), so we can't enumerate them
     // in the migration manifest. This is a one-time migration for the 0.2.0 naming redesign.
     const workspaceDir = path.join(cwd, PATHS.WORKSPACE);

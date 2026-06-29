@@ -18,7 +18,7 @@
  * should surface on every turn so long conversations don't drift.
  *
  * Silently skips when:
- *   - No .trellis/ directory
+ *   - No .suncode/ directory
  *   - No active task in the session runtime context
  *   - task.json malformed or missing status
  */
@@ -41,7 +41,7 @@ const TAG_RE = /\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n([\s\S]*?)\n\s*\[\/workf
  * rather than the plugin silently masking it.
  */
 function loadBreadcrumbs(directory) {
-  const workflowPath = join(directory, ".trellis", "workflow.md")
+  const workflowPath = join(directory, ".suncode", "workflow.md")
   if (!existsSync(workflowPath)) return {}
   let content
   try {
@@ -115,7 +115,7 @@ export default async ({ directory }) => {
             debugLog("workflow-state", "Skipping suncode subagent turn:", input?.agent)
             return
           }
-          if (process.env.TRELLIS_HOOKS === "0" || process.env.TRELLIS_DISABLE_HOOKS === "1") {
+          if (process.env.SUNCODE_HOOKS === "0" || process.env.SUNCODE_DISABLE_HOOKS === "1") {
             return
           }
           if (process.env.OPENCODE_NON_INTERACTIVE === "1") {

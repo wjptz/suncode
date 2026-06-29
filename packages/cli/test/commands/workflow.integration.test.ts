@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 
 vi.mock("figlet", () => ({
-  default: { textSync: vi.fn(() => "TRELLIS") },
+  default: { textSync: vi.fn(() => "SUNCODE") },
 }));
 
 vi.mock("inquirer", () => ({
@@ -36,7 +36,7 @@ import { update } from "../../src/commands/update.js";
 import { runWorkflowCommand, WorkflowCommandError } from "../../src/commands/workflow.js";
 import { PATHS } from "../../src/constants/paths.js";
 import { loadHashes } from "../../src/utils/template-hash.js";
-import { workflowMdTemplate } from "../../src/templates/trellis/index.js";
+import { workflowMdTemplate } from "../../src/templates/suncode/index.js";
 import { replacePythonCommandLiterals } from "../../src/configurators/shared.js";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -87,7 +87,7 @@ describe("suncode workflow integration", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-workflow-int-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-workflow-int-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
     vi.spyOn(console, "log").mockImplementation(noop);
     vi.spyOn(console, "error").mockImplementation(noop);

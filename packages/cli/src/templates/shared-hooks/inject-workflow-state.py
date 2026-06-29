@@ -25,7 +25,7 @@ custom agent's ``hooks.userPromptSubmit`` and the IDE ``.kiro.hook``
 each platform's hooks directory via writeSharedHooks() at init time.
 
 Silent exit 0 cases (no output):
-  - No .trellis/ directory found (not a Suncode project)
+  - No .suncode/ directory found (not a Suncode project)
   - task.json malformed or missing status
 """
 from __future__ import annotations
@@ -65,7 +65,7 @@ from typing import Optional
 # Bootstrap notice for Codex while the session has no active task. Codex does not
 # get the full SessionStart overview; this short reminder points the main session
 # at the start skill once and leaves the per-turn state block compact.
-CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<trellis-bootstrap>
+CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<suncode-bootstrap>
 If you have not already loaded Suncode context this session, read the `suncode-start` skill once.
 </suncode-bootstrap>"""
 
@@ -74,15 +74,15 @@ If you have not already loaded Suncode context this session, read the `suncode-s
 # CWD-robust Suncode root discovery (fixes hook-path-robustness for this hook)
 # ---------------------------------------------------------------------------
 
-def find_trellis_root(start: Path) -> Optional[Path]:
-    """Walk up from start to find directory containing .trellis/.
+def find_suncode_root(start: Path) -> Optional[Path]:
+    """Walk up from start to find directory containing .suncode/.
 
     Handles CWD drift: subdirectory launches, monorepo packages, etc.
-    Returns None if no .trellis/ found (silent no-op).
+    Returns None if no .suncode/ found (silent no-op).
     """
     cur = start.resolve()
     while cur != cur.parent:
-        if (cur / ".trellis").is_dir():
+        if (cur / ".suncode").is_dir():
             return cur
         cur = cur.parent
     return None
@@ -132,7 +132,7 @@ def _detect_platform(input_data: dict) -> str | None:
 
 
 def _resolve_active_task(root: Path, input_data: dict):
-    scripts_dir = root / ".trellis" / "scripts"
+    scripts_dir = root / ".suncode" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     from common.active_task import resolve_active_task  # type: ignore[import-not-found]
@@ -187,7 +187,7 @@ def load_breadcrumbs(root: Path) -> dict[str, str]:
     in build_breadcrumb so users see the broken state and fix
     workflow.md, rather than the hook silently masking the issue.
     """
-    workflow = root / ".trellis" / "workflow.md"
+    workflow = root / ".suncode" / "workflow.md"
     if not workflow.is_file():
         return {}
     try:
@@ -204,21 +204,21 @@ def load_breadcrumbs(root: Path) -> dict[str, str]:
     return result
 
 
-def _read_trellis_config(root: Path) -> dict:
-    """Load .trellis/config.yaml via the bundled trellis_config helper.
+def _read_suncode_config(root: Path) -> dict:
+    """Load .suncode/config.yaml via the bundled suncode_config helper.
 
-    The helper lives in .trellis/scripts/common; the hook lives outside the
+    The helper lives in .suncode/scripts/common; the hook lives outside the
     scripts tree, so we extend sys.path before importing.
     """
-    scripts_dir = root / ".trellis" / "scripts"
+    scripts_dir = root / ".suncode" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     try:
-        from common.trellis_config import read_trellis_config  # type: ignore[import-not-found]
+        from common.suncode_config import read_suncode_config  # type: ignore[import-not-found]
     except Exception:
         return {}
     try:
-        return read_trellis_config(root)
+        return read_suncode_config(root)
     except Exception:
         return {}
 
@@ -226,7 +226,7 @@ def _read_trellis_config(root: Path) -> dict:
 def _codex_mode_banner(config: dict) -> str:
     """Emit a `<codex-mode>` banner for the additionalContext payload.
 
-    Reads `codex.dispatch_mode` from .trellis/config.yaml; defaults to
+    Reads `codex.dispatch_mode` from .suncode/config.yaml; defaults to
     `inline` when missing or invalid because Codex sub-agents run with
     `fork_turns="none"` isolation and can't inherit the parent session's
     task context. The banner makes the active mode explicit to Codex AI
@@ -261,7 +261,7 @@ def resolve_breadcrumb_key(
 
     Codex defaults to ``inline`` because sub-agents run with ``fork_turns="none"``
     isolation and can't inherit the parent session's task context. Users can
-    opt into ``codex.dispatch_mode: sub-agent`` in ``.trellis/config.yaml``
+    opt into ``codex.dispatch_mode: sub-agent`` in ``.suncode/config.yaml``
     to use the parallel ``<status>-inline`` tag → ``<status>`` flip. Invalid
     or missing values fall back to inline.
 
@@ -341,7 +341,7 @@ def _load_hook_input() -> dict:
 
 
 def main() -> int:
-    if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+    if os.environ.get("SUNCODE_HOOKS") == "0" or os.environ.get("SUNCODE_DISABLE_HOOKS") == "1":
         return 0
 
     data = _load_hook_input()
@@ -349,13 +349,13 @@ def main() -> int:
     cwd_str = data.get("cwd") or os.getcwd()
     cwd = Path(cwd_str)
 
-    root = find_trellis_root(cwd)
+    root = find_suncode_root(cwd)
     if root is None:
         return 0  # not a Suncode project
 
     templates = load_breadcrumbs(root)
     platform = _detect_platform(data)
-    config = _read_trellis_config(root)
+    config = _read_suncode_config(root)
     task = get_active_task(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward

@@ -1,13 +1,13 @@
 # Local Files Generated After Init
 
-`suncode init` writes the Suncode runtime into the user project. Later, `suncode update` tries to update Suncode-managed template files, but it uses `.trellis/.template-hashes.json` to determine which files have already been modified by the user.
+`suncode init` writes the Suncode runtime into the user project. Later, `suncode update` tries to update Suncode-managed template files, but it uses `.suncode/.template-hashes.json` to determine which files have already been modified by the user.
 
 This page only describes files that are visible and editable inside the user project.
 
-## `.trellis/`
+## `.suncode/`
 
 ```text
-.trellis/
+.suncode/
 ├── workflow.md
 ├── config.yaml
 ├── .developer
@@ -22,16 +22,16 @@ This page only describes files that are visible and editable inside the user pro
 
 | Path | Usually editable? | Notes |
 | --- | --- | --- |
-| `.trellis/workflow.md` | Yes | Local workflow documentation and AI routing rules. |
-| `.trellis/config.yaml` | Yes | Project configuration, hooks, packages, journal line limits, and related settings. |
-| `.trellis/spec/` | Yes | Project specs, intended to be updated regularly by users and AI. |
-| `.trellis/tasks/` | Yes | Task material and research artifacts, maintained by the task workflow. |
-| `.trellis/workspace/` | Yes | Session records, usually written by `add_session.py`. |
-| `.trellis/scripts/` | Carefully | Local runtime. It can be customized, but only after understanding the call chain. |
-| `.trellis/.runtime/` | No | Runtime state, usually written automatically by hooks/scripts. |
-| `.trellis/.developer` | Carefully | Current developer identity. |
-| `.trellis/.version` | No | Suncode version record used by update/migration logic. |
-| `.trellis/.template-hashes.json` | No | Template hash record. Do not hand-write business rules here. |
+| `.suncode/workflow.md` | Yes | Local workflow documentation and AI routing rules. |
+| `.suncode/config.yaml` | Yes | Project configuration, hooks, packages, journal line limits, and related settings. |
+| `.suncode/spec/` | Yes | Project specs, intended to be updated regularly by users and AI. |
+| `.suncode/tasks/` | Yes | Task material and research artifacts, maintained by the task workflow. |
+| `.suncode/workspace/` | Yes | Session records, usually written by `add_session.py`. |
+| `.suncode/scripts/` | Carefully | Local runtime. It can be customized, but only after understanding the call chain. |
+| `.suncode/.runtime/` | No | Runtime state, usually written automatically by hooks/scripts. |
+| `.suncode/.developer` | Carefully | Current developer identity. |
+| `.suncode/.version` | No | Suncode version record used by update/migration logic. |
+| `.suncode/.template-hashes.json` | No | Template hash record. Do not hand-write business rules here. |
 
 ## Platform Directories
 
@@ -45,11 +45,11 @@ Different platforms generate different directories. Common categories:
 | skills | `.claude/skills/`, `.agents/skills/`, `.qoder/skills/` | Skills that auto-trigger or can be read by AI. |
 | commands/prompts/workflows | `.cursor/commands/`, `.github/prompts/`, `.devin/workflows/`, `.zcode/commands/` | Explicit user-invoked command or workflow entry points. |
 
-When modifying a platform directory, also confirm whether `.trellis/workflow.md` still describes the same flow.
+When modifying a platform directory, also confirm whether `.suncode/workflow.md` still describes the same flow.
 
 ## Meaning Of Template Hashes
 
-`.trellis/.template-hashes.json` records the content hash from the last time Suncode wrote a template file. `suncode update` uses it to distinguish three cases:
+`.suncode/.template-hashes.json` records the content hash from the last time Suncode wrote a template file. `suncode update` uses it to distinguish three cases:
 
 | Case | Update behavior |
 | --- | --- |
@@ -63,10 +63,10 @@ When an AI customizes local Suncode files, it does not need to maintain hashes m
 
 Editable by default:
 
-- `.trellis/workflow.md`
-- `.trellis/config.yaml`
-- `.trellis/spec/**`
-- `.trellis/scripts/**`
+- `.suncode/workflow.md`
+- `.suncode/config.yaml`
+- `.suncode/spec/**`
+- `.suncode/scripts/**`
 - Platform hooks, settings, agents, skills, commands, prompts, and workflows
 
 Do not edit by default:
@@ -74,7 +74,7 @@ Do not edit by default:
 - Global npm install directory
 - `node_modules/@wjptz/suncode`
 - Suncode GitHub repository source code
-- Concrete state files under `.trellis/.runtime/**`
-- Hash contents inside `.trellis/.template-hashes.json`
+- Concrete state files under `.suncode/.runtime/**`
+- Hash contents inside `.suncode/.template-hashes.json`
 
 Switch to the Suncode CLI source-code perspective only when the user explicitly wants to contribute upstream.

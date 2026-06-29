@@ -41,7 +41,7 @@ export interface SpawnOptions {
   jsonls?: string[];
   scope?: string;
   /** Identity recorded as the `spawned` event author. Defaults to
-   *  the calling worker (`TRELLIS_CHANNEL_AS` env) or "main". */
+   *  the calling worker (`SUNCODE_CHANNEL_AS` env) or "main". */
   by?: string;
   /** Worker inbox delivery policy (default `explicitOnly`). */
   inboxPolicy?: InboxPolicy;
@@ -123,7 +123,7 @@ function buildSystemPrompt(
   context: string,
 ): string {
   const protocol = [
-    "[TRELLIS CHANNEL PROTOCOL — placeholder]",
+    "[SUNCODE CHANNEL PROTOCOL — placeholder]",
     `You are agent "${safeIdentifier(workerName)}" participating in the channel "${safeIdentifier(channelName)}".`,
     "Other agents (humans and AIs) may also be in this channel.",
     "Messages addressed to you arrive as ordinary user turns.",
@@ -246,9 +246,9 @@ async function spawnLocked(
 
   const spawnedBy =
     opts.by ??
-    (typeof process.env.TRELLIS_CHANNEL_AS === "string" &&
-    process.env.TRELLIS_CHANNEL_AS.length > 0
-      ? process.env.TRELLIS_CHANNEL_AS
+    (typeof process.env.SUNCODE_CHANNEL_AS === "string" &&
+    process.env.SUNCODE_CHANNEL_AS.length > 0
+      ? process.env.SUNCODE_CHANNEL_AS
       : "main");
 
   const configPath = writeSupervisorConfig(
@@ -310,7 +310,7 @@ async function spawnLocked(
       // regardless of where the supervisor's process.cwd() ends up.
       env: {
         ...process.env,
-        TRELLIS_CHANNEL_PROJECT: project,
+        SUNCODE_CHANNEL_PROJECT: project,
       },
     },
   );

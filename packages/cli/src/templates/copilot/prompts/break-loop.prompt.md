@@ -59,8 +59,8 @@ What broader problems does this bug reveal?
 
 Solidify insights into the system:
 
-- [ ] Update `.trellis/spec/guides/` thinking guides
-- [ ] Update `.trellis/spec/backend/` or `frontend/` docs
+- [ ] Update `.suncode/spec/guides/` thinking guides
+- [ ] Update `.suncode/spec/backend/` or `frontend/` docs
 - [ ] Create issue record (if applicable)
 - [ ] Create feature ticket for root fix
 - [ ] Update check commands if needed
@@ -122,7 +122,7 @@ Three levels of insight:
    - If it's a code reuse issue �?update `code-reuse-thinking-guide.md`
    - If it's domain-specific �?update `backend/*.md` or `frontend/*.md`
 
-2. **Sync templates** - After updating `.trellis/spec/`, sync to `src/templates/markdown/spec/`
+2. **Sync templates** - After updating `.suncode/spec/`, sync to `src/templates/markdown/spec/`
 
 3. **Commit the spec updates** - This is the primary output, not just the analysis text
 

@@ -76,7 +76,7 @@ describe("codex getConfigTemplate", () => {
   // The structured [features.multi_agent_v2] table form is only accepted by
   // Codex CLI 0.131+. On 0.130 and earlier — including the codex CLI bundled
   // in the Codex desktop app — it aborts the whole config load with
-  // `data did not match any variant of untagged enum FeatureToml`. Trellis
+  // `data did not match any variant of untagged enum FeatureToml`. Suncode
   // no longer writes the block; this test guards against reintroducing it.
   it("does not write a [features.multi_agent_v2] block (Codex 0.130 compat)", () => {
     const config = getConfigTemplate();

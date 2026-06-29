@@ -25,15 +25,15 @@ You are already the `suncode-check` sub-agent that the main session dispatched. 
 
 ## Suncode Context Loading Protocol
 
-Look for the `<!-- trellis-hook-injected -->` marker in your input above.
+Look for the `<!-- suncode-hook-injected -->` marker in your input above.
 
 - **If the marker is present**: task artifacts, spec, and research files have already been auto-loaded for you above. Proceed with the check work directly.
-- **If the marker is absent**: hook injection didn't fire (Windows + Claude Code, `--continue` resume, fork distribution, hooks disabled, etc.). Find the active task path from your dispatch prompt's first line `Active task: <path>` (or run `python3 ./.trellis/scripts/task.py current --source` as a fallback), then Read `<task-path>/check.jsonl`, each listed file, `<task-path>/prd.md`, `<task-path>/design.md` if present, and `<task-path>/implement.md` if present before doing the work.
+- **If the marker is absent**: hook injection didn't fire (Windows + Claude Code, `--continue` resume, fork distribution, hooks disabled, etc.). Find the active task path from your dispatch prompt's first line `Active task: <path>` (or run `python3 ./.suncode/scripts/task.py current --source` as a fallback), then Read `<task-path>/check.jsonl`, each listed file, `<task-path>/prd.md`, `<task-path>/design.md` if present, and `<task-path>/implement.md` if present before doing the work.
 
 ## Context
 
 Before checking, read:
-- `.trellis/spec/` - Development guidelines
+- `.suncode/spec/` - Development guidelines
 - Task `prd.md` - Requirements document
 - Task `design.md` - Technical design (if exists)
 - Task `implement.md` - Execution plan (if exists)
@@ -66,7 +66,7 @@ git diff              # View specific changes
 
 ### Step 2: Check Against Specs and Task Artifacts
 
-Read the task's prd.md, design.md if present, and implement.md if present, then read relevant specs in `.trellis/spec/` to check code:
+Read the task's prd.md, design.md if present, and implement.md if present, then read relevant specs in `.suncode/spec/` to check code:
 
 - Does it satisfy the task requirements
 - Does it follow the technical design and implementation plan when present

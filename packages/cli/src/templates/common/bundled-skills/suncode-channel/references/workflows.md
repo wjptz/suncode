@@ -10,12 +10,12 @@ Use when the user says "和 codex/claude 讨论一下", "brainstorm", or "拉一
 
 ```bash
 suncode channel create brainstorm-storage-layer --by main \
-  --task .trellis/tasks/05-XX-storage-adapter
+  --task .suncode/tasks/05-XX-storage-adapter
 
 suncode channel spawn brainstorm-storage-layer \
   --agent architect --provider codex \
-  --file .trellis/tasks/05-XX-storage-adapter/prd.md \
-  --file .trellis/tasks/05-XX-storage-adapter/design.md \
+  --file .suncode/tasks/05-XX-storage-adapter/prd.md \
+  --file .suncode/tasks/05-XX-storage-adapter/design.md \
   --as cx-arch --timeout 30m
 
 suncode channel send brainstorm-storage-layer \
@@ -51,7 +51,7 @@ needed.
 Use when the user asks to dispatch implementation or review work.
 
 ```bash
-TASK=.trellis/tasks/05-12-foo
+TASK=.suncode/tasks/05-12-foo
 suncode channel create cr-foo --task "$TASK" --by main
 
 suncode channel spawn cr-foo \

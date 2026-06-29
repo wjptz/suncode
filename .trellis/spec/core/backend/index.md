@@ -4,7 +4,7 @@ These guidelines apply to `packages/core`.
 
 ## Purpose
 
-`@mindfoldhq/trellis-core` owns reusable SDK/domain primitives that must stay
+`@wjptz/suncode-core` owns reusable SDK/domain primitives that must stay
 independent of CLI rendering and process-control concerns.
 
 ## Source Map
@@ -23,7 +23,7 @@ independent of CLI rendering and process-control concerns.
 - Core APIs must not print terminal output, call `process.exit`, parse CLI argv,
   or depend on Chalk / Commander / Inquirer.
 - CLI code must import core through public exports such as
-  `@mindfoldhq/trellis-core/channel`, not deep paths under `packages/core/src`.
+  `@wjptz/suncode-core/channel`, not deep paths under `packages/core/src`.
 - Public subpaths must be declared explicitly in `packages/core/package.json`.
 - Core and CLI publish together with the same version.
 - Detailed package-boundary rules currently live in
@@ -35,6 +35,8 @@ independent of CLI rendering and process-control concerns.
 
 - Read `.trellis/spec/cli/backend/trellis-core-sdk.md` before editing
   `packages/core/**` or moving logic between CLI and core.
+- Read `.trellis/spec/cli/backend/suncode-runtime-identity.md` before changing
+  persistence paths, env vars, protocol markers, or package runtime names.
 - Read `.trellis/spec/cli/unit-test/conventions.md` before adding or changing
   core tests.
 - For channel changes, also read
@@ -46,9 +48,9 @@ independent of CLI rendering and process-control concerns.
 Run the package-scoped checks that match the change:
 
 ```bash
-pnpm --filter @mindfoldhq/trellis-core lint
-pnpm --filter @mindfoldhq/trellis-core typecheck
-pnpm --filter @mindfoldhq/trellis-core test
+pnpm --filter @wjptz/suncode-core lint
+pnpm --filter @wjptz/suncode-core typecheck
+pnpm --filter @wjptz/suncode-core test
 ```
 
 For changes that affect CLI imports or release packaging, also run the root

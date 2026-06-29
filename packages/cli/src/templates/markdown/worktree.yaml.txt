@@ -22,7 +22,7 @@ copy:
   # - .env
   # - .env.local
   # Workflow config
-  - .trellis/.developer
+  - .suncode/.developer
 
 #-------------------------------------------------------------------------------
 # Post-Create Hooks

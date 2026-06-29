@@ -93,7 +93,7 @@ describe("opencode session-start history detection", () => {
     );
   });
 
-  it("detects persisted Trellis context from metadata", () => {
+  it("detects persisted Suncode context from metadata", () => {
     const messages = [
       {
         info: { role: "user" },
@@ -102,7 +102,7 @@ describe("opencode session-start history detection", () => {
             type: "text",
             text: "hello",
             metadata: {
-              trellis: {
+              suncode: {
                 sessionStart: true,
               },
             },
@@ -132,11 +132,11 @@ describe("opencode session-start history detection", () => {
 });
 
 describe("opencode bash session context", () => {
-  it("injects TRELLIS_CONTEXT_ID into Bash commands from plugin sessionID", async () => {
+  it("injects SUNCODE_CONTEXT_ID into Bash commands from plugin sessionID", async () => {
     const hooks = await createOpenCodeInjectHooks();
     const output = {
       args: {
-        command: "python3 ./.trellis/scripts/task.py start .trellis/tasks/demo",
+        command: "python3 ./.suncode/scripts/task.py start .suncode/tasks/demo",
       },
     };
 
@@ -146,7 +146,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; python3 ./.trellis/scripts/task.py start .trellis/tasks/demo",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; python3 ./.suncode/scripts/task.py start .suncode/tasks/demo",
     );
   });
 
@@ -154,7 +154,7 @@ describe("opencode bash session context", () => {
     const hooks = await createOpenCodeInjectHooks("win32");
     const output = {
       args: {
-        command: "python ./.trellis/scripts/task.py start .trellis/tasks/demo",
+        command: "python ./.suncode/scripts/task.py start .suncode/tasks/demo",
       },
     };
 
@@ -164,7 +164,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "$env:TRELLIS_CONTEXT_ID = 'opencode_oc-a'; python ./.trellis/scripts/task.py start .trellis/tasks/demo",
+      "$env:SUNCODE_CONTEXT_ID = 'opencode_oc-a'; python ./.suncode/scripts/task.py start .suncode/tasks/demo",
     );
   });
 
@@ -184,7 +184,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; git diff --name-only",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; git diff --name-only",
     );
   });
 
@@ -204,7 +204,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; git status --short",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; git status --short",
     );
   });
 
@@ -224,7 +224,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; git log --oneline -1",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; git log --oneline -1",
     );
   });
 
@@ -244,7 +244,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; git branch --show-current",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; git branch --show-current",
     );
   });
 
@@ -264,16 +264,16 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; git rev-parse --show-toplevel",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; git rev-parse --show-toplevel",
     );
   });
 
-  it("does not duplicate an explicit TRELLIS_CONTEXT_ID assignment", async () => {
+  it("does not duplicate an explicit SUNCODE_CONTEXT_ID assignment", async () => {
     const hooks = await createOpenCodeInjectHooks();
     const output = {
       args: {
         command:
-          "TRELLIS_CONTEXT_ID=manual python3 ./.trellis/scripts/task.py current",
+          "SUNCODE_CONTEXT_ID=manual python3 ./.suncode/scripts/task.py current",
       },
     };
 
@@ -283,16 +283,16 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "TRELLIS_CONTEXT_ID=manual python3 ./.trellis/scripts/task.py current",
+      "SUNCODE_CONTEXT_ID=manual python3 ./.suncode/scripts/task.py current",
     );
   });
 
-  it("does not duplicate an explicit exported TRELLIS_CONTEXT_ID", async () => {
+  it("does not duplicate an explicit exported SUNCODE_CONTEXT_ID", async () => {
     const hooks = await createOpenCodeInjectHooks();
     const output = {
       args: {
         command:
-          "export TRELLIS_CONTEXT_ID=manual; python3 ./.trellis/scripts/task.py current",
+          "export SUNCODE_CONTEXT_ID=manual; python3 ./.suncode/scripts/task.py current",
       },
     };
 
@@ -302,16 +302,16 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID=manual; python3 ./.trellis/scripts/task.py current",
+      "export SUNCODE_CONTEXT_ID=manual; python3 ./.suncode/scripts/task.py current",
     );
   });
 
-  it("does not duplicate an explicit env TRELLIS_CONTEXT_ID assignment", async () => {
+  it("does not duplicate an explicit env SUNCODE_CONTEXT_ID assignment", async () => {
     const hooks = await createOpenCodeInjectHooks();
     const output = {
       args: {
         command:
-          "env FOO=bar TRELLIS_CONTEXT_ID=manual python3 ./.trellis/scripts/task.py current",
+          "env FOO=bar SUNCODE_CONTEXT_ID=manual python3 ./.suncode/scripts/task.py current",
       },
     };
 
@@ -321,16 +321,16 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "env FOO=bar TRELLIS_CONTEXT_ID=manual python3 ./.trellis/scripts/task.py current",
+      "env FOO=bar SUNCODE_CONTEXT_ID=manual python3 ./.suncode/scripts/task.py current",
     );
   });
 
-  it("does not duplicate an explicit PowerShell TRELLIS_CONTEXT_ID assignment", async () => {
+  it("does not duplicate an explicit PowerShell SUNCODE_CONTEXT_ID assignment", async () => {
     const hooks = await createOpenCodeInjectHooks("win32");
     const output = {
       args: {
         command:
-          "$env:TRELLIS_CONTEXT_ID = 'manual'; python ./.trellis/scripts/task.py current",
+          "$env:SUNCODE_CONTEXT_ID = 'manual'; python ./.suncode/scripts/task.py current",
       },
     };
 
@@ -340,15 +340,15 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "$env:TRELLIS_CONTEXT_ID = 'manual'; python ./.trellis/scripts/task.py current",
+      "$env:SUNCODE_CONTEXT_ID = 'manual'; python ./.suncode/scripts/task.py current",
     );
   });
 
-  it("does not treat a grep pattern as an explicit TRELLIS_CONTEXT_ID assignment", async () => {
+  it("does not treat a grep pattern as an explicit SUNCODE_CONTEXT_ID assignment", async () => {
     const hooks = await createOpenCodeInjectHooks();
     const output = {
       args: {
-        command: "env | sort | grep '^TRELLIS_CONTEXT_ID='",
+        command: "env | sort | grep '^SUNCODE_CONTEXT_ID='",
       },
     };
 
@@ -358,7 +358,7 @@ describe("opencode bash session context", () => {
     );
 
     expect(output.args.command).toBe(
-      "export TRELLIS_CONTEXT_ID='opencode_oc-a'; env | sort | grep '^TRELLIS_CONTEXT_ID='",
+      "export SUNCODE_CONTEXT_ID='opencode_oc-a'; env | sort | grep '^SUNCODE_CONTEXT_ID='",
     );
   });
 });
@@ -394,16 +394,16 @@ interface ChatMessageHooks {
   ) => Promise<void>;
 }
 
-function setupTrellisProject(): string {
-  const dir = mkdtempSync(join(tmpdir(), "trellis-opencode-264-"));
-  const taskDir = join(dir, ".trellis", "tasks", "demo-task");
+function setupSuncodeProject(): string {
+  const dir = mkdtempSync(join(tmpdir(), "suncode-opencode-264-"));
+  const taskDir = join(dir, ".suncode", "tasks", "demo-task");
   mkdirSync(taskDir, { recursive: true });
-  mkdirSync(join(dir, ".trellis", ".runtime", "sessions"), { recursive: true });
+  mkdirSync(join(dir, ".suncode", ".runtime", "sessions"), { recursive: true });
   writeFileSync(join(taskDir, "prd.md"), "# Demo PRD\n\nGoal: verify injection.");
   writeFileSync(join(taskDir, "implement.jsonl"), "");
   writeFileSync(join(taskDir, "check.jsonl"), "");
   writeFileSync(
-    join(dir, ".trellis", "workflow.md"),
+    join(dir, ".suncode", "workflow.md"),
     [
       "# Workflow",
       "",
@@ -417,12 +417,12 @@ function setupTrellisProject(): string {
 }
 
 function writeSessionFile(dir: string, key: string, taskRef: string): void {
-  const file = join(dir, ".trellis", ".runtime", "sessions", `${key}.json`);
+  const file = join(dir, ".suncode", ".runtime", "sessions", `${key}.json`);
   writeFileSync(file, JSON.stringify({ current_task: taskRef }, null, 2));
 }
 
 describe("opencode subagent helper", () => {
-  it("isSuncodeSubagent matches the three trellis sub-agent names", () => {
+  it("isSuncodeSubagent matches the three suncode sub-agent names", () => {
     expect(isSuncodeSubagent({ agent: "suncode-implement" })).toBe(true);
     expect(isSuncodeSubagent({ agent: "suncode-check" })).toBe(true);
     expect(isSuncodeSubagent({ agent: "suncode-research" })).toBe(true);
@@ -441,7 +441,7 @@ describe("opencode SuncodeContext single-session fallback", () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = setupTrellisProject();
+    dir = setupSuncodeProject();
   });
 
   afterEach(() => {
@@ -449,18 +449,18 @@ describe("opencode SuncodeContext single-session fallback", () => {
   });
 
   it("returns the only session file when exactly one exists", () => {
-    writeSessionFile(dir, "opencode_sole", ".trellis/tasks/demo-task");
+    writeSessionFile(dir, "opencode_sole", ".suncode/tasks/demo-task");
     const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "missing-key" });
 
-    expect(active.taskPath).toBe(".trellis/tasks/demo-task");
+    expect(active.taskPath).toBe(".suncode/tasks/demo-task");
     expect(active.source).toBe("session-fallback:opencode_sole");
     expect(active.stale).toBe(false);
   });
 
   it("refuses to guess when two or more session files exist", () => {
-    writeSessionFile(dir, "opencode_a", ".trellis/tasks/demo-task");
-    writeSessionFile(dir, "opencode_b", ".trellis/tasks/demo-task");
+    writeSessionFile(dir, "opencode_a", ".suncode/tasks/demo-task");
+    writeSessionFile(dir, "opencode_b", ".suncode/tasks/demo-task");
     const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "missing-key" });
 
@@ -469,7 +469,7 @@ describe("opencode SuncodeContext single-session fallback", () => {
   });
 
   it("returns no task when zero session files exist (Python parity)", () => {
-    // sessions/ exists from setupTrellisProject but contains no files
+    // sessions/ exists from setupSuncodeProject but contains no files
     const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "missing-key" });
 
@@ -478,8 +478,8 @@ describe("opencode SuncodeContext single-session fallback", () => {
   });
 
   it("prefers an exact context-key match over the fallback", () => {
-    writeSessionFile(dir, "opencode_session_exact", ".trellis/tasks/demo-task");
-    writeSessionFile(dir, "opencode_other", ".trellis/tasks/demo-task");
+    writeSessionFile(dir, "opencode_session_exact", ".suncode/tasks/demo-task");
+    writeSessionFile(dir, "opencode_other", ".suncode/tasks/demo-task");
     const ctx = new SuncodeContext(dir);
     const active = ctx.getActiveTask({ sessionID: "exact" });
 
@@ -496,7 +496,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
   let hooks: TaskToolHooks;
 
   beforeEach(async () => {
-    dir = setupTrellisProject();
+    dir = setupSuncodeProject();
     hooks = (await injectSubagentContextPlugin({
       directory: dir,
       platform: "linux",
@@ -509,7 +509,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
   });
 
   it("mutates implement prompt using single-session fallback when sessionID misses", async () => {
-    writeSessionFile(dir, "opencode_sole", ".trellis/tasks/demo-task");
+    writeSessionFile(dir, "opencode_sole", ".suncode/tasks/demo-task");
     const output: TaskToolOutput = {
       args: {
         subagent_type: "suncode-implement",
@@ -522,13 +522,13 @@ describe("opencode inject-subagent-context (issue #264)", () => {
       output,
     );
 
-    expect(output.args.prompt).toContain("<!-- trellis-hook-injected -->");
+    expect(output.args.prompt).toContain("<!-- suncode-hook-injected -->");
     expect(output.args.prompt).toContain("# Implement Agent Task");
     expect(output.args.prompt).toContain("Demo PRD");
     expect(output.args.prompt).toContain("do the implementation");
     // Marker must be at the top so generated agent definitions can detect
     // successful injection via a prefix check.
-    expect(output.args.prompt.startsWith("<!-- trellis-hook-injected -->")).toBe(
+    expect(output.args.prompt.startsWith("<!-- suncode-hook-injected -->")).toBe(
       true,
     );
   });
@@ -536,14 +536,14 @@ describe("opencode inject-subagent-context (issue #264)", () => {
   it("inlines JSONL-referenced spec content into the implement prompt", async () => {
     // Cover AC #1: "JSONL-referenced context" — the seed-only jsonl path
     // is exercised above; this one verifies a curated entry is inlined.
-    const specPath = join(dir, ".trellis", "spec", "demo.md");
-    mkdirSync(join(dir, ".trellis", "spec"), { recursive: true });
+    const specPath = join(dir, ".suncode", "spec", "demo.md");
+    mkdirSync(join(dir, ".suncode", "spec"), { recursive: true });
     writeFileSync(specPath, "# Demo Spec\n\nUNIQUE_SPEC_MARKER_42");
     writeFileSync(
-      join(dir, ".trellis", "tasks", "demo-task", "implement.jsonl"),
-      JSON.stringify({ file: ".trellis/spec/demo.md", reason: "test" }) + "\n",
+      join(dir, ".suncode", "tasks", "demo-task", "implement.jsonl"),
+      JSON.stringify({ file: ".suncode/spec/demo.md", reason: "test" }) + "\n",
     );
-    writeSessionFile(dir, "opencode_sole", ".trellis/tasks/demo-task");
+    writeSessionFile(dir, "opencode_sole", ".suncode/tasks/demo-task");
 
     const output: TaskToolOutput = {
       args: {
@@ -557,8 +557,8 @@ describe("opencode inject-subagent-context (issue #264)", () => {
       output,
     );
 
-    expect(output.args.prompt).toContain("<!-- trellis-hook-injected -->");
-    expect(output.args.prompt).toContain("=== .trellis/spec/demo.md ===");
+    expect(output.args.prompt).toContain("<!-- suncode-hook-injected -->");
+    expect(output.args.prompt).toContain("=== .suncode/spec/demo.md ===");
     expect(output.args.prompt).toContain("UNIQUE_SPEC_MARKER_42");
     expect(output.args.prompt).toContain("Demo PRD");
   });
@@ -569,7 +569,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     const output: TaskToolOutput = {
       args: {
         subagent_type: "suncode-check",
-        prompt: "Active task: .trellis/tasks/demo-task\n\nplease check",
+        prompt: "Active task: .suncode/tasks/demo-task\n\nplease check",
       },
     };
 
@@ -578,7 +578,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
       output,
     );
 
-    expect(output.args.prompt).toContain("<!-- trellis-hook-injected -->");
+    expect(output.args.prompt).toContain("<!-- suncode-hook-injected -->");
     expect(output.args.prompt).toContain("# Check Agent Task");
     expect(output.args.prompt).toContain("Demo PRD");
   });
@@ -586,8 +586,8 @@ describe("opencode inject-subagent-context (issue #264)", () => {
   it("Active task hint takes precedence over single-session fallback", async () => {
     // Set up TWO matches: a session file pointing at demo-task AND a hint
     // pointing at a different task path. Hint should win.
-    writeSessionFile(dir, "opencode_sole", ".trellis/tasks/another-task");
-    const hintTask = join(dir, ".trellis", "tasks", "hint-task");
+    writeSessionFile(dir, "opencode_sole", ".suncode/tasks/another-task");
+    const hintTask = join(dir, ".suncode", "tasks", "hint-task");
     mkdirSync(hintTask, { recursive: true });
     writeFileSync(join(hintTask, "prd.md"), "# Hint PRD\n\nfrom hint");
     writeFileSync(join(hintTask, "implement.jsonl"), "");
@@ -595,7 +595,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     const output: TaskToolOutput = {
       args: {
         subagent_type: "suncode-implement",
-        prompt: "Active task: .trellis/tasks/hint-task\n\ngo",
+        prompt: "Active task: .suncode/tasks/hint-task\n\ngo",
       },
     };
 
@@ -608,7 +608,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     expect(output.args.prompt).not.toContain("Demo PRD");
   });
 
-  it("emits the trellis-hook-injected marker for research agent too", async () => {
+  it("emits the suncode-hook-injected marker for research agent too", async () => {
     const output: TaskToolOutput = {
       args: {
         subagent_type: "suncode-research",
@@ -621,7 +621,7 @@ describe("opencode inject-subagent-context (issue #264)", () => {
       output,
     );
 
-    expect(output.args.prompt).toContain("<!-- trellis-hook-injected -->");
+    expect(output.args.prompt).toContain("<!-- suncode-hook-injected -->");
     expect(output.args.prompt).toContain("# Research Agent Task");
   });
 
@@ -647,7 +647,7 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = setupTrellisProject();
+    dir = setupSuncodeProject();
   });
 
   afterEach(() => {
@@ -656,7 +656,7 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     contextCollector.clear("main-session");
   });
 
-  it("session-start.js early-returns when input.agent is a trellis sub-agent", async () => {
+  it("session-start.js early-returns when input.agent is a suncode sub-agent", async () => {
     const hooks = (await sessionStartPlugin({
       directory: dir,
       client: undefined,
@@ -689,7 +689,7 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     }
   });
 
-  it("inject-workflow-state.js early-returns when input.agent is a trellis sub-agent", async () => {
+  it("inject-workflow-state.js early-returns when input.agent is a suncode sub-agent", async () => {
     const hooks = (await injectWorkflowStatePlugin({
       directory: dir,
     })) as ChatMessageHooks;

@@ -504,8 +504,8 @@ export const PLATFORM_MANAGED_DIRS = PLATFORM_IDS.flatMap((id) =>
   getManagedPaths(id),
 );
 
-/** All directories managed by Trellis (including .trellis itself) */
-export const ALL_MANAGED_DIRS = [".trellis", ...new Set(PLATFORM_MANAGED_DIRS)];
+/** All directories managed by Suncode (including .suncode itself) */
+export const ALL_MANAGED_DIRS = [".suncode", ...new Set(PLATFORM_MANAGED_DIRS)];
 
 /**
  * Detect which platforms are configured by checking for configDir existence.

@@ -7,7 +7,7 @@
   "migrations": [],
   "configSectionsAdded": [
     {
-      "file": ".trellis/config.yaml",
+      "file": ".suncode/config.yaml",
       "sentinel": "session_auto_commit:",
       "sectionHeading": "Session Auto-Commit"
     }

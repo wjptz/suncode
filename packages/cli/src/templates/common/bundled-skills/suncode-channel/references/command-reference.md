@@ -213,7 +213,7 @@ Behavior:
 ```bash
 suncode channel spawn <name>
   [--scope project|global]
-  [--agent <agent-name>]                  # loads .trellis/agents/<name>.md
+  [--agent <agent-name>]                  # loads .suncode/agents/<name>.md
   [--provider claude|codex]               # overrides agent file
   [--as <worker-name>]                    # default: agent name
   [--cwd <path>]
@@ -225,7 +225,7 @@ suncode channel spawn <name>
   [--file <path>] ...                     # glob, repeatable; inject content
   [--jsonl <path>] ...                    # Suncode manifest, repeatable
   [--by <agent>]                          # spawn-event author
-                                          # default: TRELLIS_CHANNEL_AS env or 'main'
+                                          # default: SUNCODE_CHANNEL_AS env or 'main'
   [--inbox-policy explicitOnly|broadcastAndExplicit]
                                           # default explicitOnly
   [--idle-timeout <Ns|Nm|Nh>]             # OOM-guard idle TTL
@@ -242,9 +242,9 @@ Behavior:
 - Records a `spawned` event with `pid`, `provider`, `agent`, `files`,
   `manifests`.
 - OOM-guard precedence: CLI flag → env var
-  (`TRELLIS_CHANNEL_WORKER_IDLE_TIMEOUT`,
-  `TRELLIS_CHANNEL_MAX_LIVE_WORKERS`) →
-  `.trellis/config.yaml#channel.worker_guard` → built-in defaults.
+  (`SUNCODE_CHANNEL_WORKER_IDLE_TIMEOUT`,
+  `SUNCODE_CHANNEL_MAX_LIVE_WORKERS`) →
+  `.suncode/config.yaml#channel.worker_guard` → built-in defaults.
 
 ### `run [name]`
 

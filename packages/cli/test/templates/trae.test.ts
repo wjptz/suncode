@@ -203,7 +203,7 @@ describe("trae platform detection in shared session-start.py", () => {
 //
 // Trae is a class-2 (pull-based) platform: hooks cannot mutate sub-agent
 // prompts. The implement/check agents must have a pull-based prelude injected
-// so they load Trellis context themselves.
+// so they load Suncode context themselves.
 describe("trae pull-based prelude injection (class-2)", () => {
   it("applyPullBasedPreludeMarkdown injects context-loading instructions", () => {
     const agents = applyPullBasedPreludeMarkdown(getAllAgents());

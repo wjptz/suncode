@@ -1,6 +1,6 @@
 ---
 name: update-spec
-description: "Captures executable contracts and coding knowledge into .trellis/spec/ documents after implementation, debugging, or design decisions. Enforces code-spec depth for infra and cross-layer changes with mandatory sections for signatures, contracts, validation matrices, and test points. Use when a feature is implemented, a bug is fixed, a design decision is made, a new pattern is discovered, or cross-layer contracts change."
+description: "Captures executable contracts and coding knowledge into .suncode/spec/ documents after implementation, debugging, or design decisions. Enforces code-spec depth for infra and cross-layer changes with mandatory sections for signatures, contracts, validation matrices, and test points. Use when a feature is implemented, a bug is fixed, a design decision is made, a new pattern is discovered, or cross-layer contracts change."
 ---
 
 # Update Code-Spec - Capture Executable Contracts
@@ -50,7 +50,7 @@ Required sections for infra/cross-layer specs:
 ## Spec Structure Overview
 
 ```
-.trellis/spec/
+.suncode/spec/
 ├── backend/           # Backend coding standards
 │   ├── index.md       # Overview and links
 │   └── *.md           # Topic-specific guidelines
@@ -115,7 +115,7 @@ Before editing, read the current code-spec to:
 - Find the right section for your update
 
 ```bash
-cat .trellis/spec/<category>/<file>.md
+cat .suncode/spec/<category>/<file>.md
 ```
 
 ### Step 4: Make the Update

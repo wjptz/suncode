@@ -46,7 +46,7 @@ if sys.platform.startswith("win"):
 # Path Constants (change here to rename directories)
 # =============================================================================
 
-DIR_WORKFLOW = ".trellis"
+DIR_WORKFLOW = ".suncode"
 DIR_SPEC = "spec"
 FILE_TASK_JSON = "task.json"
 
@@ -350,7 +350,7 @@ def get_finish_context(repo_root: str, task_dir: str) -> str:
 
 def build_implement_prompt(original_prompt: str, context: str) -> str:
     """Build complete prompt for Implement"""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""<!-- suncode-hook-injected -->
 # Implement Agent Task
 
 You are the Implement Agent in the Multi-Agent Pipeline.
@@ -385,7 +385,7 @@ All the information you need has been prepared for you:
 
 def build_check_prompt(original_prompt: str, context: str) -> str:
     """Build complete prompt for Check"""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""<!-- suncode-hook-injected -->
 # Check Agent Task
 
 You are the Check Agent in the Multi-Agent Pipeline (code and cross-layer checker).
@@ -420,7 +420,7 @@ All check specs and dev specs you need:
 
 def build_finish_prompt(original_prompt: str, context: str) -> str:
     """Build complete prompt for Finish (final check before PR)"""
-    return f"""<!-- trellis-hook-injected -->
+    return f"""<!-- suncode-hook-injected -->
 # Finish Agent Task
 
 You are performing the final check before creating a PR.
@@ -685,7 +685,7 @@ def _parse_hook_input(input_data: dict) -> tuple[str, str, dict]:
 
 
 def main():
-    if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+    if os.environ.get("SUNCODE_HOOKS") == "0" or os.environ.get("SUNCODE_DISABLE_HOOKS") == "1":
         sys.exit(0)
 
     try:

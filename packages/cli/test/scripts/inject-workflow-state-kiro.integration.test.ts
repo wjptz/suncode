@@ -19,7 +19,7 @@ import path from "node:path";
 
 const TEMPLATE_SCRIPTS = path.resolve(
   __dirname,
-  "../../src/templates/trellis/scripts",
+  "../../src/templates/suncode/scripts",
 );
 const SHARED_HOOKS = path.resolve(
   __dirname,
@@ -36,13 +36,13 @@ function hasPython(): boolean {
 }
 
 function setupRepo(tmp: string): void {
-  fs.mkdirSync(path.join(tmp, ".trellis", "scripts"), { recursive: true });
-  fs.cpSync(TEMPLATE_SCRIPTS, path.join(tmp, ".trellis", "scripts"), {
+  fs.mkdirSync(path.join(tmp, ".suncode", "scripts"), { recursive: true });
+  fs.cpSync(TEMPLATE_SCRIPTS, path.join(tmp, ".suncode", "scripts"), {
     recursive: true,
   });
   // workflow.md with a no_task breadcrumb so the body is deterministic.
   fs.writeFileSync(
-    path.join(tmp, ".trellis", "workflow.md"),
+    path.join(tmp, ".suncode", "workflow.md"),
     [
       "# Workflow",
       "",
@@ -87,7 +87,7 @@ describeFn("Kiro hook output branch", () => {
   let tmp: string;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-kiro-hook-"));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-kiro-hook-"));
     setupRepo(tmp);
   });
 

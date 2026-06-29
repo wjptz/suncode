@@ -258,7 +258,7 @@ export function getModificationStatus(
 }
 
 /**
- * Patterns to exclude from hash tracking (only applied to the .trellis/ walk).
+ * Patterns to exclude from hash tracking (only applied to the .suncode/ walk).
  */
 const EXCLUDE_FROM_HASH = [
   ".template-hashes.json", // Hash file itself
@@ -268,7 +268,7 @@ const EXCLUDE_FROM_HASH = [
   "workspace/", // Workspace files (user data)
   "tasks/", // Task files (user data)
   ".current-task", // Current task marker (file, not directory)
-  ".trellis/spec/", // User-customized spec files
+  ".suncode/spec/", // User-customized spec files
   ".backup-", // Backup directories
 ];
 
@@ -320,7 +320,7 @@ function collectFiles(cwd: string, dir: string): string[] {
 /** Options accepted by {@link initializeHashes}. */
 export interface InitializeHashesOptions {
   /**
-   * POSIX-style relative paths trellis actually wrote during the init run
+   * POSIX-style relative paths suncode actually wrote during the init run
    * (captured via `startRecordingWrites` in `file-writer.ts`). Only these
    * paths are hashed for the platform/root-level coverage; anything else
    * under `.codex/` / `.claude/` / etc. is left alone, even if it exists
@@ -347,8 +347,8 @@ export interface InitializeHashesOptions {
  * where a blind directory walk of `.codex/` / `.claude/` swept up
  * user-owned runtime data (chat history, session JSONLs).
  *
- * `.trellis/` is still walked recursively (with `EXCLUDE_FROM_HASH`) because
- * uninstall removes `.trellis/` wholesale via `rm -rf` regardless of manifest
+ * `.suncode/` is still walked recursively (with `EXCLUDE_FROM_HASH`) because
+ * uninstall removes `.suncode/` wholesale via `rm -rf` regardless of manifest
  * content — accuracy there doesn't affect data-loss, only `suncode update`
  * 3-way-merge fidelity (preserved by the existing walk).
  *
@@ -364,8 +364,8 @@ export function initializeHashes(
   // Platform + root files: hash only paths actually written this run.
   if (trackedPaths) {
     for (const relativePath of trackedPaths) {
-      // `.trellis/` paths are handled by the walk below — don't double-track.
-      if (relativePath.startsWith(".trellis/") || relativePath === ".trellis") {
+      // `.suncode/` paths are handled by the walk below — don't double-track.
+      if (relativePath.startsWith(".suncode/") || relativePath === ".suncode") {
         continue;
       }
       const fullPath = path.join(cwd, ...relativePath.split("/"));
@@ -379,11 +379,11 @@ export function initializeHashes(
     }
   }
 
-  // .trellis/ workflow tree: still walked recursively. Accuracy here is for
+  // .suncode/ workflow tree: still walked recursively. Accuracy here is for
   // `suncode update`'s 3-way merge of workflow.md / config.yaml / scripts;
-  // uninstall removes .trellis/ wholesale so it does not matter for the
+  // uninstall removes .suncode/ wholesale so it does not matter for the
   // data-loss bug this contract addresses.
-  const files = collectFiles(cwd, ".trellis");
+  const files = collectFiles(cwd, ".suncode");
   for (const relativePath of files) {
     const fullPath = path.join(cwd, relativePath);
     try {

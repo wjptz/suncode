@@ -46,7 +46,7 @@ export async function configureCopilot(cwd: string): Promise<void> {
   ensureDir(agentsDir);
   // Copilot is a class-2 (pull-based) platform: hook events don't reliably
   // fire for sub-agents (#2392/#2540). Reuse Cursor's agent content and
-  // prepend the pull-based prelude so sub-agents Read Trellis context themselves.
+  // prepend the pull-based prelude so sub-agents Read Suncode context themselves.
   // Cursor uses Claude-style comma-separated tools frontmatter; normalize that
   // to Copilot's YAML tool list format before writing into .github/agents.
   const { getAllAgents: getCursorAgents } =

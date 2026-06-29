@@ -1,6 +1,6 @@
 ---
 name: break-loop
-description: "Deep post-fix bug analysis across five dimensions: root cause categorization, fix failure analysis, prevention mechanisms, systematic expansion, and knowledge capture. Updates .trellis/spec/ guides with lessons learned to prevent recurring bugs. Use when a debugging session completes, after fixing a tricky bug, when the same class of bug keeps recurring, or when you want to capture debugging insights into project documentation."
+description: "Deep post-fix bug analysis across five dimensions: root cause categorization, fix failure analysis, prevention mechanisms, systematic expansion, and knowledge capture. Updates .suncode/spec/ guides with lessons learned to prevent recurring bugs. Use when a debugging session completes, after fixing a tricky bug, when the same class of bug keeps recurring, or when you want to capture debugging insights into project documentation."
 ---
 
 # Break the Loop - Deep Bug Analysis
@@ -60,8 +60,8 @@ What broader problems does this bug reveal?
 
 Solidify insights into the system:
 
-- [ ] Update `.trellis/spec/guides/` thinking guides
-- [ ] Update `.trellis/spec/backend/` or `frontend/` docs
+- [ ] Update `.suncode/spec/guides/` thinking guides
+- [ ] Update `.suncode/spec/backend/` or `frontend/` docs
 - [ ] Create issue record (if applicable)
 - [ ] Create feature ticket for root fix
 - [ ] Update check skills if needed
@@ -123,7 +123,7 @@ Three levels of insight:
    - If it's a code reuse issue → update `code-reuse-thinking-guide.md`
    - If it's domain-specific → update `backend/*.md` or `frontend/*.md`
 
-2. **Sync templates** - After updating `.trellis/spec/`, sync to `src/templates/markdown/spec/`
+2. **Sync templates** - After updating `.suncode/spec/`, sync to `src/templates/markdown/spec/`
 
 3. **Commit the spec updates** - This is the primary output, not just the analysis text
 

@@ -1,6 +1,6 @@
 ---
 name: integrate-skill
-description: "Adapts an external skill into project-specific development guidelines in .trellis/spec/. Creates guideline sections, code example templates with .template suffix, and updates spec indexes. Use when integrating an external skill, adding a new skill's patterns to project conventions, or incorporating third-party skill best practices into .trellis/spec/ documentation."
+description: "Adapts an external skill into project-specific development guidelines in .suncode/spec/. Creates guideline sections, code example templates with .template suffix, and updates spec indexes. Use when integrating an external skill, adding a new skill's patterns to project conventions, or incorporating third-party skill best practices into .suncode/spec/ documentation."
 ---
 
 # Integrate Skill into Project Guidelines
@@ -23,8 +23,8 @@ $integrate-skill mcp-builder
 
 > [!] **Important**: The goal of skill integration is to update **development guidelines**, not to generate project code directly.
 >
-> - Guidelines content -> Write to `.trellis/spec/{target}/doc.md`
-> - Code examples -> Place in `.trellis/spec/{target}/examples/skills/<skill-name>/`
+> - Guidelines content -> Write to `.suncode/spec/{target}/doc.md`
+> - Code examples -> Place in `.suncode/spec/{target}/examples/skills/<skill-name>/`
 > - Example files -> Use `.template` suffix (e.g., `component.tsx.template`) to avoid IDE errors
 >
 > Where `{target}` is `frontend` or `backend`, determined by skill type.
@@ -45,10 +45,10 @@ Based on skill type, determine which guidelines to update:
 
 | Skill Category | Integration Target |
 |----------------|-------------------|
-| UI/Frontend (`frontend-design`, `web-artifacts-builder`) | `.trellis/spec/frontend/` |
-| Backend/API (`mcp-builder`) | `.trellis/spec/backend/` |
-| Documentation (`doc-coauthoring`, `docx`, `pdf`) | `.trellis/` or create dedicated guidelines |
-| Testing (`webapp-testing`) | `.trellis/spec/frontend/` (E2E) |
+| UI/Frontend (`frontend-design`, `web-artifacts-builder`) | `.suncode/spec/frontend/` |
+| Backend/API (`mcp-builder`) | `.suncode/spec/backend/` |
+| Documentation (`doc-coauthoring`, `docx`, `pdf`) | `.suncode/` or create dedicated guidelines |
+| Testing (`webapp-testing`) | `.suncode/spec/frontend/` (E2E) |
 
 ### 3. Analyze Skill Content
 
@@ -92,7 +92,7 @@ See `examples/skills/<skill-name>/`
 
 ```bash
 # Directory structure ({target} = frontend or backend)
-.trellis/spec/{target}/
+.suncode/spec/{target}/
 |-- doc.md                      # Add skill-related section
 |-- index.md                    # Update index
 +-- examples/
@@ -124,7 +124,7 @@ Add to the Quick Navigation table in `index.md`:
 
 ### # Overview
 - **Skill description**: [Functionality description]
-- **Integration target**: `.trellis/spec/{target}/`
+- **Integration target**: `.suncode/spec/{target}/`
 
 ### # Tech Stack Compatibility
 
@@ -136,9 +136,9 @@ Add to the Quick Navigation table in `index.md`:
 
 | Type | Path |
 |------|------|
-| Guidelines doc | `.trellis/spec/{target}/doc.md` (section: `skill-<name>`) |
-| Code examples | `.trellis/spec/{target}/examples/skills/<name>/` |
-| Index update | `.trellis/spec/{target}/index.md` |
+| Guidelines doc | `.suncode/spec/{target}/doc.md` (section: `skill-<name>`) |
+| Code examples | `.suncode/spec/{target}/examples/skills/<name>/` |
+| Index update | `.suncode/spec/{target}/index.md` |
 
 > `{target}` = `frontend` or `backend`
 
@@ -181,14 +181,14 @@ $create-command use-<skill-name> Use <skill-name> skill following project guidel
 | `frontend-design` | `frontend` | `examples/skills/frontend-design/` |
 | `mcp-builder` | `backend` | `examples/skills/mcp-builder/` |
 | `webapp-testing` | `frontend` | `examples/skills/webapp-testing/` |
-| `doc-coauthoring` | `.trellis/` | N/A (documentation workflow only) |
+| `doc-coauthoring` | `.suncode/` | N/A (documentation workflow only) |
 
 ## Example: Integrating `mcp-builder` Skill
 
 ### Directory Structure
 
 ```
-.trellis/spec/backend/
+.suncode/spec/backend/
 |-- doc.md                           # Add MCP section
 |-- index.md                         # Add index entry
 +-- examples/

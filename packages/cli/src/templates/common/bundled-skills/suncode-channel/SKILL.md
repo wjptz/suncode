@@ -14,7 +14,7 @@ This skill is an index. Load only the reference file for the current job — do 
 ## First Commands
 
 ```bash
-trellis --version
+suncode --version
 suncode channel --help
 suncode channel list --all
 suncode channel list --scope global --all
@@ -50,7 +50,7 @@ suncode channel context list <board> --scope global --thread <thread>
 - For brainstorm, do multiple pressure-test rounds. One answer plus one confirmation is review, not brainstorm.
 - **Dispatcher wait pattern**: use `--kind done` / `--kind turn_finished` (Suncode-emitted system events), NOT a user `--tag` as the completion signal. CLI help lists `phase_done` / `question` as `--tag` examples but only `interrupt` is a reserved tag with hardcoded Suncode behavior; the others are opaque user labels. Relying on a worker to run `send --tag <my_signal>` is unreliable — LLM workers commonly write the tag string into prose instead of running the actual CLI command. See `references/command-reference.md` "tag vs kind".
 - Forum channels are event-sourced. Do not parse `events.jsonl` first; use `forum`, `thread`, `messages --thread`, and `context list`.
-- `@mindfoldhq/suncode-core` owns reusable channel/thread state, event append, seq allocation, context/title projection, reducers, and task helpers. The CLI owns flags, terminal rendering, prompts, worker lifecycle, and process exits.
+- `@wjptz/suncode-core` owns reusable channel/thread state, event append, seq allocation, context/title projection, reducers, and task helpers. The CLI owns flags, terminal rendering, prompts, worker lifecycle, and process exits.
 
 ## Reference Files
 

@@ -192,9 +192,9 @@ def cli_name(self) -> str:
 
 ## Template File Registration (Suncode-specific)
 
-When adding new files to `src/templates/trellis/scripts/`:
+When adding new files to `src/templates/suncode/scripts/`:
 
-**Single registration point**: `src/templates/trellis/index.ts`
+**Single registration point**: `src/templates/suncode/index.ts`
 
 1. Add `export const xxxScript = readTemplate("scripts/path/file.py");`
 2. Add to `getAllScripts()` Map
@@ -209,15 +209,15 @@ That's it. `commands/update.ts` uses `getAllScripts()` directly — no manual sy
 
 ```bash
 # After adding a new .py file, verify it's in getAllScripts():
-grep -l "newFileName" src/templates/trellis/index.ts  # Should match
+grep -l "newFileName" src/templates/suncode/index.ts  # Should match
 ```
 
 ### Template Sync Convention
 
-`.trellis/scripts/` (dogfooded) and `packages/cli/src/templates/trellis/scripts/` (template) must stay identical. After editing `.trellis/scripts/`, always sync:
+`.suncode/scripts/` (dogfooded) and `packages/cli/src/templates/suncode/scripts/` (template) must stay identical. After editing `.suncode/scripts/`, always sync:
 
 ```bash
-rsync -av --delete --exclude='__pycache__' .trellis/scripts/ packages/cli/src/templates/trellis/scripts/
+rsync -av --delete --exclude='__pycache__' .suncode/scripts/ packages/cli/src/templates/suncode/scripts/
 ```
 
-**Gotcha**: Running rsync with wrong source/destination paths can create nested garbage directories (e.g., `.trellis/scripts/packages/cli/...`). Always double-check paths before running.
+**Gotcha**: Running rsync with wrong source/destination paths can create nested garbage directories (e.g., `.suncode/scripts/packages/cli/...`). Always double-check paths before running.

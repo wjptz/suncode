@@ -16,7 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { workflowMdTemplate } from "../templates/trellis/index.js";
+import { workflowMdTemplate } from "../templates/suncode/index.js";
 import {
   TIMEOUTS,
   TEMPLATE_INDEX_URL,
@@ -32,7 +32,7 @@ import {
  * The id used to refer to the bundled native workflow.
  *
  * Treated as Suncode-managed for hash-tracking: when this id is selected by
- * `init --workflow` or `suncode workflow`, `.trellis/workflow.md` stays in
+ * `init --workflow` or `suncode workflow`, `.suncode/workflow.md` stays in
  * `.template-hashes.json`. Any other id is user-managed local workflow and
  * must be removed from the hash file (the durable-state contract in
  * design.md "Durable-state contract").
@@ -44,7 +44,7 @@ export const NATIVE_WORKFLOW_ID = "native";
  *
  * `content` is the workflow.md body bytes (LF-normalized in storage).
  * `path` is the marketplace-relative path for remote entries, or
- *   `bundled:trellis/workflow.md` for the native virtual entry.
+ *   `bundled:suncode/workflow.md` for the native virtual entry.
  */
 export interface ResolvedWorkflowTemplate {
   id: string;
@@ -94,7 +94,7 @@ function nativeListingEntry(): WorkflowTemplateListing {
     name: "Native Suncode Workflow",
     description:
       "Default Suncode Plan / Execute / Finish workflow bundled with the CLI",
-    path: "bundled:trellis/workflow.md",
+    path: "bundled:suncode/workflow.md",
     source: "bundled",
   };
 }
@@ -322,7 +322,7 @@ async function fetchWorkflowFileGit(
   // workflow resolution is a single-file fetch (not a directory copy).
   const { execFile } = await import("node:child_process");
   const dir = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), "trellis-workflow-"),
+    path.join(os.tmpdir(), "suncode-workflow-"),
   );
 
   function run(args: string[]): Promise<void> {

@@ -19,8 +19,8 @@ describe("collectReferencedAgents", () => {
     expect(collectReferencedAgents(body)).toEqual(["check"]);
   });
 
-  it("extracts names from `.trellis/agents/<name>.md` literal paths", () => {
-    const body = "Defined in .trellis/agents/architect.md";
+  it("extracts names from `.suncode/agents/<name>.md` literal paths", () => {
+    const body = "Defined in .suncode/agents/architect.md";
     expect(collectReferencedAgents(body)).toEqual(["architect"]);
   });
 
@@ -28,7 +28,7 @@ describe("collectReferencedAgents", () => {
     const body = `
       suncode channel spawn --agent implement
       suncode channel spawn --agent check
-      see .trellis/agents/implement.md for details
+      see .suncode/agents/implement.md for details
       another reference: --agent check
     `;
     expect(collectReferencedAgents(body)).toEqual(["check", "implement"]);
@@ -51,8 +51,8 @@ describe("collectMissingAgents", () => {
   let cwd: string;
 
   beforeEach(() => {
-    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-agent-refs-"));
-    fs.mkdirSync(path.join(cwd, ".trellis", "agents"), { recursive: true });
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-agent-refs-"));
+    fs.mkdirSync(path.join(cwd, ".suncode", "agents"), { recursive: true });
   });
 
   afterEach(() => {
@@ -61,7 +61,7 @@ describe("collectMissingAgents", () => {
 
   it("returns referenced names that are not on disk", () => {
     fs.writeFileSync(
-      path.join(cwd, ".trellis", "agents", "implement.md"),
+      path.join(cwd, ".suncode", "agents", "implement.md"),
       "---\nname: implement\n---\n",
     );
     const body = "--agent implement --agent check";
@@ -70,11 +70,11 @@ describe("collectMissingAgents", () => {
 
   it("returns [] when every referenced agent exists", () => {
     fs.writeFileSync(
-      path.join(cwd, ".trellis", "agents", "implement.md"),
+      path.join(cwd, ".suncode", "agents", "implement.md"),
       "---\nname: implement\n---\n",
     );
     fs.writeFileSync(
-      path.join(cwd, ".trellis", "agents", "check.md"),
+      path.join(cwd, ".suncode", "agents", "check.md"),
       "---\nname: check\n---\n",
     );
     const body = "--agent implement --agent check";
@@ -82,11 +82,11 @@ describe("collectMissingAgents", () => {
   });
 
   it("recognizes the nested `<name>/AGENT.md` layout", () => {
-    fs.mkdirSync(path.join(cwd, ".trellis", "agents", "designer"), {
+    fs.mkdirSync(path.join(cwd, ".suncode", "agents", "designer"), {
       recursive: true,
     });
     fs.writeFileSync(
-      path.join(cwd, ".trellis", "agents", "designer", "AGENT.md"),
+      path.join(cwd, ".suncode", "agents", "designer", "AGENT.md"),
       "---\nname: designer\n---\n",
     );
     expect(collectMissingAgents(cwd, "--agent designer")).toEqual([]);

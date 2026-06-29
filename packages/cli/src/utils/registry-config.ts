@@ -172,7 +172,7 @@ export function writeSpecRegistryConfig(
     "# Registry",
     "#-------------------------------------------------------------------------------",
     "",
-    "# Source used to install .trellis/spec. suncode update refreshes this",
+    "# Source used to install .suncode/spec. suncode update refreshes this",
     "# hash-tracked spec template while preserving local edits through the",
     "# normal update conflict flow.",
     "registry:",

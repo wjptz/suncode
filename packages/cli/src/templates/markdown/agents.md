@@ -1,14 +1,14 @@
-<!-- TRELLIS:START -->
+<!-- SUNCODE:START -->
 # Suncode Instructions
 
 These instructions are for AI assistants working in this project.
 
-This project is managed by Suncode. The working knowledge you need lives under `.trellis/`:
+This project is managed by Suncode. The working knowledge you need lives under `.suncode/`:
 
-- `.trellis/workflow.md` — development phases, when to create tasks, skill routing
-- `.trellis/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
-- `.trellis/workspace/` — per-developer journals and session traces
-- `.trellis/tasks/` — active and archived tasks (PRDs, research, jsonl context)
+- `.suncode/workflow.md` — development phases, when to create tasks, skill routing
+- `.suncode/spec/` — package- and layer-scoped coding guidelines (read before writing code in a given layer)
+- `.suncode/workspace/` — per-developer journals and session traces
+- `.suncode/tasks/` — active and archived tasks (PRDs, research, jsonl context)
 
 If a Suncode command is available on your platform (e.g. `/suncode:finish-work`, `/suncode:continue`), prefer it over manual steps. Not every platform exposes every command.
 
@@ -18,4 +18,4 @@ If you're using Codex or another agent-capable tool, additional project-scoped h
 
 Managed by Suncode. Edits outside this block are preserved; edits inside may be overwritten by a future `suncode update`.
 
-<!-- TRELLIS:END -->
+<!-- SUNCODE:END -->

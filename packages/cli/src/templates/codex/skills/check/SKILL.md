@@ -1,6 +1,6 @@
 ---
 name: check
-description: "Validates recently written code against project-specific development guidelines from .trellis/spec/. Identifies changed files via git diff, discovers applicable spec modules, runs lint and typecheck, and reports guideline violations. Use when code is written and needs quality verification, to catch context drift during long sessions, or before committing changes."
+description: "Validates recently written code against project-specific development guidelines from .suncode/spec/. Identifies changed files via git diff, discovers applicable spec modules, runs lint and typecheck, and reports guideline violations. Use when code is written and needs quality verification, to catch context drift during long sessions, or before committing changes."
 ---
 
 # Code Quality Check
@@ -25,13 +25,13 @@ Read the current task artifacts in order:
 - `implement.md` if present
 
 ```bash
-python3 ./.trellis/scripts/get_context.py --mode packages
+python3 ./.suncode/scripts/get_context.py --mode packages
 ```
 
 For each changed package/layer, read the spec index and follow its **Quality Check** section:
 
 ```bash
-cat .trellis/spec/<package>/<layer>/index.md
+cat .suncode/spec/<package>/<layer>/index.md
 ```
 
 Read the specific guideline files referenced — the index is a pointer, not the goal.
@@ -58,7 +58,7 @@ Run the project's lint, type-check, and test commands. Fix any failures before p
 
 ### Spec Sync
 
-- [ ] Does `.trellis/spec/` need updates? (new patterns, conventions, lessons learned)
+- [ ] Does `.suncode/spec/` need updates? (new patterns, conventions, lessons learned)
 
 > "If I fixed a bug or discovered something non-obvious, should I document it so future me won't hit the same issue?" → If YES, update the relevant spec doc.
 

@@ -59,7 +59,7 @@ export async function configureCodex(cwd: string): Promise<void> {
 
   // Codex is a class-2 (pull-based) platform: PreToolUse only fires for Bash
   // and CollabAgentSpawn hook is not implemented (#15486). Sub-agents must
-  // load Trellis context themselves via the prelude injected here.
+  // load Suncode context themselves via the prelude injected here.
   for (const agent of applyPullBasedPreludeToml(getAllAgents())) {
     await writeFile(
       path.join(codexAgentsRoot, `${agent.name}.toml`),
@@ -100,13 +100,13 @@ export async function configureCodex(cwd: string): Promise<void> {
   // it the workflow breadcrumb won't auto-inject (the bootstrap
   // fallback in inject-workflow-state.py covers this case). Documented in
   // spec/cli/backend/platform-integration.md.
-  if (!process.env.VITEST && !process.env.TRELLIS_QUIET) {
+  if (!process.env.VITEST && !process.env.SUNCODE_QUIET) {
     process.stderr.write(
       "⚠️  Codex hooks require `features.hooks = true` in your " +
         "~/.codex/config.toml (Codex 0.129+; older versions: `codex_hooks = true`). " +
-        "On Codex 0.129+ also run `/hooks` once to approve the Trellis " +
+        "On Codex 0.129+ also run `/hooks` once to approve the Suncode " +
         "UserPromptSubmit hook. Without these the Suncode workflow breadcrumb " +
-        "won't auto-inject. See Trellis docs for details.\n",
+        "won't auto-inject. See Suncode docs for details.\n",
     );
   }
 

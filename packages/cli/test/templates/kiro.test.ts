@@ -45,7 +45,7 @@ describe("kiro templates", () => {
     expect(suncode.hooks?.agentSpawn?.[0].command).toContain(
       ".kiro/hooks/session-start.py",
     );
-    expect(suncode.resources).toContain("file://.trellis/workflow.md");
+    expect(suncode.resources).toContain("file://.suncode/workflow.md");
     // The main agent must NOT inject sub-agent context (that's the sub-agents' job).
     expect(JSON.stringify(suncode.hooks)).not.toContain(
       "inject-subagent-context.py",

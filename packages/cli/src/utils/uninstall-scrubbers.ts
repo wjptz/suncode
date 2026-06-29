@@ -4,7 +4,7 @@
  * Each scrubber takes the file content (and any context it needs) and returns
  * `{ content, fullyEmpty }`:
  * - `content` is the post-scrub text to write back if the file should remain.
- * - `fullyEmpty` is true when, after stripping every trellis-managed value,
+ * - `fullyEmpty` is true when, after stripping every suncode-managed value,
  *   nothing meaningful is left. The caller deletes the file in that case.
  *
  * Manifest path matching (for hooks.json scrubbers) uses substring containment
@@ -20,7 +20,7 @@ export interface ScrubResult {
 /**
  * Test whether a hook command string references any of the given manifest paths.
  *
- * Trellis-emitted hook commands always have the shape
+ * Suncode-emitted hook commands always have the shape
  *   `<python-cmd> <manifest-path>`
  * so the trailing whitespace-delimited token is the script path. We compare
  * that last token (with surrounding quotes stripped) against the manifest
@@ -121,7 +121,7 @@ export function scrubHooksJson(
       if (mode === "flat") {
         const cmd = getEntryCommand(entry);
         if (cmd !== null && commandMatchesDeletedPath(cmd, deletedPaths)) {
-          continue; // drop trellis entry
+          continue; // drop suncode entry
         }
         filteredEvent.push(entry);
       } else {
@@ -219,25 +219,25 @@ export function scrubOpencodePackageJson(content: string): ScrubResult {
 }
 
 /**
- * Trellis-specific values written by the Pi configurator.
+ * Suncode-specific values written by the Pi configurator.
  *
  * The `extensions`/`skills`/`prompts` arrays are paths relative to `.pi/`. We
  * remove the exact entries that the Pi configurator emits.
  */
-const PI_TRELLIS_EXTENSION = "./extensions/suncode/index.ts";
-const PI_TRELLIS_SKILLS = "./skills";
-const PI_TRELLIS_PROMPTS = "./prompts";
+const PI_SUNCODE_EXTENSION = "./extensions/suncode/index.ts";
+const PI_SUNCODE_SKILLS = "./skills";
+const PI_SUNCODE_PROMPTS = "./prompts";
 const PI_SUBAGENTS_PACKAGE = "npm:pi-subagents";
 
-function isTrellisPiEntry(value: unknown, target: string): boolean {
+function isSuncodePiEntry(value: unknown, target: string): boolean {
   return typeof value === "string" && value === target;
 }
 
 /**
  * Scrub `.pi/settings.json`:
- * - drop `enableSkillCommands` (trellis-flagged)
- * - remove trellis entries from `extensions`/`skills`/`prompts` arrays
- * - remove trellis-managed `packages["npm:pi-subagents"]` isolation override
+ * - drop `enableSkillCommands` (suncode-flagged)
+ * - remove suncode entries from `extensions`/`skills`/`prompts` arrays
+ * - remove suncode-managed `packages["npm:pi-subagents"]` isolation override
  * - drop arrays that become empty
  */
 export function scrubPiSettings(content: string): ScrubResult {
@@ -258,14 +258,14 @@ export function scrubPiSettings(content: string): ScrubResult {
   }
 
   const arrayCleanups: [string, string][] = [
-    ["extensions", PI_TRELLIS_EXTENSION],
-    ["skills", PI_TRELLIS_SKILLS],
-    ["prompts", PI_TRELLIS_PROMPTS],
+    ["extensions", PI_SUNCODE_EXTENSION],
+    ["skills", PI_SUNCODE_SKILLS],
+    ["prompts", PI_SUNCODE_PROMPTS],
   ];
   for (const [key, target] of arrayCleanups) {
     const arr = root[key];
     if (!Array.isArray(arr)) continue;
-    const filtered = arr.filter((v) => !isTrellisPiEntry(v, target));
+    const filtered = arr.filter((v) => !isSuncodePiEntry(v, target));
     if (filtered.length === 0) {
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete root[key];
@@ -305,49 +305,49 @@ export function scrubPiSettings(content: string): ScrubResult {
 /**
  * Scrub `.codex/config.toml`.
  *
- * The current trellis-emitted file has two distinct chunks:
+ * The current suncode-emitted file has two distinct chunks:
  * 1. The line `project_doc_fallback_filenames = ["AGENTS.md"]`
  * 2. A multi-line comment block that begins with the marker
- *    `# NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.`
+ *    `# NOTE: Suncode's SessionStart + UserPromptSubmit hooks require opt-in.`
  *    and continues through `# be injected into Codex sessions.`
  *
  * Plus the leading "Project-scoped Codex defaults" header comments.
  *
  * Strategy: line-based removal. We strip:
  *  - the `project_doc_fallback_filenames = ...` line
- *  - any line that is *only* a comment introduced by trellis (the entire file
+ *  - any line that is *only* a comment introduced by suncode (the entire file
  *    as shipped is comments + that one assignment)
  *  - blank lines that surrounded those removals
  *
- * If the user added their own non-trellis lines, they are preserved as-is.
+ * If the user added their own non-suncode lines, they are preserved as-is.
  * "Fully empty" = post-scrub content has no non-whitespace characters.
  */
 export function scrubCodexConfigToml(content: string): ScrubResult {
-  const trellisCommentMarkers = [
+  const suncodeCommentMarkers = [
     "Project-scoped Codex defaults for Suncode workflows.",
     "Codex loads this after ~/.codex/config.toml when you work in this project.",
     "Keep AGENTS.md as the primary project instruction file.",
-    "NOTE: Trellis's SessionStart + UserPromptSubmit hooks require opt-in.",
+    "NOTE: Suncode's SessionStart + UserPromptSubmit hooks require opt-in.",
     "Add the following to your USER-level config at ~/.codex/config.toml",
     "(not this project file — features.* must be enabled globally):",
     "[features]",
     "hooks = true",
     "codex_hooks = true",
-    "Without this flag, hooks.json is ignored and Trellis context won't",
+    "Without this flag, hooks.json is ignored and Suncode context won't",
     "be injected into Codex sessions.",
   ];
 
-  // A comment line is "trellis-known" if its content (after `#` and spaces)
+  // A comment line is "suncode-known" if its content (after `#` and spaces)
   // matches one of the known marker strings exactly OR is an empty `#` line.
-  function isTrellisCommentLine(line: string): boolean {
+  function isSuncodeCommentLine(line: string): boolean {
     const trimmed = line.trim();
     if (!trimmed.startsWith("#")) return false;
     const inner = trimmed.replace(/^#+\s?/, "").trim();
-    if (inner.length === 0) return true; // bare `#` line inside trellis block
-    return trellisCommentMarkers.some((m) => inner === m);
+    if (inner.length === 0) return true; // bare `#` line inside suncode block
+    return suncodeCommentMarkers.some((m) => inner === m);
   }
 
-  function isTrellisAssignment(line: string): boolean {
+  function isSuncodeAssignment(line: string): boolean {
     return /^\s*project_doc_fallback_filenames\s*=/.test(line);
   }
 
@@ -355,7 +355,7 @@ export function scrubCodexConfigToml(content: string): ScrubResult {
   let prevWasBlank = true; // start-of-file counts as blank for collapsing
 
   for (const rawLine of content.split(/\r?\n/)) {
-    if (isTrellisAssignment(rawLine) || isTrellisCommentLine(rawLine)) {
+    if (isSuncodeAssignment(rawLine) || isSuncodeCommentLine(rawLine)) {
       continue; // drop
     }
     const isBlank = rawLine.trim().length === 0;

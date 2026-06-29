@@ -39,13 +39,13 @@ describe("CONFIG_DIRS", () => {
 });
 
 describe("ALL_MANAGED_DIRS", () => {
-  it("starts with .trellis", () => {
-    expect(ALL_MANAGED_DIRS[0]).toBe(".trellis");
+  it("starts with .suncode", () => {
+    expect(ALL_MANAGED_DIRS[0]).toBe(".suncode");
   });
 
-  it("contains .trellis plus all managed dirs", () => {
+  it("contains .suncode plus all managed dirs", () => {
     expect(ALL_MANAGED_DIRS).toEqual([
-      ".trellis",
+      ".suncode",
       ...new Set(PLATFORM_MANAGED_DIRS),
     ]);
   });
@@ -90,19 +90,19 @@ describe("isManagedPath", () => {
     expect(isManagedPath(".devin/workflows")).toBe(true);
     expect(isManagedPath(".github/prompts")).toBe(true);
     expect(isManagedPath(".github/hooks")).toBe(true);
-    expect(isManagedPath(".trellis")).toBe(true);
+    expect(isManagedPath(".suncode")).toBe(true);
   });
 
-  // Positive: .trellis hardcoded paths
-  it("matches .trellis sub-paths", () => {
-    expect(isManagedPath(".trellis/spec")).toBe(true);
-    expect(isManagedPath(".trellis/tasks/some-task")).toBe(true);
+  // Positive: .suncode hardcoded paths
+  it("matches .suncode sub-paths", () => {
+    expect(isManagedPath(".suncode/spec")).toBe(true);
+    expect(isManagedPath(".suncode/tasks/some-task")).toBe(true);
   });
 
   // Boundary: prefix-similar but NOT a sub-path (no / separator after name)
   it("rejects prefix-similar non-sub-paths", () => {
     expect(isManagedPath(".claude-backup")).toBe(false);
-    expect(isManagedPath(".trellis-old")).toBe(false);
+    expect(isManagedPath(".suncode-old")).toBe(false);
     expect(isManagedPath(".cursorignore")).toBe(false);
     expect(isManagedPath(".opencode-v2")).toBe(false);
     expect(isManagedPath(".agents/skills-backup")).toBe(false);
@@ -123,7 +123,7 @@ describe("isManagedPath", () => {
   // Boundary: path traversal
   it("rejects path traversal", () => {
     expect(isManagedPath("../.claude")).toBe(false);
-    expect(isManagedPath("../.trellis/spec")).toBe(false);
+    expect(isManagedPath("../.suncode/spec")).toBe(false);
   });
 
   // Boundary: unrelated directories
@@ -137,7 +137,7 @@ describe("isManagedPath", () => {
   // Windows path separator (bug fix verification)
   it("matches Windows-style backslash paths", () => {
     expect(isManagedPath(".claude\\commands\\foo.md")).toBe(true);
-    expect(isManagedPath(".trellis\\spec\\backend")).toBe(true);
+    expect(isManagedPath(".suncode\\spec\\backend")).toBe(true);
     expect(isManagedPath(".agents\\skills\\start\\SKILL.md")).toBe(true);
     expect(isManagedPath(".codex\\agents\\check.toml")).toBe(true);
     expect(isManagedPath(".agent\\workflows\\start.md")).toBe(true);
@@ -168,8 +168,8 @@ describe("isManagedRootDir", () => {
     }
   });
 
-  it("matches .trellis", () => {
-    expect(isManagedRootDir(".trellis")).toBe(true);
+  it("matches .suncode", () => {
+    expect(isManagedRootDir(".suncode")).toBe(true);
   });
 
   it("matches shared agent skills layer", () => {
@@ -186,7 +186,7 @@ describe("isManagedRootDir", () => {
 
   it("rejects sub-paths (not a root dir)", () => {
     expect(isManagedRootDir(".claude/commands")).toBe(false);
-    expect(isManagedRootDir(".trellis/spec")).toBe(false);
+    expect(isManagedRootDir(".suncode/spec")).toBe(false);
   });
 
   it("rejects unrelated directories", () => {
@@ -308,7 +308,7 @@ describe("collectPlatformTemplates", () => {
     kilo: ".kilocode/skills",
     kiro: ".kiro/skills",
     // Gemini CLI 0.40+ reads `.agents/skills/` as a workspace alias.
-    // Trellis writes there (shared with Codex) so a single skill set serves
+    // Suncode writes there (shared with Codex) so a single skill set serves
     // both platforms — eliminates duplicate-skill warnings (issue #224).
     gemini: ".agents/skills",
     antigravity: ".agent/skills",

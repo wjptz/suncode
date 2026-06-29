@@ -14,7 +14,7 @@ import inquirer from "inquirer";
 // === External dependency mocks (hoisted by vitest) ===
 
 vi.mock("figlet", () => ({
-  default: { textSync: vi.fn(() => "TRELLIS") },
+  default: { textSync: vi.fn(() => "SUNCODE") },
 }));
 
 vi.mock("inquirer", () => ({
@@ -55,7 +55,7 @@ import { update } from "../../src/commands/update.js";
 import { VERSION } from "../../src/constants/version.js";
 import { DIR_NAMES, FILE_NAMES, PATHS } from "../../src/constants/paths.js";
 import { computeHash } from "../../src/utils/template-hash.js";
-import { workflowMdTemplate } from "../../src/templates/trellis/index.js";
+import { workflowMdTemplate } from "../../src/templates/suncode/index.js";
 import { replacePythonCommandLiterals } from "../../src/configurators/shared.js";
 
 // A managed template file that update always handles (Python script)
@@ -129,7 +129,7 @@ describe("update() integration", () => {
   }
 
   /**
-   * Stage a project as if an older Trellis version installed pristine template
+   * Stage a project as if an older Suncode version installed pristine template
    * files, then the current CLI is about to update it. The hash file records
    * the older pristine content so update() must treat those files as
    * auto-update candidates.
@@ -158,7 +158,7 @@ describe("update() integration", () => {
   }
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-update-int-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-update-int-"));
     vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
     registryDownload.files.clear();
     // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -387,14 +387,14 @@ describe("update() integration", () => {
     expect(fs.readFileSync(targetFull, "utf-8")).toBe(modifiedOldContent);
   });
 
-  it("#4d preserves user AGENTS.md without TRELLIS markers by appending the managed block", async () => {
+  it("#4d preserves user AGENTS.md without SUNCODE markers by appending the managed block", async () => {
     await setupProject();
 
     const targetRelative = FILE_NAMES.AGENTS;
     const targetFull = path.join(tmpDir, targetRelative);
     const templateContent = fs.readFileSync(targetFull, "utf-8");
 
-    // User has a hand-written AGENTS.md with no TRELLIS:START/END markers at
+    // User has a hand-written AGENTS.md with no SUNCODE:START/END markers at
     // all (predates 0.5.0-beta.18 or was authored by hand). Pre-fix behavior
     // would clobber this content; post-fix should append the managed block.
     const userContent = "# Project notes\n\nThings the team agreed on.\n";
@@ -405,11 +405,11 @@ describe("update() integration", () => {
     const result = fs.readFileSync(targetFull, "utf-8");
     expect(result).toContain("# Project notes");
     expect(result).toContain("Things the team agreed on.");
-    expect(result).toContain("<!-- TRELLIS:START -->");
-    expect(result).toContain("<!-- TRELLIS:END -->");
+    expect(result).toContain("<!-- SUNCODE:START -->");
+    expect(result).toContain("<!-- SUNCODE:END -->");
     // Managed block should sit AFTER the user content, not replace it.
     expect(result.indexOf("# Project notes")).toBeLessThan(
-      result.indexOf("<!-- TRELLIS:START -->"),
+      result.indexOf("<!-- SUNCODE:START -->"),
     );
     // Tail equals the canonical template (force-applied managed block).
     expect(result.endsWith(templateContent.trimEnd() + "\n")).toBe(true);
@@ -1128,7 +1128,7 @@ describe("update() integration", () => {
   // The [b] Backup-rename path in the confirm prompt promises "keeps a .backup
   // copy". Previously it was identical to [r] (both relied on the full project
   // snapshot). We now write an INLINE .backup next to the new path so users can
-  // diff/merge their customizations without digging through .trellis/.backup-*/.
+  // diff/merge their customizations without digging through .suncode/.backup-*/.
   /** Install a mock that returns a specific migration choice for the per-file prompt
    *  and {proceed: true} for the top-level confirm. Resolves the flakiness of
    *  matching on `name` field in the dynamic import path. */
@@ -1147,7 +1147,7 @@ describe("update() integration", () => {
   // The [b] Backup-rename path in the confirm prompt promises "keeps a .backup
   // copy". Previously it was identical to [r] (both relied on the full project
   // snapshot). We now write an INLINE .backup next to the new path so users can
-  // diff/merge their customizations without digging through .trellis/.backup-*/.
+  // diff/merge their customizations without digging through .suncode/.backup-*/.
   it("#25 backup-rename leaves inline <new-path>.backup with original content", async () => {
     await setupProject();
     stageLegacy040Project();
@@ -1199,7 +1199,7 @@ describe("update() integration", () => {
       ".claude/skills/trellis-before-dev/SKILL.md",
     );
     expect(fs.existsSync(newPath)).toBe(true);
-    // No inline .backup — the full-project snapshot under .trellis/.backup-*
+    // No inline .backup — the full-project snapshot under .suncode/.backup-*
     // is the single source of recovery for this mode.
     expect(fs.existsSync(newPath + ".backup")).toBe(false);
   });

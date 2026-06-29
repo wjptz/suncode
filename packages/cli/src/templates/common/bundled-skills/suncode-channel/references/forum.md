@@ -66,7 +66,7 @@ suncode channel post design-feedback summary \
   --scope global \
   --as main \
   --thread login-empty-state \
-  --summary "Adopted the option-B layout; ticket TRELLIS-123 owns the fix."
+  --summary "Adopted the option-B layout; ticket SUNCODE-123 owns the fix."
 ```
 
 Key distinctions:
@@ -119,7 +119,7 @@ suncode channel context add design-feedback \
 suncode channel context add design-feedback \
   --scope global \
   --thread login-empty-state \
-  --file "$PWD/.trellis/tasks/05-13-login-redesign/design.md"
+  --file "$PWD/.suncode/tasks/05-13-login-redesign/design.md"
 ```
 
 - `--thread <key>` switches between channel-level and thread-level context.

@@ -1,6 +1,6 @@
 ---
 name: improve-ut
-description: "Analyzes changed files and improves unit test coverage using project-specific testing conventions from .trellis/spec/ unit-test specs. Determines test scope (unit vs integration vs regression), adds or updates tests following existing patterns, and runs validation. Use when code changes need test coverage, after implementing a feature, after fixing a bug, or when test gaps are identified."
+description: "Analyzes changed files and improves unit test coverage using project-specific testing conventions from .suncode/spec/ unit-test specs. Determines test scope (unit vs integration vs regression), adds or updates tests following existing patterns, and runs validation. Use when code changes need test coverage, after implementing a feature, after fixing a bug, or when test gaps are identified."
 ---
 
 # Improve Unit Tests (UT)
@@ -19,7 +19,7 @@ Discover and read unit-test specs dynamically:
 
 ```bash
 # Discover available packages and their spec layers
-python3 ./.trellis/scripts/get_context.py --mode packages
+python3 ./.suncode/scripts/get_context.py --mode packages
 ```
 
 Look for packages with `unit-test` spec layer in the output. For each discovered `unit-test/` directory, read all relevant spec files inside it (for example `index.md`, `conventions.md`, `integration-patterns.md`, `mock-strategies.md`).

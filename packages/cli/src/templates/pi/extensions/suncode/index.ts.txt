@@ -67,7 +67,7 @@ function trunc(s: string, w: number) {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────
-const TRELLIS_AGENT_JSONL: Record<string, string> = {
+const SUNCODE_AGENT_JSONL: Record<string, string> = {
   "suncode-implement": "implement.jsonl",
   implement: "implement.jsonl",
   "suncode-check": "check.jsonl",
@@ -444,9 +444,9 @@ function lookupStr(data: unknown, keys: string[]): string | null {
 function cmdHasSuncodeCtx(cmd: string) {
   const t = cmd.trimStart();
   return (
-    /^export\s+TRELLIS_CONTEXT_ID=/.test(t) ||
-    /^TRELLIS_CONTEXT_ID=/.test(t) ||
-    /^env\s+.*TRELLIS_CONTEXT_ID=/.test(t)
+    /^export\s+SUNCODE_CONTEXT_ID=/.test(t) ||
+    /^SUNCODE_CONTEXT_ID=/.test(t) ||
+    /^env\s+.*SUNCODE_CONTEXT_ID=/.test(t)
   );
 }
 function fmtDur(ms: number) {
@@ -602,10 +602,10 @@ const PI_CLI_SEGMENTS = [
 ];
 
 function resolvePiCli(): { command: string; args: string[] } {
-  const envCli = str(process.env.TRELLIS_PI_CLI_JS);
+  const envCli = str(process.env.SUNCODE_PI_CLI_JS);
   if (envCli) {
     const p = resolve(envCli);
-    if (!exists(p)) throw new Error(`TRELLIS_PI_CLI_JS missing: ${p}`);
+    if (!exists(p)) throw new Error(`SUNCODE_PI_CLI_JS missing: ${p}`);
     return { command: process.execPath, args: [p] };
   }
   const candidates: string[] = [];
@@ -720,7 +720,7 @@ class BBC {
 function findRoot(start: string): string {
   let c = resolve(start);
   while (true) {
-    if (existsSync(join(c, ".trellis")) || existsSync(join(c, ".pi"))) return c;
+    if (existsSync(join(c, ".suncode")) || existsSync(join(c, ".pi"))) return c;
     const p = dirname(c);
     if (p === c) return resolve(start);
     c = p;
@@ -786,7 +786,7 @@ function parseAgentFM(c: string): AgentConfig {
 }
 
 function contextKey(input?: unknown, ctx?: PiExtensionContext): string | null {
-  const ov = str(process.env.TRELLIS_CONTEXT_ID);
+  const ov = str(process.env.SUNCODE_CONTEXT_ID);
   if (ov) return ov.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 160) || hash(ov);
   const sessionId =
     callStr(ctx?.sessionManager?.getSessionId) ??
@@ -806,18 +806,18 @@ function readTaskDir(root: string, key: string | null): string | null {
   if (!key) return null;
   try {
     const ctx = JSON.parse(
-      readText(join(root, ".trellis", ".runtime", "sessions", `${key}.json`)),
+      readText(join(root, ".suncode", ".runtime", "sessions", `${key}.json`)),
     ) as JsonObject;
     let ref = str(ctx.current_task);
     if (!ref) return null;
     ref = ref;
     ref = ref.replace(/\\/g, "/").replace(/^\.\//, "");
-    if (ref.startsWith("tasks/")) ref = `.trellis/${ref}`;
-    return ref.startsWith(".trellis/")
+    if (ref.startsWith("tasks/")) ref = `.suncode/${ref}`;
+    return ref.startsWith(".suncode/")
       ? join(root, ref)
       : isAbsolute(ref)
         ? ref
-        : join(root, ".trellis", "tasks", ref);
+        : join(root, ".suncode", "tasks", ref);
   } catch {
     return null;
   }
@@ -825,7 +825,7 @@ function readTaskDir(root: string, key: string | null): string | null {
 function sessionHasTask(root: string, key: string): boolean {
   try {
     const ctx = JSON.parse(
-      readText(join(root, ".trellis", ".runtime", "sessions", `${key}.json`)),
+      readText(join(root, ".suncode", ".runtime", "sessions", `${key}.json`)),
     ) as JsonObject;
     return !!str(ctx.current_task);
   } catch {
@@ -835,7 +835,7 @@ function sessionHasTask(root: string, key: string): boolean {
 function adoptKey(root: string, key: string): string {
   if (sessionHasTask(root, key)) return key;
   try {
-    const dir = join(root, ".trellis", ".runtime", "sessions");
+    const dir = join(root, ".suncode", ".runtime", "sessions");
     const keys = readdirSync(dir)
       .filter(
         (f) => f.endsWith(".json") && sessionHasTask(root, f.slice(0, -5)),
@@ -853,7 +853,7 @@ function adoptKey(root: string, key: string): string {
 const WF_RE =
   /\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n([\s\S]*?)\n\s*\[\/workflow-state:\1\]/g;
 function workflowBreadcrumb(root: string, key: string | null): string {
-  const wf = readText(join(root, ".trellis", "workflow.md"));
+  const wf = readText(join(root, ".suncode", "workflow.md"));
   if (!wf) return "";
   const templates: Record<string, string> = {};
   for (const m of wf.matchAll(WF_RE)) {
@@ -881,13 +881,13 @@ function workflowBreadcrumb(root: string, key: string | null): string {
 
 // ── Session Overview ───────────────────────────────────────────────────
 function runContextScript(root: string, key: string | null, args: string[]): string {
-  const script = join(root, ".trellis", "scripts", "get_context.py");
+  const script = join(root, ".suncode", "scripts", "get_context.py");
   if (!exists(script)) return "";
   try {
     const py = process.platform === "win32" ? "python" : "python3";
     const result = spawnSync(py, [script, ...args], {
       cwd: root,
-      env: key ? { ...process.env, TRELLIS_CONTEXT_ID: key } : process.env,
+      env: key ? { ...process.env, SUNCODE_CONTEXT_ID: key } : process.env,
       encoding: "utf-8",
       timeout: SESSION_OVERVIEW_TIMEOUT_MS,
       windowsHide: true,
@@ -912,7 +912,7 @@ function workflowOverview(root: string, key: string | null): string {
     "--platform",
     "pi",
   ]);
-  return stdout ? `<trellis-workflow>\n${stdout}\n</trellis-workflow>` : "";
+  return stdout ? `<suncode-workflow>\n${stdout}\n</suncode-workflow>` : "";
 }
 
 function buildStartupContext(
@@ -935,11 +935,11 @@ function buildStartupContext(
 function buildContext(root: string, agent: string, key: string | null): string {
   const dir = readTaskDir(root, key);
   if (!dir)
-    return "No active Suncode task found. Read .trellis/ before proceeding.";
+    return "No active Suncode task found. Read .suncode/ before proceeding.";
   const prd = readText(join(dir, "prd.md"));
   const design = readText(join(dir, "design.md"));
   const impl = readText(join(dir, "implement.md"));
-  const jsonlName = TRELLIS_AGENT_JSONL[agent] ?? "";
+  const jsonlName = SUNCODE_AGENT_JSONL[agent] ?? "";
   let spec = "";
   if (jsonlName) {
     const chunks: string[] = [];
@@ -1146,8 +1146,8 @@ function runPi(
     const inv = resolvePiCli();
     const childEnv = {
       ...process.env,
-      TRELLIS_SUBAGENT_CHILD: "1",
-      ...(key ? { TRELLIS_CONTEXT_ID: key } : {}),
+      SUNCODE_SUBAGENT_CHILD: "1",
+      ...(key ? { SUNCODE_CONTEXT_ID: key } : {}),
     };
     const cli = spawn(inv.command, [...inv.args, ...buildPiArgs(cfg)], {
       cwd: root,
@@ -1392,7 +1392,7 @@ export default function suncodeExtension(pi: {
   ) => void;
   getThinkingLevel?: () => string;
 }): void {
-  if (process.env.TRELLIS_SUBAGENT_CHILD === "1") return;
+  if (process.env.SUNCODE_SUBAGENT_CHILD === "1") return;
   const root = findRoot(process.cwd());
   const procKey = `pi_process_${hash([root, process.pid, Date.now(), randomBytes(8).toString("hex")].join(":"))}`;
   let curKey: string | null = null;
@@ -1627,7 +1627,7 @@ export default function suncodeExtension(pi: {
       typeof ev.input.command === "string" &&
       !cmdHasSuncodeCtx(ev.input.command)
     )
-      ev.input.command = `export TRELLIS_CONTEXT_ID=${shellQuote(k)}; ${ev.input.command}`;
+      ev.input.command = `export SUNCODE_CONTEXT_ID=${shellQuote(k)}; ${ev.input.command}`;
   });
   // Preserve progress details from execute(); mark failed subagent results through
   // the official tool_result patch hook instead of throwing away renderer details.

@@ -199,7 +199,7 @@ export type ProjectType = "frontend" | "backend" | "fullstack" | "unknown";
 
 // Good: Type alias with const assertion
 export const DIR_NAMES = {
-  WORKFLOW: ".trellis",
+  WORKFLOW: ".suncode",
   PROGRESS: "agent-traces",
 } as const;
 ```

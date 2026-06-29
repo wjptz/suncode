@@ -27,7 +27,7 @@ function extractActiveTaskHint(prompt) {
 
 /**
  * Get context for implement agent. `taskDir` may be relative
- * (`.trellis/tasks/foo`) or absolute; both are resolved via
+ * (`.suncode/tasks/foo`) or absolute; both are resolved via
  * `ctx.resolveTaskDir`.
  */
 function getImplementContext(ctx, taskDir) {
@@ -107,7 +107,7 @@ function getResearchContext(ctx) {
   const parts = []
 
   // Dynamic project structure (scan actual spec directory)
-  const specPath = ".trellis/spec"
+  const specPath = ".suncode/spec"
   const specFull = join(ctx.directory, specPath)
 
   const structureLines = [`## Project Spec Directory Structure\n\n\`\`\`\n${specPath}/`]
@@ -147,8 +147,8 @@ function getResearchContext(ctx) {
 
 ## Search Tips
 
-- Spec files: \`.trellis/spec/**/*.md\`
-- Known issues: \`.trellis/big-question/\`
+- Spec files: \`.suncode/spec/**/*.md\`
+- Known issues: \`.suncode/big-question/\`
 - Code search: Use Glob and Grep tools
 - Tech solutions: Use mcp__exa__web_search_exa or mcp__exa__get_code_context_exa`)
 
@@ -160,7 +160,7 @@ function getResearchContext(ctx) {
  */
 function buildPrompt(agentType, originalPrompt, context, isFinish = false) {
   const templates = {
-    implement: `<!-- trellis-hook-injected -->
+    implement: `<!-- suncode-hook-injected -->
 # Implement Agent Task
 
 You are the Implement Agent in the Multi-Agent Pipeline.
@@ -190,7 +190,7 @@ ${originalPrompt}
 - Follow all dev specs injected above
 - Report list of modified/created files when done`,
 
-    check: isFinish ? `<!-- trellis-hook-injected -->
+    check: isFinish ? `<!-- suncode-hook-injected -->
 # Finish Agent Task
 
 You are performing the final check before creating a PR.
@@ -226,7 +226,7 @@ ${originalPrompt}
 - If critical CODE issues found, report them clearly (fix specs, not code)
 - Verify all acceptance criteria in prd.md are met
 - Verify design.md and implement.md constraints when those files are present` :
-      `<!-- trellis-hook-injected -->
+      `<!-- suncode-hook-injected -->
 # Check Agent Task
 
 You are the Check Agent in the Multi-Agent Pipeline.
@@ -255,7 +255,7 @@ ${originalPrompt}
 - Fix issues yourself, don't just report
 - Must execute complete checklist`,
 
-    research: `<!-- trellis-hook-injected -->
+    research: `<!-- suncode-hook-injected -->
 # Research Agent Task
 
 You are the Research Agent in the Multi-Agent Pipeline.
@@ -324,10 +324,10 @@ function isWindowsPosixShell(env = process.env) {
 
 function buildSuncodeContextPrefix(contextKey, hostPlatform = process.platform, env = process.env) {
   if (hostPlatform === "win32" && !isWindowsPosixShell(env)) {
-    return `$env:TRELLIS_CONTEXT_ID = ${powershellQuote(contextKey)}; `
+    return `$env:SUNCODE_CONTEXT_ID = ${powershellQuote(contextKey)}; `
   }
 
-  return `export TRELLIS_CONTEXT_ID=${shellQuote(contextKey)}; `
+  return `export SUNCODE_CONTEXT_ID=${shellQuote(contextKey)}; `
 }
 
 function getBashCommandKey(args) {
@@ -340,10 +340,10 @@ function getBashCommandKey(args) {
 function commandStartsWithSuncodeContext(command) {
   const firstCommand = command.trimStart().split(/[;&|]/, 1)[0].trimStart()
   return (
-    /^TRELLIS_CONTEXT_ID\s*=/.test(firstCommand) ||
-    /^export\s+TRELLIS_CONTEXT_ID\s*=/.test(firstCommand) ||
-    /^env\s+(?:(?:-\S+|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*TRELLIS_CONTEXT_ID\s*=/.test(firstCommand) ||
-    /^\$env:TRELLIS_CONTEXT_ID\s*=/i.test(firstCommand)
+    /^SUNCODE_CONTEXT_ID\s*=/.test(firstCommand) ||
+    /^export\s+SUNCODE_CONTEXT_ID\s*=/.test(firstCommand) ||
+    /^env\s+(?:(?:-\S+|[A-Za-z_][A-Za-z0-9_]*=\S*)\s+)*SUNCODE_CONTEXT_ID\s*=/.test(firstCommand) ||
+    /^\$env:SUNCODE_CONTEXT_ID\s*=/i.test(firstCommand)
   )
 }
 
@@ -379,7 +379,7 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
   return {
       "tool.execute.before": async (input, output) => {
         try {
-          if (process.env.TRELLIS_HOOKS === "0" || process.env.TRELLIS_DISABLE_HOOKS === "1") {
+          if (process.env.SUNCODE_HOOKS === "0" || process.env.SUNCODE_DISABLE_HOOKS === "1") {
             return
           }
           debugLog("inject", "tool.execute.before called, tool:", input?.tool)
@@ -387,7 +387,7 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
           const toolName = input?.tool?.toLowerCase()
           if (toolName === "bash") {
             if (injectSuncodeContextIntoBash(ctx, input, output, hostPlatform, env)) {
-              debugLog("inject", "Injected TRELLIS_CONTEXT_ID into Bash command")
+              debugLog("inject", "Injected SUNCODE_CONTEXT_ID into Bash command")
             }
             return
           }

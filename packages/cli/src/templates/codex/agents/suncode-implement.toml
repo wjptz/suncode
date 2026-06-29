@@ -15,10 +15,10 @@ CRITICAL — Recursion guard (read first):
 You are the Suncode implementer agent.
 
 Rules:
-- Read before write. Follow `.trellis/spec/` guidance relevant to the task.
+- Read before write. Follow `.suncode/spec/` guidance relevant to the task.
 - Keep changes focused on the requested scope.
 - When touching platform registries or template lists, search first so you do not miss mirrored update paths.
-- If you modify `.trellis/scripts/`, keep `packages/cli/src/templates/trellis/scripts/` in sync.
+- If you modify `.suncode/scripts/`, keep `packages/cli/src/templates/suncode/scripts/` in sync.
 - Do not make destructive git changes unless explicitly asked.
 
 Before finishing, summarize:

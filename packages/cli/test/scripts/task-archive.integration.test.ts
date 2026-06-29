@@ -2,7 +2,7 @@
  * Integration tests for `task.py archive` auto-commit behavior.
  *
  * The python script lives under
- * `src/templates/trellis/scripts/common/task_store.py`; this test stamps
+ * `src/templates/suncode/scripts/common/task_store.py`; this test stamps
  * the templates into a fresh git repo and exercises the real `python3
  * task.py archive` path. Two scenarios:
  *
@@ -24,7 +24,7 @@ import path from "node:path";
 
 const TEMPLATE_SCRIPTS = path.resolve(
   __dirname,
-  "../../src/templates/trellis/scripts",
+  "../../src/templates/suncode/scripts",
 );
 
 function hasPython(): boolean {
@@ -54,19 +54,19 @@ function setupRepo(tmp: string): void {
   git(tmp, "config", "user.name", "Test");
 
   // Stamp the real templates into the test repo.
-  const scriptsDest = path.join(tmp, ".trellis", "scripts");
+  const scriptsDest = path.join(tmp, ".suncode", "scripts");
   fs.mkdirSync(scriptsDest, { recursive: true });
   fs.cpSync(TEMPLATE_SCRIPTS, scriptsDest, { recursive: true });
 
   // session_auto_commit must be enabled for the archive to commit.
   fs.writeFileSync(
-    path.join(tmp, ".trellis", "config.yaml"),
+    path.join(tmp, ".suncode", "config.yaml"),
     "session_auto_commit: true\n",
   );
 }
 
 function makeTask(repo: string, name: string, prdBody: string): void {
-  const dir = path.join(repo, ".trellis", "tasks", name);
+  const dir = path.join(repo, ".suncode", "tasks", name);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "prd.md"), prdBody);
   fs.writeFileSync(
@@ -91,7 +91,7 @@ function makeTask(repo: string, name: string, prdBody: string): void {
 function runArchive(repo: string, taskName: string): void {
   const r = spawnSync(
     "python3",
-    [".trellis/scripts/task.py", "archive", taskName],
+    [".suncode/scripts/task.py", "archive", taskName],
     { cwd: repo, encoding: "utf-8" },
   );
   if (r.status !== 0) {
@@ -105,7 +105,7 @@ describe.skipIf(!hasPython())(
     let tmp: string;
 
     beforeEach(() => {
-      tmp = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-archive-test-"));
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-archive-test-"));
       setupRepo(tmp);
     });
 
@@ -121,7 +121,7 @@ describe.skipIf(!hasPython())(
 
       // Dirty edit in task-b BEFORE archiving task-a.
       fs.appendFileSync(
-        path.join(tmp, ".trellis", "tasks", "task-b", "prd.md"),
+        path.join(tmp, ".suncode", "tasks", "task-b", "prd.md"),
         "DIRTY EDIT IN TASK-B SHOULD NOT BE COMMITTED\n",
       );
 
@@ -145,7 +145,7 @@ describe.skipIf(!hasPython())(
 
       // task-b dirty change still in working tree.
       const status = git(tmp, "status", "--porcelain");
-      expect(status).toMatch(/M\s+\.trellis\/tasks\/task-b\/prd\.md/);
+      expect(status).toMatch(/M\s+\.suncode\/tasks\/task-b\/prd\.md/);
     });
 
     it(
@@ -156,7 +156,7 @@ describe.skipIf(!hasPython())(
         // surfaced the bug.
         const researchDir = path.join(
           tmp,
-          ".trellis",
+          ".suncode",
           "tasks",
           "big",
           "research",
@@ -196,7 +196,7 @@ describe.skipIf(!hasPython())(
           .filter(Boolean);
         expect(deletes.length).toBeGreaterThan(0);
         expect(
-          deletes.every((p) => p.startsWith(".trellis/tasks/big/")),
+          deletes.every((p) => p.startsWith(".suncode/tasks/big/")),
         ).toBe(true);
       },
       30_000, // python startup + 100-file ops can be slow
@@ -219,7 +219,7 @@ describe.skipIf(!hasPython())(
 
       const r = spawnSync(
         "python3",
-        [".trellis/scripts/task.py", "archive", "tracked"],
+        [".suncode/scripts/task.py", "archive", "tracked"],
         { cwd: tmp, encoding: "utf-8" },
       );
 
@@ -228,8 +228,8 @@ describe.skipIf(!hasPython())(
       expect(r.stderr).toContain("Auto-commit failed");
 
       const status = git(tmp, "status", "--porcelain");
-      expect(status).toContain(".trellis/tasks/tracked/");
-      expect(status).toContain(".trellis/tasks/archive/");
+      expect(status).toContain(".suncode/tasks/tracked/");
+      expect(status).toContain(".suncode/tasks/archive/");
     });
   },
 );

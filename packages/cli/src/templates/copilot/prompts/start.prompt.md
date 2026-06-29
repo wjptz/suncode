@@ -12,7 +12,7 @@ Initialize a Suncode-managed development session. This platform has no session-s
 Identity, git status, current task, active tasks, journal location.
 
 ```bash
-{{PYTHON_CMD}} ./.trellis/scripts/get_context.py
+{{PYTHON_CMD}} ./.suncode/scripts/get_context.py
 ```
 
 If this output includes a line beginning `Suncode update available:`, copy the full line verbatim when summarizing session context. Do not shorten operational command hints.
@@ -21,18 +21,18 @@ If this output includes a line beginning `Suncode update available:`, copy the f
 Phase Index + skill routing table + DO-NOT-skip rules.
 
 ```bash
-{{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode phase
+{{PYTHON_CMD}} ./.suncode/scripts/get_context.py --mode phase
 ```
 
-Full guide in `.trellis/workflow.md` (read on demand).
+Full guide in `.suncode/workflow.md` (read on demand).
 
 ## Step 3: Guideline indexes
 Discover packages + spec layers, then read each relevant index file.
 
 ```bash
-{{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode packages
-cat .trellis/spec/guides/index.md
-cat .trellis/spec/<package>/<layer>/index.md   # for each relevant layer
+{{PYTHON_CMD}} ./.suncode/scripts/get_context.py --mode packages
+cat .suncode/spec/guides/index.md
+cat .suncode/spec/<package>/<layer>/index.md   # for each relevant layer
 ```
 
 Index files list the specific guideline docs to read when you actually start coding.
@@ -44,7 +44,7 @@ From Step 1 you know the current task and status. Check the task directory:
 - **Active task status `planning` + `prd.md` exists** → stay in Phase 1. Lightweight tasks can be PRD-only; complex tasks need `design.md` + `implement.md`. Load the relevant Phase 1 step detail before `task.py start`.
 - **Active task status `in_progress`** → Phase 2 step 2.1. Load the step detail:
   ```bash
-  {{PYTHON_CMD}} ./.trellis/scripts/get_context.py --mode phase --step 2.1 --platform {{CLI_FLAG}}
+  {{PYTHON_CMD}} ./.suncode/scripts/get_context.py --mode phase --step 2.1 --platform {{CLI_FLAG}}
   ```
 - **No active task** → classify first. For simple conversation / small task, ask only whether this turn should create a Suncode task. For complex work, ask whether you may create a Suncode task and enter planning. If the user says no, skip Suncode for this session.
 
@@ -60,4 +60,4 @@ From Step 1 you know the current task and status. Check the task directory:
 | Stuck / fixed same bug multiple times | `suncode-break-loop` |
 | Learned something worth capturing | `suncode-update-spec` |
 
-Full rules + anti-rationalization table in `.trellis/workflow.md`.
+Full rules + anti-rationalization table in `.suncode/workflow.md`.

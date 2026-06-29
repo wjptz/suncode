@@ -10,21 +10,16 @@ const __dirname = path.dirname(__filename);
 type TemplateCategory = "scripts" | "markdown" | "commands";
 
 /**
- * Get the path to the trellis templates directory (.trellis/ scaffolding).
+ * Get the path to the Suncode templates directory (.suncode/ scaffolding).
  */
-export function getTrellisTemplatePath(): string {
-  const templatePath = path.join(__dirname, "trellis");
+export function getSuncodeTemplatePath(): string {
+  const templatePath = path.join(__dirname, "suncode");
   if (fs.existsSync(templatePath)) {
     return templatePath;
   }
   throw new Error(
-    "Could not find trellis templates directory. Expected at templates/trellis/",
+    "Could not find Suncode templates directory. Expected at templates/suncode/",
   );
-}
-
-/** @deprecated Use getTrellisTemplatePath() instead. */
-export function getTrellisSourcePath(): string {
-  return getTrellisTemplatePath();
 }
 
 /**
@@ -72,11 +67,11 @@ export function getPiSourcePath(): string {
 }
 
 /**
- * Read a file from the trellis template directory.
+ * Read a file from the Suncode template directory.
  */
-export function readTrellisFile(relativePath: string): string {
-  const trellisPath = getTrellisSourcePath();
-  const filePath = path.join(trellisPath, relativePath);
+export function readSuncodeFile(relativePath: string): string {
+  const suncodePath = getSuncodeTemplatePath();
+  const filePath = path.join(suncodePath, relativePath);
   return fs.readFileSync(filePath, "utf-8");
 }
 
@@ -92,11 +87,11 @@ export function readTemplate(
 }
 
 export function readScript(relativePath: string): string {
-  return readTrellisFile(`scripts/${relativePath}`);
+  return readSuncodeFile(`scripts/${relativePath}`);
 }
 
 export function readMarkdown(relativePath: string): string {
-  return readTrellisFile(relativePath);
+  return readSuncodeFile(relativePath);
 }
 
 export function readCommand(filename: string): string {
@@ -104,15 +99,15 @@ export function readCommand(filename: string): string {
 }
 
 /**
- * Copy a directory from trellis templates to target, making scripts executable.
+ * Copy a directory from Suncode templates to target, making scripts executable.
  */
-export async function copyTrellisDir(
+export async function copySuncodeDir(
   srcRelativePath: string,
   destPath: string,
   options?: { executable?: boolean },
 ): Promise<void> {
-  const trellisPath = getTrellisSourcePath();
-  const srcPath = path.join(trellisPath, srcRelativePath);
+  const suncodePath = getSuncodeTemplatePath();
+  const srcPath = path.join(suncodePath, srcRelativePath);
   await copyDirRecursive(srcPath, destPath, options);
 }
 

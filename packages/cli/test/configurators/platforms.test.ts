@@ -71,7 +71,7 @@ describe("getConfiguredPlatforms", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-platforms-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-platforms-"));
   });
 
   afterEach(() => {
@@ -208,7 +208,7 @@ describe("configurePlatform", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "trellis-configure-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-configure-"));
     // Use force mode to avoid interactive prompts
     setWriteMode("force");
   });
@@ -242,7 +242,7 @@ describe("configurePlatform", () => {
   it("configurePlatform writes collected templates byte-for-byte for every platform", async () => {
     for (const id of PLATFORM_IDS) {
       const platformDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), `trellis-parity-${id}-`),
+        path.join(os.tmpdir(), `suncode-parity-${id}-`),
       );
       try {
         await configurePlatform(id, platformDir);
@@ -278,7 +278,7 @@ describe("configurePlatform", () => {
     // placeholder resolver so the rendered files are byte-identical to
     // Gemini's writes for the same skill names — see issue #224 fix.
     // `suncode-start` is included via `resolveAllAsSkillsNeutral` directly —
-    // it's the user-invocable fallback referenced by the <trellis-bootstrap>
+    // it's the user-invocable fallback referenced by the <suncode-bootstrap>
     // notice in inject-workflow-state.py (the SessionStart hook was removed
     // for de-recursion).
     const expected = resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext);
@@ -427,7 +427,7 @@ describe("configurePlatform", () => {
     expect(suncode.hooks?.agentSpawn?.[0].command).toBe(
       `${expectedPythonCmd} .kiro/hooks/session-start.py`,
     );
-    expect(suncode.resources).toContain("file://.trellis/workflow.md");
+    expect(suncode.resources).toContain("file://.suncode/workflow.md");
 
     // 3 sub-agents keep their inject-subagent-context.py spawn hook.
     for (const name of [
@@ -1007,7 +1007,7 @@ describe("configurePlatform", () => {
     expect(extension).toContain('pi.on?.("session_start"');
     expect(extension).toContain('pi.on?.("tool_call"');
     expect(extension).toContain("ctx?.sessionManager?.getSessionId");
-    expect(extension).toContain("TRELLIS_PI_CLI_JS");
+    expect(extension).toContain("SUNCODE_PI_CLI_JS");
     expect(extension).toContain("function formatPiOutput");
     expect(extension).toContain('"## Suncode Agent Definition"');
     expect(extension).toContain("ctx?.ui?.notify?.(");
@@ -1026,7 +1026,7 @@ describe("configurePlatform", () => {
     expect(extension).not.toContain("inject-workflow-state.py");
     expect(extension).not.toContain("inject-subagent-context.py");
     expect(extension).not.toContain("session-start.py");
-    // get_context.py is allowed: it lives in .trellis/scripts/ and is the
+    // get_context.py is allowed: it lives in .suncode/scripts/ and is the
     // shared session-overview script invoked by every platform's hook.
 
     const settings = JSON.parse(
@@ -1121,7 +1121,7 @@ describe("configurePlatform", () => {
   it("does not throw for any platform", async () => {
     for (const id of PLATFORM_IDS) {
       const platformDir = fs.mkdtempSync(
-        path.join(os.tmpdir(), `trellis-cfg-${id}-`),
+        path.join(os.tmpdir(), `suncode-cfg-${id}-`),
       );
       try {
         setWriteMode("force");

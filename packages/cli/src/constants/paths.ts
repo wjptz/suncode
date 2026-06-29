@@ -8,18 +8,18 @@
 // Directory names (can be renamed)
 export const DIR_NAMES = {
   /** Root workflow directory */
-  WORKFLOW: ".trellis",
-  /** Workspace directory (under .trellis/) - developer work areas */
+  WORKFLOW: ".suncode",
+  /** Workspace directory (under .suncode/) - developer work areas */
   WORKSPACE: "workspace",
-  /** Tasks directory (under .trellis/) - unified task storage */
+  /** Tasks directory (under .suncode/) - unified task storage */
   TASKS: "tasks",
   /** Archive directory (under tasks/) */
   ARCHIVE: "archive",
-  /** Spec/guidelines directory (under .trellis/) */
+  /** Spec/guidelines directory (under .suncode/) */
   SPEC: "spec",
-  /** Scripts directory (under .trellis/) */
+  /** Scripts directory (under .suncode/) */
   SCRIPTS: "scripts",
-  /** Channel runtime agent definitions (under .trellis/) */
+  /** Channel runtime agent definitions (under .suncode/) */
   AGENTS: "agents",
 } as const;
 
@@ -43,29 +43,29 @@ export const FILE_NAMES = {
 
 // Constructed paths (relative to project root)
 export const PATHS = {
-  /** .trellis/ */
+  /** .suncode/ */
   WORKFLOW: DIR_NAMES.WORKFLOW,
-  /** .trellis/workspace/ */
+  /** .suncode/workspace/ */
   WORKSPACE: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.WORKSPACE}`,
-  /** .trellis/tasks/ */
+  /** .suncode/tasks/ */
   TASKS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.TASKS}`,
-  /** .trellis/spec/ */
+  /** .suncode/spec/ */
   SPEC: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SPEC}`,
-  /** .trellis/scripts/ */
+  /** .suncode/scripts/ */
   SCRIPTS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SCRIPTS}`,
-  /** .trellis/agents/ */
+  /** .suncode/agents/ */
   AGENTS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.AGENTS}`,
-  /** .trellis/.developer */
+  /** .suncode/.developer */
   DEVELOPER_FILE: `${DIR_NAMES.WORKFLOW}/${FILE_NAMES.DEVELOPER}`,
-  /** .trellis/.current-task */
+  /** .suncode/.current-task */
   CURRENT_TASK_FILE: `${DIR_NAMES.WORKFLOW}/${FILE_NAMES.CURRENT_TASK}`,
-  /** .trellis/workflow.md */
+  /** .suncode/workflow.md */
   WORKFLOW_GUIDE_FILE: `${DIR_NAMES.WORKFLOW}/${FILE_NAMES.WORKFLOW_GUIDE}`,
 } as const;
 
 /**
  * Get developer's workspace directory path
- * @example getWorkspaceDir("john") => ".trellis/workspace/john"
+ * @example getWorkspaceDir("john") => ".suncode/workspace/john"
  */
 export function getWorkspaceDir(developer: string): string {
   return `${PATHS.WORKSPACE}/${developer}`;
@@ -73,7 +73,7 @@ export function getWorkspaceDir(developer: string): string {
 
 /**
  * Get task directory path
- * @example getTaskDir("01-21-my-task") => ".trellis/tasks/01-21-my-task"
+ * @example getTaskDir("01-21-my-task") => ".suncode/tasks/01-21-my-task"
  */
 export function getTaskDir(taskName: string): string {
   return `${PATHS.TASKS}/${taskName}`;
@@ -81,7 +81,7 @@ export function getTaskDir(taskName: string): string {
 
 /**
  * Get archive directory path
- * @example getArchiveDir() => ".trellis/tasks/archive"
+ * @example getArchiveDir() => ".suncode/tasks/archive"
  */
 export function getArchiveDir(): string {
   return `${PATHS.TASKS}/${DIR_NAMES.ARCHIVE}`;
