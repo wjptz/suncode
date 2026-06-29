@@ -244,7 +244,7 @@ export async function runWorkflowCommand(
   const cwd = process.cwd();
   if (!fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
     throw new WorkflowCommandError(
-      "No .trellis/ directory found. Run `trellis init` first.",
+      "No .trellis/ directory found. Run `suncode init` first.",
     );
   }
 
@@ -298,7 +298,7 @@ export async function runWorkflowCommand(
 
   // Best-effort warning: if the resolved workflow references
   // `.trellis/agents/<name>.md` files that don't exist on disk, point the user
-  // at `trellis update` so `trellis channel spawn --agent <name>` doesn't fail
+  // at `suncode update` so `suncode channel spawn --agent <name>` doesn't fail
   // mid-session. Non-blocking; never errors a successful write.
   warnAboutMissingAgents(cwd, template.content);
 }
@@ -311,7 +311,7 @@ function warnAboutMissingAgents(cwd: string, workflowContent: string): void {
       `\n⚠ The selected workflow references .trellis/agents/{${missing.join(",")}}.md, but those files are not on disk.\n`,
     ) +
       chalk.yellow(
-        `  Run \`trellis update\` to backfill the bundled agent definitions, or create them under ${PATHS.AGENTS}/.\n`,
+        `  Run \`suncode update\` to backfill the bundled agent definitions, or create them under ${PATHS.AGENTS}/.\n`,
       ),
   );
 }

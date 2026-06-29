@@ -1,13 +1,12 @@
 {
-  "name": "@mindfoldhq/trellis",
+  "name": "@wjptz/suncode",
   "version": "0.6.5",
-  "description": "AI capabilities grow like ivy — Trellis provides the structure to guide them along a disciplined path",
+  "description": "Suncode is an AI workflow framework for coding agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "trellis": "./bin/trellis.js",
-    "tl": "./bin/trellis.js"
+    "suncode": "./bin/suncode.js"
   },
   "publishConfig": {
     "access": "public"
@@ -47,12 +46,12 @@
     "developer-tools",
     "agent",
     "memory",
-    "trellis"
+    "suncode"
   ],
-  "author": "Mindfold LLC",
+  "author": "wjptz",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@mindfoldhq/trellis-core": "workspace:*",
+    "@wjptz/suncode-core": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "figlet": "^1.9.4",
@@ -85,6 +84,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/mindfold-ai/trellis.git"
+    "url": "https://github.com/wjptz/suncode.git"
   }
 }

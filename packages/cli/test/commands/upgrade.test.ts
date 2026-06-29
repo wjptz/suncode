@@ -36,12 +36,12 @@ describe("upgrade command", () => {
       buildUpgradeCommand({ tag: "beta" }, "0.5.12", "darwin"),
     ).toMatchObject({
       command: "npm",
-      args: ["install", "-g", "@mindfoldhq/trellis@beta"],
+      args: ["install", "-g", "@wjptz/suncode@beta"],
       spawnOptions: { stdio: "inherit", shell: false },
-      displayCommand: "npm install -g @mindfoldhq/trellis@beta",
-      target: "@mindfoldhq/trellis@beta",
+      displayCommand: "npm install -g @wjptz/suncode@beta",
+      target: "@wjptz/suncode@beta",
       tag: "beta",
-      binaryCheckCommand: "which trellis",
+      binaryCheckCommand: "which suncode",
     });
   });
 
@@ -50,12 +50,12 @@ describe("upgrade command", () => {
       buildUpgradeCommand({ tag: "beta" }, "0.5.12", "win32"),
     ).toMatchObject({
       command: "cmd.exe",
-      args: ["/d", "/s", "/c", "npm install -g @mindfoldhq/trellis@beta"],
+      args: ["/d", "/s", "/c", "npm install -g @wjptz/suncode@beta"],
       spawnOptions: { stdio: "inherit", shell: false },
-      displayCommand: "npm install -g @mindfoldhq/trellis@beta",
-      target: "@mindfoldhq/trellis@beta",
+      displayCommand: "npm install -g @wjptz/suncode@beta",
+      target: "@wjptz/suncode@beta",
       tag: "beta",
-      binaryCheckCommand: "where trellis",
+      binaryCheckCommand: "where suncode",
     });
   });
 
@@ -67,7 +67,7 @@ describe("upgrade command", () => {
 
     expect(runner).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("Run: npm install -g @mindfoldhq/trellis@latest"),
+      expect.stringContaining("Run: npm install -g @wjptz/suncode@latest"),
     );
 
     log.mockRestore();
@@ -81,13 +81,13 @@ describe("upgrade command", () => {
 
     expect(runner).toHaveBeenCalledWith(
       "npm",
-      ["install", "-g", "@mindfoldhq/trellis@latest"],
+      ["install", "-g", "@wjptz/suncode@latest"],
       { stdio: "inherit", shell: false },
     );
     expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("trellis --version"),
+      expect.stringContaining("suncode --version"),
     );
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("which trellis"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("which suncode"));
 
     log.mockRestore();
   });
@@ -97,7 +97,7 @@ describe("upgrade command", () => {
     const runner = vi.fn(() => ({ status: 1, signal: null }));
 
     await expect(upgrade({ tag: "latest" }, runner)).rejects.toThrow(
-      /npm install failed with exit code 1\.[\s\S]*Troubleshooting:[\s\S]*Manual command: npm install -g @mindfoldhq\/trellis@latest[\s\S]*npm config get prefix[\s\S]*which trellis/,
+      /npm install failed with exit code 1\.[\s\S]*Troubleshooting:[\s\S]*Manual command: npm install -g @wjptz\/suncode@latest[\s\S]*npm config get prefix[\s\S]*which suncode/,
     );
 
     log.mockRestore();

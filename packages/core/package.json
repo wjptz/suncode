@@ -1,7 +1,7 @@
 {
-  "name": "@mindfoldhq/trellis-core",
+  "name": "@wjptz/suncode-core",
   "version": "0.6.5",
-  "description": "Trellis core SDK — channel and task domain primitives consumed by the Trellis CLI and downstream Node services",
+  "description": "Suncode core SDK — channel and task domain primitives consumed by the Suncode CLI and downstream Node services",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -52,13 +52,13 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
-    "trellis",
+    "suncode",
     "channel",
     "sdk",
     "agent",
     "events"
   ],
-  "author": "Mindfold LLC",
+  "author": "wjptz",
   "license": "AGPL-3.0-only",
   "devDependencies": {
     "@eslint/js": "^9.18.0",
@@ -73,6 +73,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mindfold-ai/trellis.git"
+    "url": "https://github.com/wjptz/suncode.git"
   }
 }

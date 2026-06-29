@@ -20,7 +20,7 @@ import { compareVersions } from "../utils/compare-versions.js";
 export { VERSION, PACKAGE_NAME };
 
 /**
- * Check if a Trellis update is available (compare project version with CLI version)
+ * Check if a Suncode update is available (compare project version with CLI version)
  */
 function checkForUpdates(cwd: string): void {
   const versionFile = path.join(cwd, DIR_NAMES.WORKFLOW, ".version");
@@ -35,10 +35,10 @@ function checkForUpdates(cwd: string): void {
     // CLI is newer than project - update available
     console.log(
       chalk.yellow(
-        `\n⚠️  Trellis update available: ${projectVersion} → ${cliVersion}`,
+        `\n⚠️  Suncode update available: ${projectVersion} → ${cliVersion}`,
       ),
     );
-    console.log(chalk.gray(`   Run: trellis update\n`));
+    console.log(chalk.gray(`   Run: suncode update\n`));
   } else if (comparison < 0) {
     // CLI is older than project - CLI needs updating
     console.log(
@@ -46,7 +46,7 @@ function checkForUpdates(cwd: string): void {
         `\n⚠️  Your CLI (${cliVersion}) is older than project (${projectVersion})`,
       ),
     );
-    console.log(chalk.gray(`   Run: trellis upgrade\n`));
+    console.log(chalk.gray(`   Run: suncode upgrade\n`));
   }
 }
 
@@ -59,7 +59,7 @@ if (fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
 const program = new Command();
 
 program
-  .name("trellis")
+  .name("suncode")
   .description(
     "AI-assisted development workflow framework for Cursor, Claude Code and more",
   )
@@ -67,7 +67,7 @@ program
 
 program
   .command("init")
-  .description("Initialize trellis in the current project")
+  .description("Initialize Suncode in the current project")
   .option("--cursor", "Include Cursor commands")
   .option("--claude", "Include Claude Code commands")
   .option("--opencode", "Include OpenCode commands")
@@ -88,7 +88,7 @@ program
   .option("--trae", "Include Trae IDE commands")
   .option(
     "--with-statusline",
-    "Install the Trellis statusLine for Claude Code (off by default)",
+    "Install the Suncode statusLine for Claude Code (off by default)",
   )
   .option("-y, --yes", "Skip prompts and use defaults")
   .option(
@@ -138,7 +138,7 @@ program
         chalk.red("Error:"),
         error instanceof Error ? error.message : error,
       );
-      if (process.env.DEBUG || process.env.TRELLIS_DEBUG) {
+      if (process.env.DEBUG || process.env.SUNCODE_DEBUG) {
         console.error(error instanceof Error ? error.stack : error);
       }
       process.exit(1);
@@ -147,7 +147,7 @@ program
 
 program
   .command("update")
-  .description("Update trellis configuration and commands to latest version")
+  .description("Update Suncode configuration and commands to latest version")
   .option("--dry-run", "Preview changes without applying them")
   .option("-f, --force", "Overwrite all changed files without asking")
   .option("-s, --skip-all", "Skip all changed files without asking")
@@ -169,7 +169,7 @@ program
         chalk.red("Error:"),
         error instanceof Error ? error.message : error,
       );
-      if (process.env.DEBUG || process.env.TRELLIS_DEBUG) {
+      if (process.env.DEBUG || process.env.SUNCODE_DEBUG) {
         console.error(error instanceof Error ? error.stack : error);
       }
       process.exit(1);
@@ -178,7 +178,7 @@ program
 
 program
   .command("upgrade")
-  .description("Upgrade the global Trellis CLI package")
+  .description("Upgrade the global Suncode CLI package")
   .option(
     "--tag <tag>",
     "npm dist-tag or version to install (default follows current channel: latest, beta, or rc)",
@@ -195,7 +195,7 @@ program
         chalk.red("Error:"),
         error instanceof Error ? error.message : error,
       );
-      if (process.env.DEBUG || process.env.TRELLIS_DEBUG) {
+      if (process.env.DEBUG || process.env.SUNCODE_DEBUG) {
         console.error(error instanceof Error ? error.stack : error);
       }
       process.exit(1);
@@ -205,7 +205,7 @@ program
 program
   .command("uninstall")
   .description(
-    "Remove all trellis files (managed platform files + .trellis/) from this project",
+    "Remove all Suncode-managed files (managed platform files + .trellis/) from this project",
   )
   .option("-y, --yes", "Skip confirmation prompt")
   .option("--dry-run", "List what would be removed without changing anything")
@@ -220,7 +220,7 @@ program
         chalk.red("Error:"),
         error instanceof Error ? error.message : error,
       );
-      if (process.env.DEBUG || process.env.TRELLIS_DEBUG) {
+      if (process.env.DEBUG || process.env.SUNCODE_DEBUG) {
         console.error(error instanceof Error ? error.stack : error);
       }
       process.exit(1);
@@ -230,7 +230,7 @@ program
 program
   .command("mem")
   .description(
-    "Search/recall AI conversation history across Claude Code, Codex, OpenCode, Pi (run 'trellis mem help' for subcommands and flags)",
+    "Search/recall AI conversation history across Claude Code, Codex, OpenCode, Pi (run 'suncode mem help' for subcommands and flags)",
   )
   .allowUnknownOption(true)
   .helpOption(false)
@@ -246,7 +246,7 @@ program
         chalk.red("Error:"),
         error instanceof Error ? error.message : error,
       );
-      if (process.env.DEBUG || process.env.TRELLIS_DEBUG) {
+      if (process.env.DEBUG || process.env.SUNCODE_DEBUG) {
         console.error(error instanceof Error ? error.stack : error);
       }
       process.exit(1);
@@ -290,7 +290,7 @@ program
         chalk.red("Error:"),
         error instanceof Error ? error.message : error,
       );
-      if (process.env.DEBUG || process.env.TRELLIS_DEBUG) {
+      if (process.env.DEBUG || process.env.SUNCODE_DEBUG) {
         console.error(error instanceof Error ? error.stack : error);
       }
       process.exit(1);

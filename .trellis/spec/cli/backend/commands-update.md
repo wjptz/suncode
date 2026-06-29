@@ -148,7 +148,7 @@ Opt-in to apply file migrations (renames/deletes/dir renames). Without it: migra
 
 ### Tag flag (`--tag <beta|rc|latest>`)
 
-There is no `--tag` flag on `trellis update` today. Version selection is implicit: `update()` always uses the version of the installed CLI (`constants/version.ts:VERSION`). Users who want a specific CLI channel should run `trellis upgrade --tag beta` (or `latest` / `rc`) first, then run `trellis update`. The npm-version check in `commands/update.ts:getLatestNpmVersion` only looks at the `latest` dist-tag and is purely advisory ("⚠️ Your CLI is behind npm").
+There is no `--tag` flag on `trellis update` today. Version selection is implicit: `update()` always uses the version of the installed CLI (`constants/version.ts:VERSION`). Users who want a specific CLI channel should run `trellis upgrade --tag beta` (or `latest` / `rc`) first, then run `trellis update`. The npm-version check in `commands/update.ts:getLatestNpmVersion` only looks at the `latest` dist-tag and is purely advisory ("⚠️ Your CLI is behind npm"). Because it is advisory, it must be bounded by a short timeout (`LATEST_NPM_VERSION_TIMEOUT_MS`, currently 1500 ms) and return `null` on timeout, DNS, proxy, auth, or non-OK registry responses. `update()` should continue with the local template/migration plan and print the existing grayed-out "(unable to fetch)" line instead of blocking prompts or tests on npm availability.
 
 ---
 
@@ -346,7 +346,7 @@ Old Trellis used `.agents/skills/` as the Codex configDir; current Trellis uses 
 ### Things that look like bugs but aren't
 
 - The `Proceed?` prompt asks for confirmation even when the only "change" is a version bump. Some of those cases short-circuit before the prompt (no file changes, no migrations, no safe-deletes — see the early return after `analyzeChanges`); others legitimately have changes worth confirming.
-- `getLatestNpmVersion` failure ("unable to fetch") is silent on the npm side and prints a single grayed-out line. The proxy setup happens in `commands/update.ts:update` via `utils/proxy.ts:setupProxy`; users behind a corporate proxy without `HTTP_PROXY` / `HTTPS_PROXY` set will see the gray line forever. This is intentional — the npm check is advisory only.
+- `getLatestNpmVersion` failure ("unable to fetch") is silent on the npm side and prints a single grayed-out line. The proxy setup happens in `commands/update.ts:update` via `utils/proxy.ts:setupProxy`; users behind a corporate proxy without `HTTP_PROXY` / `HTTPS_PROXY` set will see the gray line forever. This is intentional — the npm check is advisory only. Do not remove the short `AbortController` timeout around this fetch; package scopes that are new, private, unpublished, or temporarily slow on npm must not stall `update({})` long enough to trip the 10-second integration-test timeout or hang a user's otherwise-local project update.
 
 ---
 

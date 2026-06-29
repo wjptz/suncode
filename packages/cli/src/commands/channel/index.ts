@@ -27,7 +27,7 @@ import { channelTitleClear, channelTitleSet } from "./title.js";
 import { runSupervisor } from "./supervisor.js";
 import { channelWait, parseDuration } from "./wait.js";
 import { parseCsv } from "./store/schema.js";
-import { parseInboxPolicy } from "@mindfoldhq/trellis-core/channel";
+import { parseInboxPolicy } from "@wjptz/suncode-core/channel";
 
 function parseNonNegativeInteger(value: string): number {
   if (!/^\d+$/.test(value)) {
@@ -50,7 +50,7 @@ export function registerChannelCommand(program: Command): void {
     .description("Create a new channel (collaboration session)")
     .option("--scope <scope>", "channel scope: project | global")
     .option("--type <type>", "channel type: chat | forum", "chat")
-    .option("--task <path>", "associated Trellis task directory")
+    .option("--task <path>", "associated Suncode task directory")
     .option("--project <slug>", "project slug")
     .option("--labels <csv>", "comma-separated labels")
     .option("--description <text>", "stable channel description")
@@ -308,7 +308,7 @@ export function registerChannelCommand(program: Command): void {
     )
     .option(
       "--jsonl <path>",
-      "parse a Trellis jsonl manifest ({file, reason} per line) and include each referenced file (repeatable)",
+      "parse a Suncode jsonl manifest ({file, reason} per line) and include each referenced file (repeatable)",
       (val: string, prev: string[] | undefined) => [...(prev ?? []), val],
       [] as string[],
     )
@@ -405,7 +405,7 @@ export function registerChannelCommand(program: Command): void {
     )
     .option(
       "--jsonl <path>",
-      "parse a Trellis jsonl manifest and include each referenced file (repeatable)",
+      "parse a Suncode jsonl manifest and include each referenced file (repeatable)",
       (val: string, prev: string[] | undefined) => [...(prev ?? []), val],
       [] as string[],
     )

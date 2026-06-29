@@ -1,5 +1,5 @@
 /**
- * mem.ts — CLI wrapper over `@mindfoldhq/trellis-core/mem`.
+ * mem.ts — CLI wrapper over `@wjptz/suncode-core/mem`.
  *
  * The reusable retrieval / context-extraction logic lives in core; this file
  * owns only CLI concerns: argument parsing, terminal rendering, the OpenCode
@@ -12,7 +12,7 @@
  *   extract <session-id>          dump cleaned dialogue (use --grep KW to filter turns)
  *   projects                      list active project cwds (AI-routing entry point)
  *
- * Run `trellis mem help` for the full flag reference.
+ * Run `suncode mem help` for the full flag reference.
  */
 
 import * as os from "node:os";
@@ -25,14 +25,14 @@ import {
   MemSessionNotFoundError,
   readMemContext,
   searchMemSessions,
-} from "@mindfoldhq/trellis-core/mem";
+} from "@wjptz/suncode-core/mem";
 import type {
   MemFilter,
   MemPhase,
   MemSessionInfo,
   MemSourceFilter,
   MemSourceKind,
-} from "@mindfoldhq/trellis-core/mem";
+} from "@wjptz/suncode-core/mem";
 
 // ---------- argv ----------
 
@@ -131,7 +131,7 @@ function warnOpencodeUnavailable(): void {
   if (opencodeWarned) return;
   opencodeWarned = true;
   process.stderr.write(
-    "⚠️  tl mem: OpenCode platform reader is temporarily unavailable in this build.\n" +
+    "⚠️  suncode mem: OpenCode platform reader is temporarily unavailable in this build.\n" +
       "    OpenCode 1.2+ moved to SQLite; the native dependency was reverted in\n" +
       "    0.6.0-beta.4 due to install failures. Re-enabled in a future release.\n",
   );
@@ -455,7 +455,7 @@ function cmdExtract(argv: Argv): void {
 }
 
 function cmdHelp(): void {
-  console.log(`trellis mem — list/search Claude/Codex/OpenCode/Pi sessions
+  console.log(`suncode mem — list/search Claude/Codex/OpenCode/Pi sessions
 
 commands:
   list                          list sessions (default if no command)
@@ -474,7 +474,7 @@ flags:
   --cwd <path>                           override the project cwd
   --limit N                              cap output (default 50)
   --grep KW                              extract / context: filter turns by keyword (multi-token AND)
-  --phase brainstorm|implement|all       extract: slice by Trellis brainstorm windows
+  --phase brainstorm|implement|all       extract: slice by Suncode brainstorm windows
                                          (default all; brainstorm = [task.py create, task.py start);
                                          Claude/Codex/Pi supported; OpenCode warns + returns all)
   --turns N                              context: number of hit turns to return (default 3)
@@ -485,11 +485,11 @@ flags:
   --help, -h                             show this help
 
 examples:
-  trellis mem list
-  trellis mem list --global --platform claude --since 2026-04-01
-  trellis mem search "session insight" --global
-  trellis mem extract 5842592d --grep memory
-  trellis mem extract 5842592d --phase brainstorm
+  suncode mem list
+  suncode mem list --global --platform claude --since 2026-04-01
+  suncode mem search "session insight" --global
+  suncode mem extract 5842592d --grep memory
+  suncode mem extract 5842592d --phase brainstorm
 `);
 }
 

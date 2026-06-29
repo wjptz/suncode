@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { InboxPolicy } from "@mindfoldhq/trellis-core/channel";
+import type { InboxPolicy } from "@wjptz/suncode-core/channel";
 
 import { loadAgent } from "./agent-loader.js";
 import type { Provider } from "./adapters/index.js";
@@ -37,7 +37,7 @@ export interface SpawnOptions {
   warnBeforeMs?: number;
   /** Files (or globs) to include in the worker's system prompt. */
   files?: string[];
-  /** Trellis jsonl manifests to expand into the system prompt. */
+  /** Suncode jsonl manifests to expand into the system prompt. */
   jsonls?: string[];
   scope?: string;
   /** Identity recorded as the `spawned` event author. Defaults to
@@ -109,7 +109,7 @@ function resolveSpawn(channelName: string, opts: SpawnOptions): ResolvedSpawn {
 }
 
 /**
- * Compose the worker's system prompt: Trellis channel protocol prefix
+ * Compose the worker's system prompt: Suncode channel protocol prefix
  * (placeholder) + agent body (if any).
  *
  * NOTE: protocol prefix lives in the system prompt — NOT in any user

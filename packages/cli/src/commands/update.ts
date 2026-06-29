@@ -641,7 +641,7 @@ function preserveExistingRegistryConfig(cwd: string, template: string): string {
     "#-------------------------------------------------------------------------------\n" +
     "# Registry\n" +
     "#-------------------------------------------------------------------------------\n\n" +
-    "# Source used to install .trellis/spec. trellis update refreshes this\n" +
+    "# Source used to install .trellis/spec. suncode update refreshes this\n" +
     "# hash-tracked spec template while preserving local edits through the\n" +
     "# normal update conflict flow.\n" +
     "registry:\n" +
@@ -1196,13 +1196,21 @@ function getInstalledVersion(cwd: string): string {
   return "unknown";
 }
 
+const LATEST_NPM_VERSION_TIMEOUT_MS = 1500;
+
 /**
  * Fetch latest version from npm registry
  */
 async function getLatestNpmVersion(): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, LATEST_NPM_VERSION_TIMEOUT_MS);
+
   try {
     const response = await fetch(
       `https://registry.npmjs.org/${PACKAGE_NAME}/latest`,
+      { signal: controller.signal },
     );
     if (!response.ok) {
       return null;
@@ -1211,6 +1219,8 @@ async function getLatestNpmVersion(): Promise<string | null> {
     return data.version ?? null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1538,7 +1548,7 @@ async function promptMigrationAction(
           .join("\n"),
       )
     : chalk.gray(
-        `  Why prompted: file content doesn't match the Trellis template hash\n` +
+        `  Why prompted: file content doesn't match the Suncode template hash\n` +
           `  for this path — usually local customization. If unsure, pick [b].`,
       );
 
@@ -1833,14 +1843,14 @@ function printMigrationResult(result: MigrationResult): void {
 export async function update(options: UpdateOptions): Promise<void> {
   const cwd = process.cwd();
 
-  // Check if Trellis is initialized
+  // Check if Suncode is initialized
   if (!fs.existsSync(path.join(cwd, DIR_NAMES.WORKFLOW))) {
-    console.log(chalk.red("Error: Trellis not initialized in this directory."));
-    console.log(chalk.gray("Run 'trellis init' first."));
+    console.log(chalk.red("Error: Suncode not initialized in this directory."));
+    console.log(chalk.gray("Run 'suncode init' first."));
     return;
   }
 
-  console.log(chalk.cyan("\nTrellis Update"));
+  console.log(chalk.cyan("\nSuncode Update"));
   console.log(chalk.cyan("══════════════\n"));
 
   // Set up proxy before any network calls (npm version check)
@@ -1874,7 +1884,7 @@ export async function update(options: UpdateOptions): Promise<void> {
         `⚠️  Your CLI (${cliVersion}) is behind npm (${latestNpmVersion}).`,
       ),
     );
-    console.log(chalk.yellow(`   Run: trellis upgrade\n`));
+    console.log(chalk.yellow(`   Run: suncode upgrade\n`));
   }
 
   // Check for downgrade situation
@@ -1888,9 +1898,9 @@ export async function update(options: UpdateOptions): Promise<void> {
 
     if (!options.allowDowngrade) {
       console.log(chalk.gray("Solutions:"));
-      console.log(chalk.gray(`  1. Update your CLI: trellis upgrade`));
+      console.log(chalk.gray(`  1. Update your CLI: suncode upgrade`));
       console.log(
-        chalk.gray(`  2. Force downgrade: trellis update --allow-downgrade\n`),
+        chalk.gray(`  2. Force downgrade: suncode update --allow-downgrade\n`),
       );
       return;
     }
@@ -1913,7 +1923,7 @@ export async function update(options: UpdateOptions): Promise<void> {
   if (isUnknownVersion) {
     console.log(
       chalk.yellow(
-        "⚠️  No version file found. Skipping migrations — run trellis init to fix.",
+        "⚠️  No version file found. Skipping migrations — run suncode init to fix.",
       ),
     );
     console.log(chalk.gray("   Template updates will still be applied."));
@@ -2078,7 +2088,7 @@ export async function update(options: UpdateOptions): Promise<void> {
             ),
         );
         console.log("");
-        console.log(chalk.yellow(`  Run: trellis update --migrate`));
+        console.log(chalk.yellow(`  Run: suncode update --migrate`));
         console.log("");
         console.log(
           chalk.gray(
@@ -2240,7 +2250,7 @@ export async function update(options: UpdateOptions): Promise<void> {
           );
           console.log(
             chalk.gray(
-              "  Hash-verified: only files matching known Trellis templates are deleted. Your local customizations (hash mismatch) are still preserved.",
+              "  Hash-verified: only files matching known Suncode templates are deleted. Your local customizations (hash mismatch) are still preserved.",
             ),
           );
         }
@@ -2546,7 +2556,7 @@ export async function update(options: UpdateOptions): Promise<void> {
           status: "planning",
           scope: "migration",
           priority: "P1",
-          creator: "trellis-update",
+          creator: "suncode-update",
           assignee: currentDeveloper,
           createdAt: todayStr,
         });
@@ -2561,7 +2571,7 @@ export async function update(options: UpdateOptions): Promise<void> {
         prdContent += `**From Version**: ${projectVersion}\n`;
         prdContent += `**To Version**: ${cliVersion}\n`;
         prdContent += `**Assignee**: ${currentDeveloper}\n\n`;
-        prdContent += `## Status\n\n- [ ] Review migration guide\n- [ ] Update custom files\n- [ ] Run \`trellis update --migrate\`\n- [ ] Test workflows\n\n`;
+        prdContent += `## Status\n\n- [ ] Review migration guide\n- [ ] Update custom files\n- [ ] Run \`suncode update --migrate\`\n- [ ] Test workflows\n\n`;
 
         for (const {
           version,

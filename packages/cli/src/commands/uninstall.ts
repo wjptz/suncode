@@ -208,7 +208,7 @@ function buildPlan(cwd: string, hashes: Record<string, string>): UninstallPlan {
 function renderPlan(cwd: string, plan: UninstallPlan): void {
   const trellisDir = path.join(cwd, DIR_NAMES.WORKFLOW);
 
-  console.log(chalk.bold("\nTrellis uninstall plan\n"));
+  console.log(chalk.bold("\nSuncode uninstall plan\n"));
 
   const deletePaths = plan.deletions
     .filter((d) => !d.missing)
@@ -387,7 +387,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   if (!fs.existsSync(trellisDir)) {
     console.log(
       chalk.gray(
-        "Trellis is not installed in this project (no .trellis/ directory found).",
+        "Suncode is not installed in this project (no .trellis/ directory found).",
       ),
     );
     return;
@@ -399,7 +399,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   if (Object.keys(hashes).length === 0) {
     console.error(
       chalk.red(
-        "Trellis directory found but manifest is missing — cannot determine which platform files to remove. " +
+        "Suncode directory found but manifest is missing — cannot determine which platform files to remove. " +
           "You can manually delete .trellis/ if needed.",
       ),
     );
@@ -428,7 +428,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     // without giving them an actionable signal.
     console.log(
       chalk.gray(
-        `   Pruned ${pruned.length} orphan manifest entries (user-owned files trellis did not write).`,
+        `   Pruned ${pruned.length} orphan manifest entries (user-owned files Suncode did not write).`,
       ),
     );
   }

@@ -788,7 +788,7 @@ describe("init() integration", () => {
     );
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining(
-        `Trellis rendered Python commands as "${expectedPythonCmd}" in generated hooks, settings, and help text`,
+        `Suncode rendered Python commands as "${expectedPythonCmd}" in generated hooks, settings, and help text`,
       ),
     );
   });
