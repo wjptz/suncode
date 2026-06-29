@@ -71,7 +71,56 @@ Implementation should be split into small commits or child tasks by phase.
       `06-29-suncode-cli-package-identity`.
 - [x] Start with Phase 0 inventory before editing behavior. Inventory recorded
       in `research/phase-0-inventory.md`.
-- [ ] After each phase, update this plan with actual validation results.
+- [x] After each phase, update this plan with actual validation results.
+
+## Completed Child Tasks
+
+1. `06-29-suncode-public-branding`
+   - Rebranded public repository surfaces, docs-site, and marketplace content
+     for Suncode.
+   - Committed/pushed the public branding work in the relevant repositories.
+   - Archived and journaled the child task.
+
+2. `06-29-suncode-cli-package-identity`
+   - Renamed the CLI package to `@wjptz/suncode`.
+   - Renamed the core package to `@wjptz/suncode-core`.
+   - Replaced the package bin surface with `suncode` only; removed `trellis`
+     and `tl` from the Suncode package target.
+   - Updated package imports, workspace filters, release scripts, publish
+     workflow, upgrade/update/help text, tests, lockfile, and package metadata.
+   - Captured the advisory npm-latest timeout contract in
+     `.trellis/spec/cli/backend/commands-update.md`.
+   - Archived and journaled the child task.
+
+## Validation Results
+
+- Public branding child validation was static/audit-oriented and recorded in
+  its archived task/journal.
+- CLI package identity validation passed:
+  - `pnpm --filter @wjptz/suncode-core test`
+  - `pnpm --filter @wjptz/suncode test`
+  - `pnpm --dir packages/cli run typecheck`
+  - `pnpm test`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - built CLI smoke tests for `suncode --version`, `suncode --help`,
+    `suncode init --help`, and `suncode update --help`
+  - `node packages/cli/scripts/release-preflight.js check-versions`
+  - `node packages/cli/scripts/release-preflight.js verify-packed-cli`
+- `node packages/cli/scripts/release-preflight.js publish-plan` was attempted
+  and failed on an external npm registry timeout while checking
+  `@wjptz/suncode-core@0.6.5`; this is not a local package/build failure.
+
+## Follow-Up Work
+
+The planning task is complete. Remaining implementation phases should be opened
+as new child tasks when the user chooses to continue:
+
+- `suncode-agent-interactions`
+- `suncode-docs-marketplace-forks`
+- `suncode-persistence-isolation`
+- `suncode-release-hardening`
 
 ## Validation Plan
 

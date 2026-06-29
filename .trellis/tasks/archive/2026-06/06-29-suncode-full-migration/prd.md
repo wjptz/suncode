@@ -92,21 +92,21 @@ user's existing Trellis installation or `.trellis` project content.
 
 ## Acceptance Criteria
 
-- [ ] A staged migration plan exists with clear phase boundaries, risks,
+- [x] A staged migration plan exists with clear phase boundaries, risks,
       validation commands, and rollback points.
-- [ ] The plan identifies which work stays in the main repository and which work
+- [x] The plan identifies which work stays in the main repository and which work
       belongs in the `docs-site` and `marketplace` repositories.
-- [ ] The plan states that Suncode and Trellis are independent products, not an
+- [x] The plan states that Suncode and Trellis are independent products, not an
       upgrade path where Suncode converts Trellis content.
-- [ ] The plan includes a release strategy for package names, docs changelog
+- [x] The plan includes a release strategy for package names, docs changelog
       requirements, and marketplace template source changes.
-- [ ] The plan includes a concrete Suncode persistence approach using
+- [x] The plan includes a concrete Suncode persistence approach using
       `.suncode`, `SUNCODE_*`, and Suncode markers, with explicit tests that
       `.trellis` content is not converted or modified.
-- [ ] The plan includes validation for package build/test, template generation,
+- [x] The plan includes validation for package build/test, template generation,
       init/update smoke tests, docs changelog guard, and marketplace template
       fetching.
-- [ ] User reviews and approves the final planning artifacts before code
+- [x] User reviews and approves the final planning artifacts before code
       implementation starts.
 
 ## Out of Scope
