@@ -1,0 +1,29 @@
+{
+  "id": "suncode-full-migration",
+  "name": "suncode-full-migration",
+  "title": "Plan staged Suncode migration",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": "repo-wide",
+  "package": "cli",
+  "priority": "P2",
+  "creator": "kangmeng",
+  "assignee": "kangmeng",
+  "createdAt": "2026-06-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-29-suncode-public-branding",
+    "06-29-suncode-cli-package-identity"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

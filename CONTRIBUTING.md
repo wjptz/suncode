@@ -1,15 +1,15 @@
-# Contributing to Trellis
+# Contributing to Suncode
 
-Thanks for your interest in contributing to Trellis! This document provides guidelines for contributing to the project.
+Thanks for your interest in contributing to Suncode! This document provides guidelines for contributing to the project.
 
 ## Ways to Contribute
 
 ### Reporting Bugs
 
-Before creating a bug report, please check [existing issues](https://github.com/mindfold-ai/Trellis/issues) to avoid duplicates.
+Before creating a bug report, please check [existing issues](https://github.com/wjptz/suncode/issues) to avoid duplicates.
 
 When reporting a bug, include:
-- Trellis version (`trellis --version`)
+- Suncode version (`suncode --version`)
 - Node.js version (`node --version`)
 - Operating system
 - Steps to reproduce
@@ -53,8 +53,8 @@ Code contributions are welcome for:
 
 2. **Clone your fork**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/Trellis.git
-   cd Trellis
+   git clone https://github.com/YOUR_USERNAME/suncode.git
+   cd suncode
    ```
 
 3. **Install dependencies**
@@ -81,7 +81,7 @@ pnpm typecheck   # TypeScript type checking
 ## Project Structure
 
 ```
-Trellis/
+Suncode/
 ├── src/                    # TypeScript source code
 │   ├── cli/                # CLI entry point
 │   ├── commands/           # CLI commands (init, update)
@@ -92,7 +92,7 @@ Trellis/
 │   ├── agents/             # Agent definitions
 │   ├── commands/           # Slash commands
 │   └── hooks/              # Python hook scripts
-├── .trellis/               # Trellis workflow (project's own) ←
+├── .trellis/               # Current project workflow during migration ←
 │   ├── scripts/            # Bash scripts
 │   └── spec/               # Spec file templates
 └── docs/                   # Documentation
@@ -151,4 +151,4 @@ docs(readme): update quick start instructions
 
 ## Thank You
 
-Every contribution helps make Trellis better. We appreciate your time and effort!
+Every contribution helps make Suncode better. We appreciate your time and effort!
