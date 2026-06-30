@@ -90,6 +90,22 @@ docs/
 
 ---
 
+## Local Dependency Install
+
+`docs-site/` lives inside the main Suncode monorepo but is not listed in the
+root `pnpm-workspace.yaml`. When installing docs-site dependencies from this
+checkout, run pnpm in standalone mode:
+
+```bash
+pnpm install --frozen-lockfile --ignore-workspace
+```
+
+Without `--ignore-workspace`, pnpm walks up to the parent workspace and installs
+the root packages instead. The symptom is `pnpm lint` failing with `eslint: not
+found` and a warning that `node_modules` is missing in `docs-site/`.
+
+---
+
 ## Naming Conventions
 
 ### Files
