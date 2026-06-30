@@ -3,6 +3,7 @@ import {
   getPythonCommandForPlatform,
   replacePythonCommandLiterals,
   resolveAllAsSkillsNeutral,
+  resolveBundledSkills,
   resolvePlaceholders,
   resolvePlaceholdersNeutral,
   resolveSkillsNeutral,
@@ -565,5 +566,22 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
       const match = allShared.find((s) => s.name === skill.name);
       expect(match?.content).toBe(skill.content);
     }
+  });
+});
+
+describe("resolveBundledSkills", () => {
+  it("includes Hub collaboration skills for every platform skill root", () => {
+    const bundled = resolveBundledSkills(AI_TOOLS.codex.templateContext);
+    const files = bundled.map((file) => file.relativePath);
+
+    expect(files).toContain("suncode-hub-requirements/SKILL.md");
+    expect(files).toContain("suncode-hub-finish/SKILL.md");
+
+    const requirements = bundled.find(
+      (file) => file.relativePath === "suncode-hub-requirements/SKILL.md",
+    );
+    expect(requirements?.content).toContain("SUNCODE_HUB_TOKEN");
+    expect(requirements?.content).toContain("MinIO");
+    expect(requirements?.content).toContain("suncode hub create-task");
   });
 });

@@ -176,8 +176,23 @@ def _is_true_config_value(value: object) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value.strip().lower() == "true"
+        return value.strip().lower() in ("true", "yes", "1", "on")
     return False
+
+
+def _config_bool(value: object, default: bool = False) -> bool:
+    """Parse common YAML-style booleans with a default fallback."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("true", "yes", "1", "on"):
+            return True
+        if normalized in ("false", "no", "0", "off"):
+            return False
+    return default
 
 
 def _get_config_path(repo_root: Path | None = None) -> Path:
@@ -254,13 +269,67 @@ def get_hooks(event: str, repo_root: Path | None = None) -> list[str]:
         List of shell commands to execute, empty if none configured.
     """
     config = _load_config(repo_root)
+    result: list[str] = []
     hooks = config.get("hooks")
-    if not isinstance(hooks, dict):
+    if isinstance(hooks, dict):
+        commands = hooks.get(event)
+        if isinstance(commands, list):
+            result.extend(str(c) for c in commands)
+
+    for command in _get_implicit_hub_hooks(config, event):
+        if command not in result:
+            result.append(command)
+
+    return result
+
+
+def _get_implicit_hub_hooks(config: dict, event: str) -> list[str]:
+    """Return built-in Hub lifecycle hooks for team Hub projects.
+
+    These hooks are opt-in through ``hub.enabled: true``. They keep ordinary
+    local Suncode projects free from Hub process launches while making team
+    projects automatic after configuration.
+    """
+    hub = config.get("hub")
+    if not isinstance(hub, dict):
         return []
-    commands = hooks.get(event)
-    if isinstance(commands, list):
-        return [str(c) for c in commands]
-    return []
+    if not _is_true_config_value(hub.get("enabled")):
+        return []
+    mode = str(hub.get("mode", "team")).strip().lower()
+    if mode != "team":
+        return []
+
+    sync = hub.get("sync")
+    sync_config = sync if isinstance(sync, dict) else {}
+    defaults = {
+        "after_create": True,
+        "after_start": True,
+        "after_finish": False,
+        "after_archive": True,
+    }
+    enabled = _config_bool(
+        sync_config.get(_hub_sync_key(event)),
+        defaults.get(event, False),
+    )
+    if not enabled:
+        return []
+
+    commands = {
+        "after_create": 'suncode hub create-task --task-json "$TASK_JSON_PATH" --best-effort',
+        "after_start": 'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
+        "after_archive": 'suncode hub submit-completion --task-json "$TASK_JSON_PATH" --best-effort',
+    }
+    command = commands.get(event)
+    return [command] if command else []
+
+
+def _hub_sync_key(event: str) -> str:
+    return {
+        "after_create": "afterCreate",
+        "after_start": "afterStart",
+        "after_finish": "afterFinish",
+        "after_archive": "afterArchive",
+    }.get(event, event)
 
 
 # =============================================================================

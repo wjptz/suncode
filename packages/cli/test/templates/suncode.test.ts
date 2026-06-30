@@ -22,6 +22,7 @@ import {
   getContextScript,
   addSessionScript,
   workflowMdTemplate,
+  configYamlTemplate,
   gitignoreTemplate,
   getAllScripts,
   getAllAgents,
@@ -50,6 +51,7 @@ describe("suncode template constants", () => {
     getContextScript,
     addSessionScript,
     workflowMdTemplate,
+    configYamlTemplate,
     gitignoreTemplate,
   };
 
@@ -301,6 +303,18 @@ describe("suncode template constants", () => {
   it("gitignoreTemplate contains ignore patterns", () => {
     expect(gitignoreTemplate).toContain(".developer");
     expect(gitignoreTemplate).toContain("__pycache__");
+  });
+
+  it("config.yaml documents Hub as disabled by default with JWT and MinIO boundaries", () => {
+    expect(configYamlTemplate).toContain("Suncode Hub Team Collaboration");
+    expect(configYamlTemplate).toContain("#   enabled: false");
+    expect(configYamlTemplate).toContain("SUNCODE_HUB_TOKEN");
+    expect(configYamlTemplate).toContain("MinIO presigned URLs");
+    expect(configYamlTemplate).toContain("afterCreate: true");
+    expect(configYamlTemplate).toContain("afterStart: true");
+    expect(configYamlTemplate).toContain("afterArchive: true");
+    expect(configYamlTemplate).toContain("built-in lifecycle");
+    expect(configYamlTemplate).toContain("after_finish only clears the active task");
   });
 });
 

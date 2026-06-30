@@ -189,6 +189,74 @@ def _default_prd_content(title: str, description: str | None = None) -> str:
 """
 
 
+def _hub_meta_from_args(args: argparse.Namespace) -> dict[str, object]:
+    """Build optional Hub metadata from task.py create arguments."""
+    hub: dict[str, object] = {}
+    if getattr(args, "hub_project_id", None):
+        hub["projectId"] = args.hub_project_id
+    if getattr(args, "hub_developer_id", None):
+        hub["developerId"] = args.hub_developer_id
+    if getattr(args, "hub_requirement_id", None):
+        hub["requirementId"] = args.hub_requirement_id
+    if getattr(args, "hub_requirement_revision", None) is not None:
+        hub["requirementRevision"] = args.hub_requirement_revision
+    if getattr(args, "hub_task_role", None):
+        hub["taskRole"] = args.hub_task_role
+    if getattr(args, "hub_parent_local_task_id", None):
+        hub["parentLocalTaskId"] = args.hub_parent_local_task_id
+    if getattr(args, "hub_parent_remote_task_id", None):
+        hub["parentRemoteTaskId"] = args.hub_parent_remote_task_id
+    if hub:
+        hub.setdefault("taskRole", "single")
+        hub.setdefault("bindingStatus", "pending")
+    return hub
+
+
+def _task_hub_meta(task_data: dict) -> dict:
+    """Return task_data.meta.hub when it is a dict, otherwise empty dict."""
+    meta = task_data.get("meta")
+    if not isinstance(meta, dict):
+        return {}
+    hub = meta.get("hub")
+    if not isinstance(hub, dict):
+        return {}
+    return hub
+
+
+def _apply_parent_hub_defaults(
+    child_task_data: dict,
+    parent_task_data: dict,
+    parent_dir_name: str,
+) -> None:
+    """Inherit Hub requirement identity for child tasks.
+
+    Explicit child Hub args win. Parent values fill only missing fields so a
+    caller can override developer/task role details intentionally.
+    """
+    parent_hub = _task_hub_meta(parent_task_data)
+    if not parent_hub.get("requirementId"):
+        return
+
+    meta = child_task_data.setdefault("meta", {})
+    if not isinstance(meta, dict):
+        meta = {}
+        child_task_data["meta"] = meta
+    child_hub = meta.setdefault("hub", {})
+    if not isinstance(child_hub, dict):
+        child_hub = {}
+        meta["hub"] = child_hub
+
+    for key in ("projectId", "developerId", "requirementId", "requirementRevision"):
+        if key not in child_hub and key in parent_hub:
+            child_hub[key] = parent_hub[key]
+
+    child_hub.setdefault("taskRole", "child")
+    child_hub.setdefault("parentLocalTaskId", parent_dir_name)
+    if parent_hub.get("remoteTaskId") and not child_hub.get("parentRemoteTaskId"):
+        child_hub["parentRemoteTaskId"] = parent_hub["remoteTaskId"]
+    child_hub.setdefault("bindingStatus", "pending")
+
+
 # =============================================================================
 # Command: create
 # =============================================================================
@@ -262,6 +330,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     _, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
     current_branch = branch_out.strip() or "main"
 
+    hub_meta = _hub_meta_from_args(args)
     task_data = {
         "id": slug,
         "name": slug,
@@ -286,7 +355,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "parent": None,
         "relatedFiles": [],
         "notes": "",
-        "meta": {},
+        "meta": {"hub": hub_meta} if hub_meta else {},
     }
 
     write_json(task_json_path, task_data)
@@ -328,6 +397,7 @@ def cmd_create(args: argparse.Namespace) -> int:
 
                 # Set parent in child's task.json
                 task_data["parent"] = parent_dir.name
+                _apply_parent_hub_defaults(task_data, parent_data, parent_dir.name)
                 write_json(task_json_path, task_data)
 
                 print(colored(f"Linked as child of: {parent_dir.name}", Colors.GREEN), file=sys.stderr)

@@ -307,6 +307,7 @@ Usage:
   python3 task.py create <title>                     Create new task directory
   python3 task.py create <title> --package <pkg>     Create task for a specific package
   python3 task.py create <title> --parent <dir>      Create task as child of parent
+  python3 task.py create <title> --hub-requirement-id <id>  Create task bound to Hub requirement metadata
   python3 task.py add-context <dir> <jsonl> <path> [reason]  Add entry to jsonl
   python3 task.py validate <dir>                     Validate jsonl files
   python3 task.py list-context <dir>                 List jsonl entries
@@ -324,6 +325,9 @@ Usage:
 
 Monorepo options:
   --package <pkg>      Package name (validated against config.yaml packages)
+  --hub-requirement-id <id>        Hub requirement ID to store in task.json meta.hub
+  --hub-requirement-revision <n>   Hub requirement revision to store in task.json meta.hub
+  --hub-task-role <role>           Hub task role: single, parent, or child
 
 List options:
   --mine, -m           Show only tasks assigned to current developer
@@ -332,6 +336,7 @@ List options:
 Examples:
   python3 task.py create "Add login feature" --slug add-login
   python3 task.py create "Add login feature" --slug add-login --package cli
+  python3 task.py create "Hub feature" --slug hub-feature --hub-requirement-id REQ-1001 --hub-requirement-revision 7
   python3 task.py create "Child task" --slug child --parent .suncode/tasks/01-21-parent
   python3 task.py add-context <dir> implement .suncode/spec/cli/backend/auth.md "Auth guidelines"
   python3 task.py set-branch <dir> task/add-login
@@ -398,6 +403,17 @@ def main() -> int:
     p_create.add_argument("--description", "-d", help="Task description")
     p_create.add_argument("--parent", help="Parent task directory (establishes subtask link)")
     p_create.add_argument("--package", help="Package name for monorepo projects")
+    p_create.add_argument("--hub-project-id", help="Hub project ID to store in task metadata")
+    p_create.add_argument("--hub-developer-id", help="Hub developer ID to store in task metadata")
+    p_create.add_argument("--hub-requirement-id", help="Hub requirement ID to store in task metadata")
+    p_create.add_argument("--hub-requirement-revision", type=int, help="Hub requirement revision to store in task metadata")
+    p_create.add_argument(
+        "--hub-task-role",
+        choices=("single", "parent", "child"),
+        help="Hub task role for requirement binding",
+    )
+    p_create.add_argument("--hub-parent-local-task-id", help="Parent local task ID for Hub child tasks")
+    p_create.add_argument("--hub-parent-remote-task-id", help="Parent remote Hub task ID for Hub child tasks")
 
     # add-context
     p_add = subparsers.add_parser("add-context", help="Add context entry")

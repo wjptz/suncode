@@ -51,6 +51,42 @@ max_journal_lines: 2000
 #     - "echo 'Task archived'"
 
 #-------------------------------------------------------------------------------
+# Suncode Hub Team Collaboration
+#-------------------------------------------------------------------------------
+
+# Optional team Hub integration. Disabled by default; ordinary local Suncode
+# projects do not contact Hub and do not need SUNCODE_HUB_TOKEN.
+#
+# Authentication uses JWT from the SUNCODE_HUB_TOKEN environment variable.
+# Do not put JWTs, API keys, MinIO access keys, or MinIO secret keys in this
+# file. Long document upload/download uses Hub-signed MinIO presigned URLs.
+#
+# hub:
+#   enabled: false
+#   mode: team
+#   projectId: null
+#   # Optional. If omitted, Suncode uses .suncode/.developer name as developerId.
+#   developerId: null
+#   apiBaseUrl: null
+#   # confirm: allow starting before approval only after explicit user confirmation
+#   # block: require Hub review approval before starting
+#   # bypass: skip review-state gating
+#   startReviewPolicy: confirm
+#   sync:
+#     afterCreate: true
+#     afterStart: true
+#     afterFinish: false
+#     afterArchive: true
+#
+# When hub.enabled is true and mode is team, Suncode adds built-in lifecycle
+# sync hooks for create/start/archive according to hub.sync. You can still add
+# ordinary hooks: entries under hooks.after_* run together with the built-in Hub
+# hooks.
+#
+# Note: after_finish only clears the active task in Suncode; it is not the final
+# task-completion signal. Use submit-completion explicitly or via after_archive.
+
+#-------------------------------------------------------------------------------
 # Monorepo / Packages
 #-------------------------------------------------------------------------------
 

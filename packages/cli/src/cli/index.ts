@@ -12,6 +12,7 @@ import {
   WorkflowCommandError,
 } from "../commands/workflow.js";
 import { registerChannelCommand } from "../commands/channel/index.js";
+import { registerHubCommand } from "../commands/hub/index.js";
 import { DIR_NAMES } from "../constants/paths.js";
 import { PACKAGE_NAME, VERSION } from "../constants/version.js";
 import { compareVersions } from "../utils/compare-versions.js";
@@ -298,5 +299,6 @@ program
   });
 
 registerChannelCommand(program);
+registerHubCommand(program);
 
 program.parse();
