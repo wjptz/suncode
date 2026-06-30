@@ -722,7 +722,84 @@ Hub 成功响应：
 }
 ```
 
-## 8. 更新任务状态
+## 8. 提交结构化子任务
+
+```http
+POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/subtasks
+Idempotency-Key: hub:submit-subtasks:{remoteTaskId}:{subtasksHash}
+```
+
+用途：`after_start -> suncode hub submit-subtasks`，把当前 task 的实施步骤转换成 Hub 可结构化展示的子任务列表。
+
+该接口是控制面 JSON 提交，不走 MinIO，也不接收 `prd.md`、`design.md`、`implement.md` 正文。
+
+本地输入文件：
+
+```text
+.suncode/tasks/{task}/subtasks.json
+```
+
+文件格式：
+
+```json
+{
+  "version": 1,
+  "subtasks": [
+    {
+      "priority": "P1",
+      "name": "Implement API contract",
+      "description": "Add the command/API changes needed for the reviewed task."
+    }
+  ]
+}
+```
+
+请求：
+
+```json
+{
+  "developerId": "dev_456",
+  "requirementId": "REQ-1001",
+  "requirementRevision": 8,
+  "localTaskId": "06-30-payment-retry",
+  "localTaskPath": ".suncode/tasks/06-30-payment-retry",
+  "subtasksHash": "subtasks_sha256",
+  "subtasks": [
+    {
+      "priority": "P1",
+      "name": "Implement API contract",
+      "description": "Add the command/API changes needed for the reviewed task."
+    }
+  ]
+}
+```
+
+响应：
+
+```json
+{
+  "submission": {
+    "id": "SUBTASKS-5001",
+    "remoteRevision": 2,
+    "createdAt": "2026-06-30T12:00:00Z"
+  },
+  "subtasks": [
+    {
+      "remoteSubtaskId": "SUBTASK-1",
+      "name": "Implement API contract"
+    }
+  ]
+}
+```
+
+约束：
+
+- Hub 应用 `subtasksHash` 和 `Idempotency-Key` 保证重复调用不重复创建远端子任务。
+- 每个子任务必须包含非空 `priority`、`name`、`description`。
+- 这些子任务用于 Hub 展示和协作跟踪，不等同于 Suncode 本地 parent/child task 目录。
+- Suncode CLI 只读取当前目标 task 的 `subtasks.json`，不扫描 sibling task。
+
+## 9. 更新任务状态
 
 ```http
 PATCH /api/v1/projects/{projectId}/tasks/{remoteTaskId}/status
@@ -755,7 +832,7 @@ Idempotency-Key: hub:mark-started:{remoteTaskId}:{localTaskStatusRevision}
 }
 ```
 
-## 9. 提交 spec 变更
+## 10. 提交 spec 变更
 
 ```http
 POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/spec-submissions
@@ -822,7 +899,7 @@ Idempotency-Key: hub:submit-spec:{remoteTaskId}:{specBundleHash}
 }
 ```
 
-## 10. 提交任务完成材料
+## 11. 提交任务完成材料
 
 ```http
 POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/completion-submissions
@@ -882,7 +959,7 @@ Idempotency-Key: hub:submit-completion:{remoteTaskId}:{completionBundleHash}
 }
 ```
 
-## 11. 查询远端任务
+## 12. 查询远端任务
 
 ```http
 GET /api/v1/projects/{projectId}/tasks/{remoteTaskId}
@@ -908,7 +985,7 @@ GET /api/v1/projects/{projectId}/tasks/{remoteTaskId}
 }
 ```
 
-## 12. 通过本地 task 查询远端绑定
+## 13. 通过本地 task 查询远端绑定
 
 ```http
 GET /api/v1/projects/{projectId}/tasks/by-local-id/{localTaskId}
@@ -943,6 +1020,7 @@ GET /api/v1/projects/{projectId}/tasks/by-local-id/{localTaskId}
 | `suncode hub pull-review` | `GET /tasks/{remoteTaskId}/reviews`；文档型审核附件再调用 `download-document` |
 | `suncode hub sync` | `GET /requirements/{requirementId}` + `GET /requirements/{requirementId}/changes`；文档型变更再调用 `download-document` |
 | `suncode hub preflight-start` | `POST /projects/{projectId}/tasks/{remoteTaskId}/preflight-start` |
+| `suncode hub submit-subtasks` | `POST /projects/{projectId}/tasks/{remoteTaskId}/subtasks` |
 | `suncode hub mark-started` | `PATCH /projects/{projectId}/tasks/{remoteTaskId}/status` |
 | `suncode hub submit-spec` | `POST /artifact-upload-sessions` + MinIO PUT + `POST /tasks/{remoteTaskId}/spec-submissions` |
 | `suncode hub submit-completion` | `POST /artifact-upload-sessions` + MinIO PUT + `POST /tasks/{remoteTaskId}/completion-submissions` |
@@ -953,6 +1031,7 @@ GET /api/v1/projects/{projectId}/tasks/by-local-id/{localTaskId}
 - 必须支持幂等键。
 - 必须能签发 MinIO 预签名上传/下载 URL。
 - 必须保存 artifact 的 `path`、`type`、`sha256`、`size`、`remoteRevision`、`objectRef`。
+- 必须保存结构化子任务的 `priority`、`name`、`description`，并按 `subtasksHash` 幂等更新。
 - 必须在 submission 时校验 MinIO 对象存在，并校验对象 hash。
 - 必须支持 requirement revision 冲突检测。
 - 必须支持 review cursor 和 change cursor。

@@ -100,6 +100,9 @@ export interface HubManifest {
   planRevision?: number;
   lastPlanSubmissionId?: string;
   lastPlanBundleHash?: string;
+  lastSubtasksSubmissionId?: string;
+  lastSubtasksHash?: string;
+  lastSubtasksRevision?: number;
   lastSpecBundleHash?: string;
   lastCompletionBundleHash?: string;
   reviewCursor?: string;

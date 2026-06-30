@@ -49,6 +49,7 @@ suncode hub preflight-start
 
 task.py start
   -> after_start (hub.enabled=true 时内置 sync hook)
+    -> suncode hub submit-subtasks --task-json "$TASK_JSON_PATH"
     -> suncode hub mark-started --task-json "$TASK_JSON_PATH"
 
 finish-work skill
@@ -75,7 +76,7 @@ Hub 协作分三层：
 | --- | --- | --- |
 | Skill | 编排需要 AI 判断、文档产出或多轮交互的语义流程 | 拉取需求并创建 task、生成经验总结 |
 | CLI 命令 | 执行可幂等的本地状态更新和 Hub API 调用 | `suncode hub submit-plan`、`suncode hub preflight-start` |
-| Hook | 在 Suncode 生命周期事件后自动补充通知或同步 | `after_create` 自动绑定远端 task、`after_start` 标记开发开始 |
+| Hook | 在 Suncode 生命周期事件后自动补充通知或同步 | `after_create` 自动绑定远端 task、`after_start` 上传结构化子任务并标记开发开始 |
 
 设计原则：
 
@@ -639,6 +640,36 @@ AI 行为：
 
 成功后 exit 0；失败 exit 1，阻止 AI 继续 `task.py start`。
 
+### `suncode hub submit-subtasks`
+
+读取目标 task 目录下的 `subtasks.json`，把当前任务的实施步骤提交为 Hub 结构化子任务。该命令是控制面 JSON 提交，不走 MinIO，不读取其他 task 目录。
+
+`subtasks.json` 格式：
+
+```json
+{
+  "version": 1,
+  "subtasks": [
+    {
+      "priority": "P1",
+      "name": "Implement API contract",
+      "description": "Add the command/API changes needed for the reviewed task."
+    }
+  ]
+}
+```
+
+行为：
+
+1. Hub disabled：exit 0，输出 skipped。
+2. task 未绑定远端：skipped。
+3. `subtasks.json` 不存在或 `subtasks` 为空：skipped。
+4. 每个条目必须有非空 `priority`、`name`、`description`。
+5. 使用规范化后的 `subtasksHash` 做幂等，hash 未变时 no-op。
+6. 成功后更新 task 级 `hub-manifest.json` 的 `lastSubtasksHash`、`lastSubtasksSubmissionId`、`lastSubtasksRevision`。
+
+`after_start` 中该命令应排在 `mark-started` 之前，确保 Hub 可以先看到结构化子任务，再看到主任务进入开发中。
+
 ### `suncode hub mark-started`
 
 `after_start` 自动调用，通知 Hub 本地 task 已进入 `in_progress`。这是状态通知，不是开发前 gate。
@@ -692,6 +723,9 @@ hub:preflight-start:{remoteTaskId}:{requirementRevision}:{artifactBundleHash}:re
 
 mark-started:
 hub:mark-started:{remoteTaskId}:{localTaskStatusRevision}
+
+submit-subtasks:
+hub:submit-subtasks:{remoteTaskId}:{subtasksHash}
 
 submit-spec:
 hub:submit-spec:{remoteTaskId}:{specBundleHash}

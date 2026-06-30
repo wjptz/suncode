@@ -160,6 +160,7 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 - `prd.md` — requirements, constraints, and acceptance criteria. Do not put technical design or execution checklists here.
 - `design.md` — technical design for complex tasks: boundaries, contracts, data flow, tradeoffs, compatibility, rollout / rollback shape.
 - `implement.md` — execution plan for complex tasks: ordered checklist, validation commands, review gates, and rollback points.
+- `subtasks.json` — optional structured execution map for local display; required for Hub team projects before start so Hub can show main task -> subtask structure.
 - `implement.jsonl` / `check.jsonl` — spec and research manifests for sub-agent context. They do not replace `implement.md`.
 - Lightweight tasks may be PRD-only. Complex tasks must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
 
@@ -184,14 +185,16 @@ Complex task: ask the user if you can create a Suncode task and enter the planni
 - 1.1 Requirement exploration `[required · repeatable]` (`prd.md`; complex tasks also need `design.md` + `implement.md`)
 - 1.2 Research `[optional · repeatable]`
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix (sub-agent-dispatch platforms only; inline platforms skip)
-- 1.4 Activate task `[required · once]` (review gate, then `task.py start`; status → in_progress)
-- 1.5 Completion criteria
+- 1.4 Structure subtasks `[required for Hub team projects · once]` (`subtasks.json`)
+- 1.5 Activate task `[required · once]` (review gate, then `task.py start`; status → in_progress)
+- 1.6 Completion criteria
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
+Hub team project: convert the reviewed `implement.md` steps into `subtasks.json` before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
@@ -205,6 +208,7 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
 [workflow-state:planning-inline]
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
+Hub team project: convert the reviewed `implement.md` steps into `subtasks.json` before `task.py start`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `suncode-before-dev`.
 [/workflow-state:planning-inline]
@@ -323,7 +327,7 @@ For task trees, create the parent task first and then create each child with `--
 
 After this command succeeds, the per-turn breadcrumb auto-switches to `[workflow-state:planning]`, telling the AI to stay in planning.
 
-Run only `create` here — do not also run `start`. `start` flips status to `in_progress`, which switches the breadcrumb to the implementation phase before planning artifacts are reviewed. Save `start` for step 1.4.
+Run only `create` here — do not also run `start`. `start` flips status to `in_progress`, which switches the breadcrumb to the implementation phase before planning artifacts are reviewed. Save `start` for step 1.5.
 
 Skip when `python3 ./.suncode/scripts/task.py current --source` already points to a task.
 
@@ -433,7 +437,40 @@ Skip this step. Context is loaded directly by the `suncode-before-dev` skill in 
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
-#### 1.4 Activate task `[required · once]`
+#### 1.4 Structure subtasks `[required for Hub team projects · once]`
+
+For Hub team projects, convert the reviewed `implement.md` execution steps into `{TASK_DIR}/subtasks.json` before starting implementation. This file is for structured Hub display and must describe the current task only.
+
+Required format:
+
+```json
+{
+  "version": 1,
+  "subtasks": [
+    {
+      "priority": "P1",
+      "name": "Implement API contract",
+      "description": "Add the command/API changes needed for the reviewed task."
+    }
+  ]
+}
+```
+
+Rules:
+- Keep each subtask small enough to be understandable in Hub.
+- Use `priority`, `name`, and `description` only for each item.
+- Derive the list from the current task's `implement.md`; do not include sibling task work.
+- Local-only projects may skip this file.
+
+When `task.py start` runs in a Hub team project, the built-in `after_start` hook uploads this file with:
+
+```bash
+suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort
+```
+
+Then it marks the Hub task as started.
+
+#### 1.5 Activate task `[required · once]`
 
 After artifact review, flip the task status to `in_progress`:
 
@@ -447,7 +484,7 @@ After this command succeeds, the breadcrumb auto-switches to `[workflow-state:in
 
 If `task.py start` errors with a session-identity message (no context key from hook input, `SUNCODE_CONTEXT_ID`, or platform-native session env), follow the hint in the error to set up session identity, then retry.
 
-#### 1.5 Completion criteria
+#### 1.6 Completion criteria
 
 | Condition | Required |
 |------|:---:|
@@ -457,6 +494,7 @@ If `task.py start` errors with a session-identity message (no context key from h
 | `research/` has artifacts (complex tasks) | recommended |
 | `design.md` exists (complex tasks) | ✅ |
 | `implement.md` exists (complex tasks) | ✅ |
+| `subtasks.json` exists (Hub team projects) | ✅ |
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 

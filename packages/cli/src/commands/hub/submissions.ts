@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { createHubApiClient } from "./client.js";
 import { resolveHubConfig } from "./config.js";
 import {
@@ -6,7 +9,7 @@ import {
   collectSpecArtifacts,
   filterChangedArtifacts,
 } from "./artifacts.js";
-import { hashArtifactBundle } from "./hash.js";
+import { hashArtifactBundle, hashText } from "./hash.js";
 import {
   loadHubManifest,
   loadProjectSpecManifest,
@@ -37,6 +40,12 @@ export interface SubmitSpecOptions extends SubmitArtifactsOptions {
   files?: readonly string[];
 }
 
+export interface HubStructuredSubtask {
+  priority: string;
+  name: string;
+  description: string;
+}
+
 interface UploadSessionResponse {
   uploadSession: {
     id: string;
@@ -61,6 +70,18 @@ interface SubmissionResponse {
     sha256: string;
     storage?: "minio";
     objectRef?: UploadedArtifact["objectRef"];
+  }[];
+}
+
+interface SubtasksSubmissionResponse {
+  submission?: {
+    id: string;
+    remoteRevision?: number;
+    createdAt?: string;
+  };
+  subtasks?: {
+    remoteSubtaskId?: string;
+    name: string;
   }[];
 }
 
@@ -93,6 +114,81 @@ export async function submitCompletion(
     collect: (cwd, taskJsonPath) =>
       collectCompletionArtifacts({ cwd, taskJsonPath }),
   });
+}
+
+export async function submitSubtasks(
+  options: SubmitArtifactsOptions,
+): Promise<HubCommandResult> {
+  const cwd = options.cwd ?? process.cwd();
+  const config = resolveHubConfig({
+    cwd,
+    env: options.env,
+    requireAuth: true,
+  });
+  if (!config.enabled) {
+    return { status: "disabled", message: config.reason };
+  }
+
+  const task = readHubTask(options.taskJsonPath, cwd);
+  const manifest = loadHubManifest(task.taskDir);
+  const remoteTaskId = task.meta.remoteTaskId ?? manifest.remoteTaskId;
+  if (!remoteTaskId) {
+    return {
+      status: "skipped",
+      message: "Task is not bound to a remote Hub task.",
+    };
+  }
+
+  const subtasks = readStructuredSubtasks(task.taskDir);
+  if (subtasks.length === 0) {
+    return { status: "skipped", message: "No structured subtasks found." };
+  }
+
+  const subtasksHash = hashText(JSON.stringify({ version: 1, subtasks }));
+  if (!options.force && manifest.lastSubtasksHash === subtasksHash) {
+    return { status: "skipped", message: "No changed subtasks." };
+  }
+
+  const client = createHubApiClient(config, options.fetch);
+  const submission = await client.requestJson<SubtasksSubmissionResponse>(
+    "POST",
+    `/projects/${encodeURIComponent(config.projectId)}/tasks/${encodeURIComponent(remoteTaskId)}/subtasks`,
+    {
+      developerId: task.meta.developerId ?? config.developerId,
+      requirementId: task.meta.requirementId ?? manifest.requirementId,
+      requirementRevision:
+        task.meta.requirementRevision ?? manifest.requirementRevision,
+      localTaskId: task.localTaskId,
+      localTaskPath: task.localTaskPath,
+      subtasksHash,
+      subtasks,
+    },
+    ["hub:submit-subtasks", remoteTaskId, subtasksHash].join(":"),
+  );
+
+  syncManifestTaskBinding(manifest, {
+    projectId: config.projectId,
+    requirementId: task.meta.requirementId ?? manifest.requirementId,
+    requirementRevision:
+      task.meta.requirementRevision ?? manifest.requirementRevision,
+    remoteTaskId,
+    taskRole: task.meta.taskRole ?? manifest.taskRole,
+    parentRemoteTaskId:
+      task.meta.parentRemoteTaskId ?? manifest.parentRemoteTaskId ?? null,
+  });
+  manifest.lastSubtasksHash = subtasksHash;
+  if (submission.submission?.id) {
+    manifest.lastSubtasksSubmissionId = submission.submission.id;
+  }
+  if (submission.submission?.remoteRevision !== undefined) {
+    manifest.lastSubtasksRevision = submission.submission.remoteRevision;
+  }
+  saveHubManifest(task.taskDir, manifest);
+
+  return {
+    status: "submitted",
+    message: `subtasks submitted (${subtasks.length} subtask(s)).`,
+  };
 }
 
 async function submitArtifacts(
@@ -458,4 +554,44 @@ function currentHashes(
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readStructuredSubtasks(taskDir: string): HubStructuredSubtask[] {
+  const filePath = path.join(taskDir, "subtasks.json");
+  if (!fs.existsSync(filePath)) return [];
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+  const subtasks = extractSubtasks(parsed);
+  return subtasks.map(normalizeSubtask);
+}
+
+function extractSubtasks(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") {
+    throw new Error("subtasks.json must be an object with a subtasks array.");
+  }
+  const subtasks = (value as Record<string, unknown>).subtasks;
+  if (!Array.isArray(subtasks)) {
+    throw new Error("subtasks.json must contain a subtasks array.");
+  }
+  return subtasks;
+}
+
+function normalizeSubtask(value: unknown): HubStructuredSubtask {
+  if (!value || typeof value !== "object") {
+    throw new Error("Each structured subtask must be an object.");
+  }
+  const record = value as Record<string, unknown>;
+  const subtask = {
+    priority: requiredString(record.priority, "priority"),
+    name: requiredString(record.name, "name"),
+    description: requiredString(record.description, "description"),
+  };
+  return subtask;
+}
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Each structured subtask must include a non-empty ${field}.`);
+  }
+  return value.trim();
 }

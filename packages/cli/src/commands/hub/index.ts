@@ -10,6 +10,7 @@ import {
   submitCompletion,
   submitPlan,
   submitSpec,
+  submitSubtasks,
 } from "./submissions.js";
 import { resolveTaskJsonPath } from "./task.js";
 import type { HubCommandResult } from "./types.js";
@@ -117,6 +118,28 @@ export function registerHubCommand(program: Command): void {
       await run(
         async () =>
           submitPlan({
+            taskJsonPath: resolveTaskJsonPath({
+              cwd: process.cwd(),
+              taskJsonPath: opts.taskJson,
+              task: opts.task,
+            }),
+            force: opts.force,
+          }),
+        opts.bestEffort,
+      );
+    });
+
+  hub
+    .command("submit-subtasks")
+    .description("Submit current task structured subtasks to Hub")
+    .option("--task-json <path>", "path to task.json")
+    .option("--task <task>", "task directory/name fallback")
+    .option("--force", "submit even when local hashes match the manifest")
+    .option("--best-effort", "warn and exit 0 on failure")
+    .action(async (opts: TaskOptions & { force?: boolean }) => {
+      await run(
+        async () =>
+          submitSubtasks({
             taskJsonPath: resolveTaskJsonPath({
               cwd: process.cwd(),
               taskJsonPath: opts.taskJson,

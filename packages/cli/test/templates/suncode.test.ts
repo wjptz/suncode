@@ -131,6 +131,14 @@ describe("suncode template constants", () => {
     expect(workflowMdTemplate).toContain("#");
   });
 
+  it("workflow asks complex tasks to create structured subtasks before start", () => {
+    expect(workflowMdTemplate).toContain("subtasks.json");
+    expect(workflowMdTemplate).toContain('"priority"');
+    expect(workflowMdTemplate).toContain('"name"');
+    expect(workflowMdTemplate).toContain('"description"');
+    expect(workflowMdTemplate).toContain("suncode hub submit-subtasks");
+  });
+
   it("marketplace native workflow mirror matches the bundled workflow", () => {
     const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
       ? process.cwd()

@@ -25,7 +25,11 @@ import {
   loadHubManifest,
   loadProjectSpecManifest,
 } from "../../src/commands/hub/manifest.js";
-import { submitPlan, submitSpec } from "../../src/commands/hub/submissions.js";
+import {
+  submitPlan,
+  submitSpec,
+  submitSubtasks,
+} from "../../src/commands/hub/submissions.js";
 import {
   HubTaskError,
   resolveTaskJsonPath,
@@ -161,6 +165,22 @@ function createMockFetch(): {
             sha256: artifact.sha256,
             storage: "minio",
             objectRef: artifact.objectRef,
+          }),
+        ),
+      });
+    }
+
+    if (String(url).endsWith("/subtasks")) {
+      return jsonResponse({
+        submission: {
+          id: "SUBTASKS-5001",
+          remoteRevision: 2,
+          createdAt: "2026-06-30T12:00:00Z",
+        },
+        subtasks: (JSON.parse(body ?? "{}").subtasks ?? []).map(
+          (subtask: { name: string }, index: number) => ({
+            remoteSubtaskId: `SUBTASK-${index + 1}`,
+            name: subtask.name,
           }),
         ),
       });
@@ -636,6 +656,98 @@ describe("hub commands", () => {
         ?.lastSubmittedSha256,
     ).toEqual(expect.any(String));
     expect(loadHubManifest(taskDir).artifacts).toEqual({});
+  });
+
+  it("submit-subtasks sends only the current task structured subtasks to Hub", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    writeJson(path.join(taskDir, "subtasks.json"), {
+      version: 1,
+      subtasks: [
+        {
+          priority: "P1",
+          name: "Persist retry policy",
+          description: "Add storage and validation for retry settings.",
+        },
+        {
+          priority: "P2",
+          name: "Expose retry status",
+          description: "Show retry state in task status responses.",
+        },
+      ],
+    });
+    const unrelatedTask = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "06-30-unrelated",
+    );
+    fs.mkdirSync(unrelatedTask, { recursive: true });
+    writeJson(path.join(unrelatedTask, "subtasks.json"), {
+      version: 1,
+      subtasks: [
+        {
+          priority: "P0",
+          name: "Wrong task",
+          description: "This must not be uploaded.",
+        },
+      ],
+    });
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await submitSubtasks({
+      cwd: tmpDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(result.status).toBe("submitted");
+    const submission = calls.find((call) => call.url.endsWith("/subtasks"));
+    expect(submission).toBeDefined();
+    expect(submission?.headers["idempotency-key"]).toMatch(
+      /^hub:submit-subtasks:TASK-2001:/,
+    );
+    expect(JSON.parse(submission?.body ?? "{}")).toMatchObject({
+      developerId: "dev_456",
+      requirementId: "REQ-1001",
+      localTaskId: "06-30-payment-retry",
+      localTaskPath: ".suncode/tasks/06-30-payment-retry",
+      subtasks: [
+        {
+          priority: "P1",
+          name: "Persist retry policy",
+          description: "Add storage and validation for retry settings.",
+        },
+        {
+          priority: "P2",
+          name: "Expose retry status",
+          description: "Show retry state in task status responses.",
+        },
+      ],
+    });
+    expect(submission?.body).not.toContain("Wrong task");
+    expect(loadHubManifest(taskDir).lastSubtasksHash).toEqual(
+      expect.any(String),
+    );
+
+    calls.length = 0;
+    const second = await submitSubtasks({
+      cwd: tmpDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+    expect(second.status).toBe("skipped");
+    expect(calls).toHaveLength(0);
   });
 });
 

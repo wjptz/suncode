@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- MVP CLI、隐式 Hub hooks、Hub 元数据 task 创建、MinIO 上传/下载 helper、两个 Hub skill、中文接口文档和核心测试已实现。
+- MVP CLI、隐式 Hub hooks、Hub 元数据 task 创建、结构化子任务上传、MinIO 上传/下载 helper、两个 Hub skill、中文接口文档和核心测试已实现。
 - `prd.md` / `design.md` / `implement.md` / `research/**` / 完成总结只按当前 task 目录收集，不扫描 sibling task。
 - `spec` 按项目级 `.suncode/spec/**` 收集，状态写入 `.suncode/hub-spec-manifest.json`；当前 task 只作为 Hub 关联上下文。
 - 仍未实现的优化：基于 git diff 缩小 spec 候选集；当前实现是扫描 `.suncode/spec/**` 后按 hash 幂等跳过未变化文件。
@@ -48,6 +48,7 @@
 - [x] 新增 `suncode hub pull-review`。
 - [x] 新增 `suncode hub sync`。
 - [x] 新增 `suncode hub preflight-start`。
+- [x] 新增 `suncode hub submit-subtasks`。
 - [x] 新增 `suncode hub mark-started`。
 - [x] 新增 `suncode hub submit-spec`。
 - [x] 新增 `suncode hub submit-completion`。
@@ -111,6 +112,7 @@ hooks:
   after_create:
     - "suncode hub create-task --task-json \"$TASK_JSON_PATH\""
   after_start:
+    - "suncode hub submit-subtasks --task-json \"$TASK_JSON_PATH\""
     - "suncode hub mark-started --task-json \"$TASK_JSON_PATH\""
   after_archive:
     - "suncode hub submit-completion --task-json \"$TASK_JSON_PATH\" --best-effort"
@@ -118,6 +120,7 @@ hooks:
 
 - [x] 明确 `after_finish` 不代表任务完成，不默认用于最终 completion。
 - [x] hook 命令必须在 Hub disabled 时快速跳过。
+- [x] `after_start` 先上传当前任务 `subtasks.json`，再标记 Hub 任务开始。
 
 ## 阶段 7：MVP Hub skills 与 workflow 引导
 
@@ -138,6 +141,7 @@ hooks:
 - [ ] 在 planning breadcrumb / brainstorm skill 中提示：
   - Hub enabled 且 binding 未完成时先补 `suncode hub create-task`。
   - 规划完成后调用 `suncode hub submit-plan`。
+  - Hub team 项目在 `task.py start` 前把 `implement.md` 实施步骤转换为 `subtasks.json`。
   - 开发前调用 `suncode hub preflight-start`。
   - 如果审核未通过或未完成，AI 必须向用户二次确认；确认后执行 `suncode hub preflight-start --confirm-unapproved-review`，再 `task.py start`。
 - [ ] 在 in-progress breadcrumb / finish-work skill 中提示：
@@ -188,10 +192,16 @@ hooks:
   - 只上传目标 task 目录下的总结/评估文档。
   - 总结正文通过 MinIO 上传，Hub API 只接收对象引用。
   - 默认不包含 child task；只有显式 `--include-children` 且归属校验通过才包含 child 摘要。
-- [ ] hook 集成：
+- [x] hook 集成：
   - `after_create` 调用命令。
-  - `after_start` 调用命令。
+  - `after_start` 调用 `submit-subtasks`，再调用 `mark-started`。
   - disabled 时 hook 不制造错误。
+- [x] `submit-subtasks`：
+  - 只读取目标 task 目录下的 `subtasks.json`。
+  - 不扫描 sibling task。
+  - 每个子任务包含 `priority`、`name`、`description`。
+  - 通过 `subtasksHash` 幂等跳过未变化子任务。
+  - Hub API payload 不包含规划文档正文。
 - [ ] skill 集成：
   - `suncode-hub-requirements` 能从 pull 到创建 task 串起流程。
   - `suncode-hub-finish` 不上传空白总结或不相关 task 文档。

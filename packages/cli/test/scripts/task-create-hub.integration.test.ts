@@ -181,9 +181,10 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
     expect(readHooks(tmp, "after_create")).toContain(
       'suncode hub create-task --task-json "$TASK_JSON_PATH" --best-effort',
     );
-    expect(readHooks(tmp, "after_start")).toContain(
+    expect(readHooks(tmp, "after_start")).toEqual([
+      'suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort',
       'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
-    );
+    ]);
     expect(readHooks(tmp, "after_archive")).toContain(
       'suncode hub submit-completion --task-json "$TASK_JSON_PATH" --best-effort',
     );
