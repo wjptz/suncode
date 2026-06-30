@@ -176,3 +176,37 @@ Completed Suncode runtime isolation: fresh installs now use .suncode paths, SUNC
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Hub structured subtask upload
+
+**Date**: 2026-06-30
+**Task**: Hub structured subtask upload
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Added submit-subtasks command, Hub after_start subtask upload, workflow/API docs, tests, and the Hub collaboration backend spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b7dd97f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
