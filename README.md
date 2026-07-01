@@ -47,7 +47,7 @@ suncode init -u your-name
 Initialize only the platforms you use:
 
 ```bash
-suncode init --cursor --opencode --codex -u your-name
+suncode init --cursor --opencode --engineer --codex -u your-name
 ```
 
 Then follow the generated workflow files and commands in the target repository.

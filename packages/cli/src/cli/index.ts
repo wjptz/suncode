@@ -72,6 +72,7 @@ program
   .option("--cursor", "Include Cursor commands")
   .option("--claude", "Include Claude Code commands")
   .option("--opencode", "Include OpenCode commands")
+  .option("--engineer", "Include Engineer commands")
   .option("--codex", "Include Codex skills")
   .option("--kilo", "Include Kilo CLI commands")
   .option("--kiro", "Include Kiro Code skills")

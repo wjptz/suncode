@@ -123,6 +123,7 @@ _SUBAGENT_CONFIG_DIRS: tuple[str, ...] = (
     ".kiro",
     ".gemini",
     ".opencode",
+    ".engineer",
     ".qoder",
     ".codebuddy",
     ".factory",   # Factory Droid

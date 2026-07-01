@@ -155,6 +155,7 @@ def resolve_effective_platform(platform: str, config: dict) -> str:
     keeps the main agent in charge so context isn't lost. Invalid / missing
     values also fall back to inline.
 
+    ``engineer`` is OpenCode-compatible, so it reuses OpenCode workflow blocks.
     Other platforms are returned unchanged.
     """
     if platform == "codex":
@@ -165,6 +166,8 @@ def resolve_effective_platform(platform: str, config: dict) -> str:
             if cfg_mode in ("inline", "sub-agent"):
                 mode = cfg_mode
         return f"codex-{mode}"
+    if platform == "engineer":
+        return "opencode"
     return platform
 
 

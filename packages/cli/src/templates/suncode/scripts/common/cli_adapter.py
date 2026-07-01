@@ -1,11 +1,12 @@
 """
 CLI Adapter for Multi-Platform Support.
 
-Abstracts differences between Claude Code, OpenCode, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, and Pi Agent interfaces.
+Abstracts differences between Claude Code, OpenCode, Engineer, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, and Pi Agent interfaces.
 
 Supported platforms:
 - claude: Claude Code (default)
 - opencode: OpenCode
+- engineer: Engineer (OpenCode-compatible)
 - cursor: Cursor IDE
 - iflow: iFlow CLI
 - codex: Codex CLI (skills-based)
@@ -41,6 +42,7 @@ from typing import ClassVar, Literal
 Platform = Literal[
     "claude",
     "opencode",
+    "engineer",
     "cursor",
     "iflow",
     "codex",
@@ -76,6 +78,9 @@ class CLIAdapter:
         "opencode": {
             "plan": "suncode-plan",  # 'plan' is built-in in OpenCode
         },
+        "engineer": {
+            "plan": "suncode-plan",  # Engineer follows the OpenCode agent surface
+        },
     }
 
     def get_agent_name(self, agent: str) -> str:
@@ -99,10 +104,12 @@ class CLIAdapter:
         """Get platform-specific config directory name.
 
         Returns:
-            Directory name ('.claude', '.opencode', '.cursor', '.iflow', '.codex', '.kilocode', '.kiro', '.gemini', '.agent', '.devin', '.qoder', '.codebuddy', '.github/copilot', '.factory', '.pi', or '.trae')
+            Directory name ('.claude', '.opencode', '.engineer', '.cursor', '.iflow', '.codex', '.kilocode', '.kiro', '.gemini', '.agent', '.devin', '.qoder', '.codebuddy', '.github/copilot', '.factory', '.pi', or '.trae')
         """
         if self.platform == "opencode":
             return ".opencode"
+        elif self.platform == "engineer":
+            return ".engineer"
         elif self.platform == "cursor":
             return ".cursor"
         elif self.platform == "iflow":
@@ -141,7 +148,7 @@ class CLIAdapter:
             project_root: Project root directory
 
         Returns:
-            Path to config directory (.claude, .opencode, .cursor, .iflow, .codex, .kilocode, .kiro, .gemini, .agent, .devin, .qoder, .codebuddy, .github/copilot, .factory, .pi, or .trae)
+            Path to config directory (.claude, .opencode, .engineer, .cursor, .iflow, .codex, .kilocode, .kiro, .gemini, .agent, .devin, .qoder, .codebuddy, .github/copilot, .factory, .pi, or .trae)
         """
         return project_root / self.config_dir_name
 
@@ -176,7 +183,7 @@ class CLIAdapter:
             Devin uses workflow directory: .devin/workflows/suncode-<name>.md
             Copilot uses prompt files: .github/prompts/<name>.prompt.md
             Pi uses prompt templates: .pi/prompts/suncode-<name>.md
-            Claude/OpenCode use subdirectory: .claude/commands/suncode/<name>.md
+            Claude/OpenCode/Engineer use subdirectory: <config>/commands/suncode/<name>.md
         """
         if self.platform == "pi":
             prompts_dir = self.get_config_dir(project_root) / "prompts"
@@ -284,7 +291,7 @@ class CLIAdapter:
         Returns:
             Dict of environment variables to set
         """
-        if self.platform == "opencode":
+        if self.platform in ("opencode", "engineer"):
             return {"OPENCODE_NON_INTERACTIVE": "1"}
         elif self.platform == "iflow":
             return {"IFLOW_NON_INTERACTIVE": "1"}
@@ -341,8 +348,8 @@ class CLIAdapter:
         """
         mapped_agent = self.get_agent_name(agent)
 
-        if self.platform == "opencode":
-            cmd = ["opencode", "run"]
+        if self.platform in ("opencode", "engineer"):
+            cmd = [self.cli_name, "run"]
             cmd.extend(["--agent", mapped_agent])
 
             # Note: OpenCode 'run' mode is non-interactive by default
@@ -429,8 +436,8 @@ class CLIAdapter:
         Returns:
             List of command arguments
         """
-        if self.platform == "opencode":
-            return ["opencode", "run", "--session", session_id]
+        if self.platform in ("opencode", "engineer"):
+            return [self.cli_name, "run", "--session", session_id]
         elif self.platform == "iflow":
             # iFlow uses -c to continue most recent conversation
             # session_id is ignored as iFlow doesn't support session IDs
@@ -495,8 +502,8 @@ class CLIAdapter:
 
     @property
     def is_opencode(self) -> bool:
-        """Check if platform is OpenCode."""
-        return self.platform == "opencode"
+        """Check if platform uses the OpenCode-compatible CLI surface."""
+        return self.platform in ("opencode", "engineer")
 
     @property
     def is_claude(self) -> bool:
@@ -519,7 +526,9 @@ class CLIAdapter:
 
         Note: Cursor doesn't have a CLI tool, returns None-like value.
         """
-        if self.is_opencode:
+        if self.platform == "engineer":
+            return "engineer"
+        elif self.is_opencode:
             return "opencode"
         elif self.is_cursor:
             return "cursor"  # Note: Cursor is IDE-only, no CLI
@@ -555,7 +564,14 @@ class CLIAdapter:
         Claude Code, OpenCode, iFlow, and Codex support CLI agent execution.
         Cursor is IDE-only and doesn't support CLI agents.
         """
-        return self.platform in ("claude", "opencode", "iflow", "codex", "pi")
+        return self.platform in (
+            "claude",
+            "opencode",
+            "engineer",
+            "iflow",
+            "codex",
+            "pi",
+        )
 
     @property
     def requires_agent_definition_file(self) -> bool:
@@ -564,7 +580,7 @@ class CLIAdapter:
         Claude Code, OpenCode, iFlow: require agent .md files (--agent flag).
         Codex: auto-discovers agents from .codex/agents/*.toml, no --agent flag.
         """
-        return self.platform in ("claude", "opencode", "iflow")
+        return self.platform in ("claude", "opencode", "engineer", "iflow")
 
     # =========================================================================
     # Session ID Handling
@@ -609,7 +625,7 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
     """Get CLI adapter for the specified platform.
 
     Args:
-        platform: Platform name ('claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or 'trae')
+        platform: Platform name ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or 'trae')
 
     Returns:
         CLIAdapter instance
@@ -627,6 +643,7 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
     if platform not in (
         "claude",
         "opencode",
+        "engineer",
         "cursor",
         "iflow",
         "codex",
@@ -643,7 +660,7 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
         "trae",
     ):
         raise ValueError(
-            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or 'trae')"
+            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or 'trae')"
         )
 
     return CLIAdapter(platform=platform)  # type: ignore
@@ -654,6 +671,7 @@ _ALL_PLATFORM_CONFIG_DIRS = (
     ".cursor",
     ".iflow",
     ".opencode",
+    ".engineer",
     ".codex",
     ".kilocode",
     ".kiro",
@@ -690,27 +708,28 @@ def detect_platform(project_root: Path) -> Platform:
     Detection order:
     1. SUNCODE_PLATFORM environment variable (if set)
     2. .opencode directory exists → opencode
-    3. .iflow directory exists → iflow
-    4. .cursor directory exists (without .claude) → cursor
-    5. .gemini directory exists → gemini
-    6. .codex exists and no other platform dirs → codex
-    7. .kilocode directory exists → kilo
-    8. .kiro/skills exists and no other platform dirs → kiro
-    9. .agent/workflows exists and no other platform dirs → antigravity
-    10. .devin/workflows (or legacy .windsurf/workflows) exists and no other platform dirs → devin
-    11. .codebuddy directory exists → codebuddy
-    12. .qoder directory exists → qoder
-    13. .github/copilot directory exists → copilot
-    14. .factory directory exists → droid
-    15. .pi directory exists → pi
-    16. .trae directory exists → trae
-    17. Default → claude
+    3. .engineer directory exists → engineer
+    4. .iflow directory exists → iflow
+    5. .cursor directory exists (without .claude) → cursor
+    6. .gemini directory exists → gemini
+    7. .codex exists and no other platform dirs → codex
+    8. .kilocode directory exists → kilo
+    9. .kiro/skills exists and no other platform dirs → kiro
+    10. .agent/workflows exists and no other platform dirs → antigravity
+    11. .devin/workflows (or legacy .windsurf/workflows) exists and no other platform dirs → devin
+    12. .codebuddy directory exists → codebuddy
+    13. .qoder directory exists → qoder
+    14. .github/copilot directory exists → copilot
+    15. .factory directory exists → droid
+    16. .pi directory exists → pi
+    17. .trae directory exists → trae
+    18. Default → claude
 
     Args:
         project_root: Project root directory
 
     Returns:
-        Detected platform ('claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'trae', or default 'claude')
+        Detected platform ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'trae', or default 'claude')
     """
     import os
 
@@ -722,6 +741,7 @@ def detect_platform(project_root: Path) -> Platform:
     if env_platform in (
         "claude",
         "opencode",
+        "engineer",
         "cursor",
         "iflow",
         "codex",
@@ -742,6 +762,10 @@ def detect_platform(project_root: Path) -> Platform:
     # Check for .opencode directory (OpenCode-specific)
     if (project_root / ".opencode").is_dir():
         return "opencode"
+
+    # Check for .engineer directory (OpenCode-compatible)
+    if (project_root / ".engineer").is_dir():
+        return "engineer"
 
     # Check for .iflow directory (iFlow-specific)
     if (project_root / ".iflow").is_dir():

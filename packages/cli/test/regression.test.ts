@@ -727,6 +727,7 @@ describe("regression: update only configured platforms (beta.16)", () => {
       "claude-code",
       "cursor",
       "opencode",
+      "engineer",
       "codex",
       "kilo",
       "kiro",
@@ -4271,6 +4272,7 @@ print(len(entries))
         "  'codex_inline': resolve_effective_platform('codex', {'codex': {'dispatch_mode': 'inline'}}),",
         "  'codex_invalid_mode': resolve_effective_platform('codex', {'codex': {'dispatch_mode': 'invalid'}}),",
         "  'claude_passthrough': resolve_effective_platform('claude', {'codex': {'dispatch_mode': 'inline'}}),",
+        "  'engineer_alias': resolve_effective_platform('engineer', {}),",
         "}",
         "print(json.dumps(result))",
       ].join("\n"),
@@ -4289,6 +4291,8 @@ print(len(entries))
     expect(result.codex_invalid_mode).toBe("codex-inline");
     // Non-codex platforms ignore the codex.dispatch_mode setting.
     expect(result.claude_passthrough).toBe("claude");
+    // Engineer reuses OpenCode workflow blocks.
+    expect(result.engineer_alias).toBe("opencode");
   });
 
   it("[issue-codex-dispatch-mode] codex hook injects <codex-mode> banner reflecting dispatch_mode", () => {
@@ -4390,6 +4394,24 @@ describe("regression: platform additions (beta.9, beta.13, beta.16)", () => {
     expect(AI_TOOLS.opencode.configDir).toBe(".opencode");
   });
 
+  it("[engineer] Engineer platform is registered as an OpenCode-compatible config", () => {
+    const tools = AI_TOOLS as Record<
+      string,
+      {
+        configDir: string;
+        cliFlag: string;
+        hasPythonHooks: boolean;
+        templateContext: { agentCapable: boolean; hasHooks: boolean };
+      }
+    >;
+    expect(tools).toHaveProperty("engineer");
+    expect(tools.engineer.configDir).toBe(".engineer");
+    expect(tools.engineer.cliFlag).toBe("engineer");
+    expect(tools.engineer.hasPythonHooks).toBe(false);
+    expect(tools.engineer.templateContext.agentCapable).toBe(true);
+    expect(tools.engineer.templateContext.hasHooks).toBe(false);
+  });
+
   it("[beta.13] Cursor platform is registered", () => {
     expect(AI_TOOLS).toHaveProperty("cursor");
     expect(AI_TOOLS.cursor.configDir).toBe(".cursor");
@@ -4472,6 +4494,12 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
   it("[beta.9] cli_adapter.py supports opencode platform", () => {
     expect(commonCliAdapter).toContain('"opencode"');
     expect(commonCliAdapter).toContain(".opencode");
+  });
+
+  it("[engineer] cli_adapter.py supports engineer platform as OpenCode-compatible", () => {
+    expect(commonCliAdapter).toContain('"engineer"');
+    expect(commonCliAdapter).toContain(".engineer");
+    expect(commonCliAdapter).toContain('self.platform in ("opencode", "engineer")');
   });
 
   it("[beta.13] cli_adapter.py supports cursor platform", () => {

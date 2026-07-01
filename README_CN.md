@@ -47,7 +47,7 @@ suncode init -u your-name
 只初始化你实际使用的平台：
 
 ```bash
-suncode init --cursor --opencode --codex -u your-name
+suncode init --cursor --opencode --engineer --codex -u your-name
 ```
 
 随后按目标仓库中生成的工作流文件和命令使用。

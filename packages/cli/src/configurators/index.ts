@@ -20,7 +20,12 @@ import {
 // Platform configurators
 import { configureClaude } from "./claude.js";
 import { configureCursor } from "./cursor.js";
-import { configureOpenCode, collectOpenCodeTemplates } from "./opencode.js";
+import {
+  configureOpenCode,
+  collectOpenCodeTemplates,
+  configureEngineer,
+  collectEngineerTemplates,
+} from "./opencode.js";
 import { configureCodex } from "./codex.js";
 import { configureKilo } from "./kilo.js";
 import { configureKiro } from "./kiro.js";
@@ -212,6 +217,10 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
   opencode: {
     configure: configureOpenCode,
     collectTemplates: () => collectOpenCodeTemplates(),
+  },
+  engineer: {
+    configure: configureEngineer,
+    collectTemplates: () => collectEngineerTemplates(),
   },
   codex: {
     configure: configureCodex,

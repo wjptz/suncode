@@ -1005,6 +1005,7 @@ interface InitOptions {
   cursor?: boolean;
   claude?: boolean;
   opencode?: boolean;
+  engineer?: boolean;
   codex?: boolean;
   kilo?: boolean;
   kiro?: boolean;

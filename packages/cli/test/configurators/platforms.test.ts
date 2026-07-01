@@ -8,7 +8,7 @@ import {
   collectPlatformTemplates,
   PLATFORM_IDS,
 } from "../../src/configurators/index.js";
-import { AI_TOOLS } from "../../src/types/ai-tools.js";
+import { AI_TOOLS, type AITool } from "../../src/types/ai-tools.js";
 import { setWriteMode } from "../../src/utils/file-writer.js";
 import {
   getAllAgents as getAllCodexAgents,
@@ -102,6 +102,12 @@ describe("getConfiguredPlatforms", () => {
     fs.mkdirSync(path.join(tmpDir, ".opencode"));
     const result = getConfiguredPlatforms(tmpDir);
     expect(result.has("opencode")).toBe(true);
+  });
+
+  it("detects .engineer directory as engineer", () => {
+    fs.mkdirSync(path.join(tmpDir, ".engineer"));
+    const result = getConfiguredPlatforms(tmpDir);
+    expect(result.has("engineer" as AITool)).toBe(true);
   });
 
   it("detects .codex directory as codex", () => {
@@ -234,6 +240,16 @@ describe("configurePlatform", () => {
   it("configurePlatform('opencode') creates .opencode directory", async () => {
     await configurePlatform("opencode", tmpDir);
     expect(fs.existsSync(path.join(tmpDir, ".opencode"))).toBe(true);
+  });
+
+  it("configurePlatform('engineer') creates .engineer directory", async () => {
+    await configurePlatform("engineer" as AITool, tmpDir);
+    expect(fs.existsSync(path.join(tmpDir, ".engineer"))).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".engineer", "commands", "suncode", "start.md"),
+      ),
+    ).toBe(true);
   });
 
   it("configurePlatform('codex') creates .agents/skills directory", async () => {

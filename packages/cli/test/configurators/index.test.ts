@@ -66,6 +66,7 @@ describe("isManagedPath", () => {
     expect(isManagedPath(".claude/commands/foo.md")).toBe(true);
     expect(isManagedPath(".cursor/rules/bar.md")).toBe(true);
     expect(isManagedPath(".opencode/config.json")).toBe(true);
+    expect(isManagedPath(".engineer/config.json")).toBe(true);
     expect(isManagedPath(".agents/skills/start/SKILL.md")).toBe(true);
     expect(isManagedPath(".codex/agents/check.toml")).toBe(true);
     expect(isManagedPath(".agent/workflows/start.md")).toBe(true);
@@ -83,6 +84,7 @@ describe("isManagedPath", () => {
     expect(isManagedPath(".claude")).toBe(true);
     expect(isManagedPath(".cursor")).toBe(true);
     expect(isManagedPath(".opencode")).toBe(true);
+    expect(isManagedPath(".engineer")).toBe(true);
     expect(isManagedPath(".agents/skills")).toBe(true);
     expect(isManagedPath(".codex")).toBe(true);
     expect(isManagedPath(".agent/workflows")).toBe(true);
@@ -105,6 +107,7 @@ describe("isManagedPath", () => {
     expect(isManagedPath(".suncode-old")).toBe(false);
     expect(isManagedPath(".cursorignore")).toBe(false);
     expect(isManagedPath(".opencode-v2")).toBe(false);
+    expect(isManagedPath(".engineer-v2")).toBe(false);
     expect(isManagedPath(".agents/skills-backup")).toBe(false);
     expect(isManagedPath(".codex-backup")).toBe(false);
     expect(isManagedPath(".agent/workflows-backup")).toBe(false);
@@ -137,6 +140,7 @@ describe("isManagedPath", () => {
   // Windows path separator (bug fix verification)
   it("matches Windows-style backslash paths", () => {
     expect(isManagedPath(".claude\\commands\\foo.md")).toBe(true);
+    expect(isManagedPath(".engineer\\commands\\suncode\\start.md")).toBe(true);
     expect(isManagedPath(".suncode\\spec\\backend")).toBe(true);
     expect(isManagedPath(".agents\\skills\\start\\SKILL.md")).toBe(true);
     expect(isManagedPath(".codex\\agents\\check.toml")).toBe(true);
@@ -300,10 +304,11 @@ describe("getPlatformsWithPythonHooks", () => {
 // =============================================================================
 
 describe("collectPlatformTemplates", () => {
-  const SKILL_ROOTS: Record<AITool, string> = {
+  const SKILL_ROOTS: Record<string, string> = {
     "claude-code": ".claude/skills",
     cursor: ".cursor/skills",
     opencode: ".opencode/skills",
+    engineer: ".engineer/skills",
     codex: ".agents/skills",
     kilo: ".kilocode/skills",
     kiro: ".kiro/skills",

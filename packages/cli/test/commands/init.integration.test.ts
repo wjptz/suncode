@@ -162,6 +162,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".opencode"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".engineer"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".agent", "workflows"))).toBe(false);
@@ -186,6 +187,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".cursor"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".opencode"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".engineer"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".codex"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".agent", "workflows"))).toBe(false);
@@ -664,6 +666,22 @@ describe("init() integration", () => {
         path.join(tmpDir, ".opencode", "commands", "suncode", "finish-work.md"),
       ),
     ).toBe(true);
+  });
+
+  it("#3n2 engineer platform emits OpenCode-compatible slash commands under .engineer", async () => {
+    await init({ yes: true, engineer: true } as Parameters<typeof init>[0]);
+
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".engineer", "commands", "suncode", "start.md"),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".engineer", "plugins", "inject-workflow-state.js"),
+      ),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".opencode"))).toBe(false);
   });
 
   it("#3o reasonix platform emits suncode-start skill without runAs:subagent", async () => {

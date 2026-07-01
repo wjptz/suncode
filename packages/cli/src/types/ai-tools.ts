@@ -11,6 +11,7 @@ export type AITool =
   | "claude-code"
   | "cursor"
   | "opencode"
+  | "engineer"
   | "codex"
   | "kilo"
   | "kiro"
@@ -34,6 +35,7 @@ export type TemplateDir =
   | "claude"
   | "cursor"
   | "opencode"
+  | "engineer"
   | "codex"
   | "kilo"
   | "kiro"
@@ -57,6 +59,7 @@ export type CliFlag =
   | "claude"
   | "cursor"
   | "opencode"
+  | "engineer"
   | "codex"
   | "kilo"
   | "kiro"
@@ -193,6 +196,22 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       agentCapable: true,
       hasHooks: false,
       cliFlag: "opencode",
+    },
+  },
+  engineer: {
+    name: "Engineer (OpenCode-compatible)",
+    templateDirs: ["common", "opencode"],
+    configDir: ".engineer",
+    cliFlag: "engineer",
+    defaultChecked: false,
+    hasPythonHooks: false,
+    templateContext: {
+      cmdRefPrefix: "/suncode:",
+      executorAI: "Bash scripts or Task calls",
+      userActionLabel: "Slash commands",
+      agentCapable: true,
+      hasHooks: false,
+      cliFlag: "engineer",
     },
   },
   codex: {

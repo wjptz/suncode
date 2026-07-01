@@ -37,14 +37,28 @@ function shouldExclude(filename: string): boolean {
   return false;
 }
 
+type OpenCodeCompatibleConfigDir = ".opencode" | ".engineer";
+
+function adaptOpenCodeTemplateContent(
+  content: string,
+  configDir: OpenCodeCompatibleConfigDir,
+): string {
+  return replacePythonCommandLiterals(content).replaceAll(
+    ".opencode",
+    configDir,
+  );
+}
+
 /**
  * Walk the opencode template directory and produce a `Map<relPath, content>`
- * rooted at `.opencode/`. Shared by both `configureOpenCode` (init-time write)
- * and `collectOpenCodeTemplates` (update-time hash tracking) so the two paths
- * always agree on the exact file set. `commands/` is handled separately (sourced
- * from common template context, not from this directory tree).
+ * rooted at an OpenCode-compatible config directory. Shared by init-time writes
+ * and update-time hash tracking so the two paths always agree on the exact file
+ * set. `commands/` is handled separately (sourced from common template context,
+ * not from this directory tree).
  */
-function walkOpenCodeTemplateDir(): Map<string, string> {
+function walkOpenCodeTemplateDir(
+  configDir: OpenCodeCompatibleConfigDir,
+): Map<string, string> {
   const files = new Map<string, string>();
   const sourcePath = getOpenCodeTemplatePath();
 
@@ -65,14 +79,32 @@ function walkOpenCodeTemplateDir(): Map<string, string> {
         // Map keys are logical paths used as cross-platform hash keys / lookup
         // keys downstream. Always POSIX, regardless of host OS.
         files.set(
-          toPosix(path.join(".opencode", relEntry)),
-          replacePythonCommandLiterals(content),
+          toPosix(path.join(configDir, relEntry)),
+          adaptOpenCodeTemplateContent(content, configDir),
         );
       }
     }
   }
 
   walk("");
+  return files;
+}
+
+function collectOpenCodeCompatibleTemplates(
+  configDir: OpenCodeCompatibleConfigDir,
+  ctx = AI_TOOLS.opencode.templateContext,
+): Map<string, string> {
+  const files = walkOpenCodeTemplateDir(configDir);
+  for (const cmd of resolveCommands(ctx)) {
+    files.set(`${configDir}/commands/suncode/${cmd.name}.md`, cmd.content);
+  }
+  for (const [filePath, content] of collectSkillTemplates(
+    `${configDir}/skills`,
+    resolveSkills(ctx),
+    resolveBundledSkills(ctx),
+  )) {
+    files.set(filePath, content);
+  }
   return files;
 }
 
@@ -84,19 +116,21 @@ function walkOpenCodeTemplateDir(): Map<string, string> {
  * init'd files as modifications on the next run.
  */
 export function collectOpenCodeTemplates(): Map<string, string> {
-  const files = walkOpenCodeTemplateDir();
-  const ctx = AI_TOOLS.opencode.templateContext;
-  for (const cmd of resolveCommands(ctx)) {
-    files.set(`.opencode/commands/suncode/${cmd.name}.md`, cmd.content);
-  }
-  for (const [filePath, content] of collectSkillTemplates(
-    ".opencode/skills",
-    resolveSkills(ctx),
-    resolveBundledSkills(ctx),
-  )) {
-    files.set(filePath, content);
-  }
-  return files;
+  return collectOpenCodeCompatibleTemplates(
+    ".opencode",
+    AI_TOOLS.opencode.templateContext,
+  );
+}
+
+/**
+ * Collect all Engineer template files. Engineer is OpenCode-compatible but uses
+ * its own project config root so it can coexist with `.opencode/`.
+ */
+export function collectEngineerTemplates(): Map<string, string> {
+  return collectOpenCodeCompatibleTemplates(
+    ".engineer",
+    AI_TOOLS.engineer.templateContext,
+  );
 }
 
 /**
@@ -105,6 +139,18 @@ export function collectOpenCodeTemplates(): Map<string, string> {
  */
 export async function configureOpenCode(cwd: string): Promise<void> {
   for (const [relPath, content] of collectOpenCodeTemplates()) {
+    const absPath = path.join(cwd, relPath);
+    ensureDir(path.dirname(absPath));
+    await writeFile(absPath, content);
+  }
+}
+
+/**
+ * Configure Engineer by writing the OpenCode-compatible template set under
+ * `.engineer/`.
+ */
+export async function configureEngineer(cwd: string): Promise<void> {
+  for (const [relPath, content] of collectEngineerTemplates()) {
     const absPath = path.join(cwd, relPath);
     ensureDir(path.dirname(absPath));
     await writeFile(absPath, content);
