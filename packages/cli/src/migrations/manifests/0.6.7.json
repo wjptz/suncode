@@ -1,0 +1,9 @@
+{
+  "version": "0.6.7",
+  "description": "Patch release: adds Hub init/login/logout/state, refreshes Hub workflow-state guidance, adds Hub spec-sync orchestration, and supports the Engineer terminal as an OpenCode-compatible platform.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Features:**\n- feat(hub): add `suncode hub init`, `login`, `logout`, and `state`, using user-level Hub config plus login sessions keyed by `apiBaseUrl` instead of `SUNCODE_HUB_TOKEN`.\n- feat(hooks): inject compact Hub state summaries into workflow-state context so agents can distinguish `hub:ok`, `not login`, `server error`, missing project config, and available Hub work without routing ordinary local work through Hub.\n- feat(hub): add the Hub spec-sync orchestration skill and MinIO-backed spec sync helpers for task startup workflows.\n- feat(engineer): add `suncode init --engineer` / `suncode uninstall --engineer` support, generating `.engineer/` OpenCode-compatible agents, commands, plugins, and shared Suncode helpers.\n\n**Documentation:**\n- docs: simplify README content and refresh Hub setup/configuration guidance in Chinese and English docs.\n\n**Internal:**\n- test: extend Hub, workflow-state, OpenCode-compatible template, and Engineer platform coverage.",
+  "migrations": [],
+  "notes": "No `--migrate` required.\n\nRun `suncode update` after upgrading to receive refreshed Hub workflow-state hooks, Hub skill templates, and Engineer platform templates.\n\nInstall: `npm install -g @wjptz/suncode`"
+}

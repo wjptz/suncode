@@ -1,0 +1,9 @@
+{
+  "version": "0.6.6",
+  "description": "Initial Suncode package release: rebrands the public CLI/runtime surface from Trellis to Suncode, moves generated project state to Suncode-owned names, and adds the first Hub collaboration commands.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Features:**\n- feat(cli): publish the Suncode-owned package identity with the `suncode` binary and Suncode package metadata.\n- feat(runtime): generate `.suncode/` project state, Suncode-owned command names, bundled skills, agent templates, hooks, config names, and channel/memory/task runtime paths.\n- feat(hub): add the initial `suncode hub` collaboration surface for creating tasks, syncing lifecycle events, pulling documents through Hub/MinIO, submitting structured subtasks, and submitting completion artifacts.\n\n**Documentation:**\n- docs: rebrand public README surfaces for Suncode and document the Hub collaboration flow.\n\n**Internal:**\n- chore: archive the Suncode package identity, runtime-name migration, and Hub collaboration implementation tasks.",
+  "migrations": [],
+  "notes": "No `--migrate` required for the first published `@wjptz/suncode` package line.\n\nInstall: `npm install -g @wjptz/suncode`\n\nExisting Suncode projects should run `suncode update` after upgrading."
+}
