@@ -55,9 +55,15 @@ max_journal_lines: 2000
 #-------------------------------------------------------------------------------
 
 # Optional team Hub integration. Disabled by default; ordinary local Suncode
-# projects do not contact Hub and do not need SUNCODE_HUB_TOKEN.
+# projects do not contact Hub and do not need Hub login.
 #
-# Authentication uses JWT from the SUNCODE_HUB_TOKEN environment variable.
+# Authentication uses `suncode hub login`, which stores a user-level session
+# under ~/.suncode/hub/auth.json keyed by apiBaseUrl.
+#
+# apiBaseUrl defaults to the user-level Hub config written by `suncode hub init`
+# at ~/.suncode/hub/config.json. Only set hub.apiBaseUrl here when this project
+# must override the user-level default Hub service.
+#
 # Do not put JWTs, API keys, MinIO access keys, or MinIO secret keys in this
 # file. Long document upload/download uses Hub-signed MinIO presigned URLs.
 #
@@ -67,6 +73,7 @@ max_journal_lines: 2000
 #   projectId: null
 #   # Optional. If omitted, Suncode uses .suncode/.developer name as developerId.
 #   developerId: null
+#   # Optional project override; normally leave null and use suncode hub init.
 #   apiBaseUrl: null
 #   # confirm: allow starting before approval only after explicit user confirmation
 #   # block: require Hub review approval before starting

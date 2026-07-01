@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { DIR_NAMES, FILE_NAMES } from "../../constants/paths.js";
+import {
+  getHubSession,
+  isHubSessionExpired,
+  loadGlobalHubConfig,
+  normalizeApiBaseUrl,
+} from "./auth.js";
 import type { HubConfig, StartReviewPolicy } from "./types.js";
 
 interface HubSection {
@@ -24,6 +30,7 @@ export interface ResolveHubConfigOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   requireAuth?: boolean;
+  homeDir?: string;
 }
 
 export function parseHubSection(content: string): HubSection {
@@ -79,8 +86,8 @@ export function resolveHubConfig(
   options: ResolveHubConfigOptions = {},
 ): HubConfig {
   const cwd = options.cwd ?? process.cwd();
-  const env = options.env ?? process.env;
   const requireAuth = options.requireAuth ?? true;
+  const env = options.env ?? process.env;
   const configPath = path.join(cwd, DIR_NAMES.WORKFLOW, "config.yaml");
 
   if (!fs.existsSync(configPath)) {
@@ -111,26 +118,34 @@ export function resolveHubConfig(
   if (!hub.projectId) {
     throw new HubConfigError("hub.projectId is required when hub.enabled is true");
   }
-  if (!hub.apiBaseUrl) {
+
+  const globalConfig = loadGlobalHubConfig({ homeDir: options.homeDir });
+  const apiBaseUrlSource = hub.apiBaseUrl ? "project" : "global";
+  const rawApiBaseUrl = hub.apiBaseUrl ?? globalConfig.defaultApiBaseUrl;
+  if (!rawApiBaseUrl) {
     throw new HubConfigError(
-      "hub.apiBaseUrl is required when hub.enabled is true",
+      "Hub apiBaseUrl is required. Run `suncode hub init` to set the global default, or set hub.apiBaseUrl for this project.",
     );
   }
-
-  const token = env.SUNCODE_HUB_TOKEN;
-  if (requireAuth && !token) {
+  const apiBaseUrl = normalizeApiBaseUrl(rawApiBaseUrl);
+  const session = getHubSession(apiBaseUrl, { homeDir: options.homeDir });
+  if (requireAuth && !session) {
     throw new HubConfigError(
-      "SUNCODE_HUB_TOKEN is required when hub.enabled is true",
+      `Hub login is required for ${apiBaseUrl}. Run \`suncode hub login\`.`,
+    );
+  }
+  if (requireAuth && session && isHubSessionExpired(session)) {
+    throw new HubConfigError(
+      `Hub login for ${apiBaseUrl} is expired. Run \`suncode hub login\`.`,
     );
   }
 
   const developerId =
-    hub.developerId ?? env.SUNCODE_HUB_DEVELOPER_ID ?? readDeveloperName(cwd);
-  if (!developerId) {
-    throw new HubConfigError(
-      "hub.developerId or .suncode/.developer name is required when hub.enabled is true",
-    );
-  }
+    hub.developerId ??
+    session?.developerId ??
+    env.SUNCODE_HUB_DEVELOPER_ID ??
+    readDeveloperName(cwd) ??
+    "unknown";
 
   return {
     enabled: true,
@@ -138,9 +153,10 @@ export function resolveHubConfig(
     configPath,
     mode: "team",
     projectId: hub.projectId,
-    apiBaseUrl: stripTrailingSlash(hub.apiBaseUrl),
+    apiBaseUrl,
+    apiBaseUrlSource,
     developerId,
-    ...(token ? { token } : {}),
+    ...(session?.token ? { token: session.token } : {}),
     startReviewPolicy: parseStartReviewPolicy(hub.startReviewPolicy),
   };
 }
@@ -203,8 +219,4 @@ function readDeveloperName(cwd: string): string | undefined {
     }
   }
   return undefined;
-}
-
-function stripTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "");
 }

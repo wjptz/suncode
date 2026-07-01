@@ -9,7 +9,8 @@ Use this skill only for projects that have Suncode Hub enabled. If Hub is disabl
 
 ## Rules
 
-- Never print or persist `SUNCODE_HUB_TOKEN`.
+- Never print or persist Hub tokens, passwords, or auth headers.
+- If `<hub-state>` says the current task is local-only, do not run Hub task submission or lifecycle commands unless the user explicitly asks to bind a Hub requirement.
 - Do not ask the user to leave the agent and run a separate Hub command unless a command fails and manual recovery is needed.
 - Do not create or bind a task without a concrete Hub requirement ID.
 - Do not upload documents from unrelated task directories.
@@ -17,9 +18,9 @@ Use this skill only for projects that have Suncode Hub enabled. If Hub is disabl
 
 ## Flow
 
-1. Run `suncode hub status`.
+1. Run `suncode hub state`.
    - If disabled, continue with the ordinary Suncode workflow.
-   - If enabled but auth/config is missing, explain the exact missing value. For auth, the user must provide `SUNCODE_HUB_TOKEN`.
+   - If enabled but auth/config is missing, explain the exact missing value. For auth, ask the user to run `suncode hub login`.
 2. Run `suncode hub pull` to fetch requirements for the current `.suncode/.developer` identity.
 3. Select the requirement with the user when multiple candidates are available.
 4. If the requirement body or acceptance criteria is a document payload, download it through the signed MinIO URL before summarizing it. Do not expect the Hub API response to contain the long document body.

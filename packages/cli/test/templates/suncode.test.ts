@@ -139,6 +139,12 @@ describe("suncode template constants", () => {
     expect(workflowMdTemplate).toContain("suncode hub submit-subtasks");
   });
 
+  it("workflow tells agents to use Simplified Chinese for task and spec artifacts", () => {
+    expect(workflowMdTemplate).toContain("## 语言策略");
+    expect(workflowMdTemplate).toContain("默认以简体中文作为第一语言");
+    expect(workflowMdTemplate).toContain("`task.json.name` / `title`");
+  });
+
   it("marketplace native workflow mirror matches the bundled workflow", () => {
     const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
       ? process.cwd()
@@ -158,6 +164,9 @@ describe("suncode template constants", () => {
       path.join(repoRoot, "marketplace/workflows/tdd/workflow.md"),
       "utf-8",
     );
+    expect(tddWorkflow).toContain("## 语言策略");
+    expect(tddWorkflow).toContain("默认以简体中文作为第一语言");
+
     const planning = /\[workflow-state:planning\]([\s\S]*?)\[\/workflow-state:planning\]/.exec(
       tddWorkflow,
     )?.[1];
@@ -313,10 +322,12 @@ describe("suncode template constants", () => {
     expect(gitignoreTemplate).toContain("__pycache__");
   });
 
-  it("config.yaml documents Hub as disabled by default with JWT and MinIO boundaries", () => {
+  it("config.yaml documents Hub as disabled by default with login and MinIO boundaries", () => {
     expect(configYamlTemplate).toContain("Suncode Hub Team Collaboration");
     expect(configYamlTemplate).toContain("#   enabled: false");
-    expect(configYamlTemplate).toContain("SUNCODE_HUB_TOKEN");
+    expect(configYamlTemplate).toContain("suncode hub login");
+    expect(configYamlTemplate).not.toContain("SUNCODE_HUB_TOKEN");
+    expect(configYamlTemplate).toContain("apiBaseUrl defaults to the user-level Hub config");
     expect(configYamlTemplate).toContain("MinIO presigned URLs");
     expect(configYamlTemplate).toContain("afterCreate: true");
     expect(configYamlTemplate).toContain("afterStart: true");

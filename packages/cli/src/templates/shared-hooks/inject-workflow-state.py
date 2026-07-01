@@ -33,10 +33,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
+import shutil
+import subprocess
 import sys
 import queue
 import threading
 from pathlib import Path
+from datetime import datetime, timezone
 
 # Force UTF-8 on stdin/stdout/stderr on Windows. Default codepage there is
 # cp936 / cp1252 / etc. — non-ASCII content (Chinese task names, prd snippets)
@@ -304,6 +308,304 @@ def build_breadcrumb(
 
 
 # ---------------------------------------------------------------------------
+# Hub state loading: CLI-backed live refresh, no secrets
+# ---------------------------------------------------------------------------
+
+def build_hub_state(root: Path, config: dict, input_data: dict) -> str:
+    """Build a compact <hub-state> block.
+
+    Hub-off / incomplete local state returns without network. Once a project is
+    configured and logged in, the hook asks the local CLI for authoritative
+    state with a short timeout. Refresh failures are fail-closed as unavailable;
+    stale cache must not make Hub look usable.
+    """
+    current_task = _current_hub_task_state(root, input_data)
+    hub = config.get("hub") if isinstance(config, dict) else None
+    if not isinstance(hub, dict) or not _yaml_bool_true(hub.get("enabled")):
+        return "\n".join([
+            "<hub-state>",
+            "Hub: off",
+            "Reason: hub.enabled is not true or .suncode/config.yaml is missing",
+            f"Current task: {current_task}",
+            "AI: use the local Suncode workflow; do not run Hub-specific commands.",
+            "</hub-state>",
+        ])
+
+    project_id = _string_value(hub.get("projectId"))
+    if not project_id:
+        return _hub_state_block([
+            "Hub: on",
+            "Config: invalid (hub.projectId missing)",
+            f"Current task: {current_task}",
+            "AI: ask the user to run `suncode hub init` before using Hub workflows.",
+        ])
+
+    project_api_base_url = _normalize_api_base_url(_string_value(hub.get("apiBaseUrl")))
+    global_api_base_url = _global_api_base_url()
+    api_base_url = project_api_base_url or global_api_base_url
+    if not api_base_url:
+        return _hub_state_block([
+            "Hub: on",
+            f"Project: {project_id}",
+            "Config: missing global apiBaseUrl",
+            f"Current task: {current_task}",
+            "AI: ask the user to run `suncode hub init` to set Hub apiBaseUrl.",
+        ])
+
+    session = _hub_auth_session(api_base_url)
+    if session is None:
+        return _hub_state_block([
+            "Hub: on",
+            f"Project: {project_id}",
+            f"Login: missing for {api_base_url}",
+            f"Current task: {current_task}",
+            "AI: ask the user to run `suncode hub login` before using Hub workflows.",
+        ])
+    if _hub_session_expired(session):
+        return _hub_state_block([
+            "Hub: on",
+            f"Project: {project_id}",
+            f"Login: expired for {api_base_url}",
+            f"Current task: {current_task}",
+            "AI: ask the user to run `suncode hub login` before using Hub workflows.",
+        ])
+
+    live_state, refresh_error = _refresh_hub_state_via_cli(root, input_data)
+    if live_state is None:
+        return _hub_unavailable_block(
+            project_id,
+            current_task,
+            refresh_error or "Hub state refresh failed",
+        )
+
+    return _format_live_hub_state(live_state, project_id, current_task)
+
+
+def _format_live_hub_state(
+    state: dict, fallback_project_id: str, fallback_current_task: str
+) -> str:
+    summary = state.get("summary") if isinstance(state.get("summary"), dict) else {}
+    project = state.get("project") if isinstance(state.get("project"), dict) else {}
+    current = state.get("currentTask") if isinstance(state.get("currentTask"), dict) else {}
+    hub = _string_value(summary.get("hub")) or "unknown"
+    project_id = _string_value(project.get("projectId")) or fallback_project_id
+    config = _string_value(summary.get("config")) or "unknown"
+    login = _string_value(summary.get("login")) or "unknown"
+    service = _string_value(summary.get("service")) or "unknown"
+    work = _string_value(summary.get("work")) or "unknown"
+    current_task = (
+        _string_value(current.get("state"))
+        or _string_value(summary.get("currentTask"))
+        or fallback_current_task
+    )
+    lines = [
+        f"Hub: {hub}",
+        "Source: live (`suncode hub state --json`)",
+        f"Project: {project_id}",
+        f"Config: {config}",
+        f"Login: {login}",
+        f"Service: {service}",
+        f"Work: {_work_line(state, work)}",
+        f"Current task: {current_task}",
+    ]
+    next_action = _string_value(state.get("nextAction"))
+    if next_action:
+        lines.append(f"AI: {next_action}")
+    elif service == "unavailable":
+        lines.append("AI: Hub service is currently unavailable; do not use Hub-specific workflows.")
+    elif current_task == "local-only":
+        lines.append(
+            "AI: 当前任务未绑定 Hub；不要运行 submit-plan、submit-completion、mark-started 等 Hub 任务命令，除非用户明确要求绑定 Hub 需求。"
+        )
+    elif work == "available":
+        lines.append("AI: ask the user whether to pull/select Hub work with `suncode hub pull`.")
+    else:
+        lines.append("AI: use Hub commands only for Hub-bound tasks.")
+    return _hub_state_block(lines)
+
+
+def _hub_unavailable_block(project_id: str, current_task: str, reason: str) -> str:
+    return _hub_state_block([
+        "Hub: on",
+        "Source: live refresh failed",
+        f"Project: {project_id}",
+        "Service: unavailable",
+        f"Reason: {reason}",
+        f"Current task: {current_task}",
+        "AI: Hub state refresh failed or timed out; treat Hub as currently unavailable and do not use Hub-specific workflows.",
+    ])
+
+
+def _refresh_hub_state_via_cli(
+    root: Path, input_data: dict
+) -> tuple[dict | None, str | None]:
+    command = _suncode_cli_command()
+    if command is None:
+        return None, "Hub state refresh failed: suncode command not found"
+    try:
+        completed = subprocess.run(
+            [*command, "hub", "state", "--json"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_hub_state_hook_timeout_seconds(),
+            env=_hub_state_subprocess_env(root, input_data),
+        )
+    except subprocess.TimeoutExpired:
+        return None, "Hub state refresh timed out"
+    except Exception:
+        return None, "Hub state refresh failed"
+    if completed.returncode != 0:
+        return None, "Hub state refresh failed"
+    try:
+        parsed = json.loads(completed.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return None, "Hub state refresh failed"
+    if not isinstance(parsed, dict):
+        return None, "Hub state refresh failed"
+    return parsed, None
+
+
+def _hub_state_hook_timeout_seconds() -> float:
+    raw = os.environ.get("SUNCODE_HUB_STATE_HOOK_TIMEOUT_MS")
+    try:
+        timeout_ms = int(raw) if raw else 1500
+    except ValueError:
+        timeout_ms = 1500
+    timeout_ms = min(max(timeout_ms, 50), 10000)
+    return timeout_ms / 1000
+
+
+def _suncode_cli_command() -> list[str] | None:
+    override = _string_value(os.environ.get("SUNCODE_CLI"))
+    if override:
+        try:
+            parsed = shlex.split(override, posix=(os.name != "nt"))
+        except ValueError:
+            parsed = [override]
+        return parsed or None
+    found = shutil.which("suncode") or shutil.which("suncode.cmd")
+    if found:
+        return [found]
+    fallback = Path.home() / ".local" / "share" / "pnpm" / "suncode"
+    return [str(fallback)] if fallback.exists() else None
+
+
+def _hub_state_subprocess_env(root: Path, input_data: dict) -> dict[str, str]:
+    env = os.environ.copy()
+    env["SUNCODE_HOOKS"] = "0"
+    try:
+        active = _resolve_active_task(root, input_data)
+        context_key = getattr(active, "context_key", None)
+        if isinstance(context_key, str) and context_key:
+            env["SUNCODE_CONTEXT_ID"] = context_key
+    except Exception:
+        pass
+    return env
+
+
+def _hub_state_block(lines: list[str]) -> str:
+    return "\n".join(["<hub-state>", *lines, "</hub-state>"])
+
+
+def _global_api_base_url() -> str | None:
+    config = _read_json(Path.home() / ".suncode" / "hub" / "config.json")
+    if not isinstance(config, dict):
+        return None
+    return _normalize_api_base_url(_string_value(config.get("defaultApiBaseUrl")))
+
+
+def _hub_auth_session(api_base_url: str) -> dict | None:
+    auth = _read_json(Path.home() / ".suncode" / "hub" / "auth.json")
+    if not isinstance(auth, dict):
+        return None
+    sessions = auth.get("sessions")
+    if not isinstance(sessions, dict):
+        return None
+    session = sessions.get(api_base_url)
+    return session if isinstance(session, dict) else None
+
+
+def _hub_session_expired(session: dict) -> bool:
+    expires_at = _string_value(session.get("expiresAt"))
+    if not expires_at:
+        return False
+    try:
+        parsed = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed <= datetime.now(timezone.utc)
+
+
+def _current_hub_task_state(root: Path, input_data: dict) -> str:
+    try:
+        active = _resolve_active_task(root, input_data)
+    except Exception:
+        return "unknown"
+    if not active.task_path:
+        return "none"
+    task_dir = Path(active.task_path)
+    if not task_dir.is_absolute():
+        task_dir = root / task_dir
+    task_json = task_dir / "task.json"
+    data = _read_json(task_json)
+    if not isinstance(data, dict):
+        return "unknown"
+    meta = data.get("meta")
+    hub = meta.get("hub") if isinstance(meta, dict) else None
+    if not isinstance(hub, dict):
+        return "local-only"
+    if _string_value(hub.get("remoteTaskId")) or hub.get("bindingStatus") == "bound":
+        return "hub-bound"
+    if _string_value(hub.get("requirementId")) or hub.get("bindingStatus") in (
+        "pending",
+        "pending_parent",
+        "failed",
+    ):
+        return "hub-pending"
+    return "local-only"
+
+
+def _work_line(state: object, fallback: str) -> str:
+    if isinstance(state, dict):
+        work = state.get("work")
+        if isinstance(work, dict):
+            count = work.get("availableCount")
+            if isinstance(count, int):
+                return f"{count} available requirements" if count > 0 else "none"
+    return fallback
+
+
+def _read_json(path: Path) -> object | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _normalize_api_base_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.strip().rstrip("/")
+
+
+def _string_value(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _yaml_bool_true(value: object) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "yes", "1", "on")
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
 
@@ -378,6 +680,7 @@ def main() -> int:
         parts.append(_codex_mode_banner(config))
         parts.append(breadcrumb)
         breadcrumb = "\n\n".join(parts)
+    breadcrumb = f"{breadcrumb}\n\n{build_hub_state(root, config, data)}"
 
     # Kiro (CLI userPromptSubmit / IDE promptSubmit) adds a hook's stdout
     # directly to the conversation context — no JSON envelope. Emit the bare

@@ -113,6 +113,29 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
     });
   });
 
+  it("uses Chinese as the first language for generated task metadata and PRD", () => {
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "登录状态识别",
+      "--slug",
+      "login-state",
+      "--hub-requirement-id",
+      "REQ-1001",
+    ]);
+
+    const task = readTask(tmp, taskPath);
+    expect(task.id).toBe("login-state");
+    expect(task.name).toBe("登录状态识别");
+    expect(task.title).toBe("登录状态识别");
+
+    const prd = fs.readFileSync(path.join(tmp, taskPath, "prd.md"), "utf-8");
+    expect(prd).toContain("# 登录状态识别");
+    expect(prd).toContain("## 目标");
+    expect(prd).toContain("## 需求");
+    expect(prd).toContain("## 验收标准");
+    expect(prd).toContain("优先使用简体中文");
+  });
+
   it("inherits Hub requirement metadata when creating a child task", () => {
     const parentPath = runTaskCreate(tmp, [
       "create",

@@ -9,6 +9,7 @@ export interface MarkStartedOptions {
   cwd?: string;
   taskJsonPath: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
   fetch?: FetchLike;
   status?: string;
 }
@@ -24,6 +25,7 @@ export async function markStarted(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {
@@ -66,6 +68,7 @@ export async function preflightStart(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {

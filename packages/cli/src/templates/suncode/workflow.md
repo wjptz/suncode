@@ -12,6 +12,14 @@
 
 ---
 
+## 语言策略
+
+- 任务文档（`prd.md`、`design.md`、`implement.md`、`research/*.md`）、`subtasks.json` 描述和项目 spec 更新，默认以简体中文作为第一语言。
+- 代码标识符、API 字段、命令名、文件路径、协议值、错误原文和外部引用术语保留原文。
+- 任务目录名和 `task.json.id` 保持 ASCII slug；`task.json.name` / `title` 有中文标题时使用面向人的中文标题。
+
+---
+
 ## Suncode System
 
 ### Developer Identity

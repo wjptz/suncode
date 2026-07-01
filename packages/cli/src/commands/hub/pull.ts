@@ -7,6 +7,7 @@ import type { FetchLike } from "./types.js";
 export interface PullOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
   fetch?: FetchLike;
   taskJsonPath?: string;
   cursor?: string;
@@ -19,6 +20,7 @@ export async function pullRequirements(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {
@@ -83,6 +85,7 @@ function resolveTaskRequest(options: PullOptions): {
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {

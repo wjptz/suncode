@@ -580,7 +580,7 @@ describe("resolveBundledSkills", () => {
     const requirements = bundled.find(
       (file) => file.relativePath === "suncode-hub-requirements/SKILL.md",
     );
-    expect(requirements?.content).toContain("SUNCODE_HUB_TOKEN");
+    expect(requirements?.content).toContain("suncode hub login");
     expect(requirements?.content).toContain("MinIO");
     expect(requirements?.content).toContain("suncode hub create-task");
   });

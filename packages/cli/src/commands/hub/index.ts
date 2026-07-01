@@ -3,8 +3,11 @@ import type { Command } from "commander";
 
 import { hubCreateTask } from "./create-task.js";
 import { downloadHubDocument } from "./documents.js";
+import { hubInit } from "./init.js";
 import { preflightStart, markStarted } from "./lifecycle.js";
+import { hubLogin, hubLogout } from "./login.js";
 import { pullRequirements, pullReview, syncRequirement } from "./pull.js";
+import { hubState, printHubState } from "./state.js";
 import { hubStatus } from "./status.js";
 import {
   submitCompletion,
@@ -19,6 +22,30 @@ interface TaskOptions {
   taskJson?: string;
   task?: string;
   bestEffort?: boolean;
+}
+
+interface HubInitCliOptions {
+  apiBaseUrl?: string;
+  projectApiBaseUrl?: string;
+  projectId?: string;
+  developerId?: string;
+  startReviewPolicy?: "confirm" | "block" | "bypass";
+  yes?: boolean;
+}
+
+interface HubLoginCliOptions {
+  apiBaseUrl?: string;
+  email?: string;
+  username?: string;
+  password?: string;
+}
+
+interface HubLogoutCliOptions {
+  apiBaseUrl?: string;
+}
+
+interface HubStateCliOptions {
+  json?: boolean;
 }
 
 interface DownloadDocumentOptions extends TaskOptions {
@@ -37,6 +64,73 @@ export function registerHubCommand(program: Command): void {
     .description(
       "Optional Suncode Hub team collaboration commands (requirements, task binding, artifacts, review, status)",
     );
+
+  hub
+    .command("init")
+    .description("Initialize Hub configuration for this project")
+    .option("--api-base-url <url>", "global default Hub API base URL")
+    .option("--project-api-base-url <url>", "project-level Hub API URL override")
+    .option("--project-id <id>", "Hub project ID")
+    .option("--developer-id <id>", "optional Hub developer ID")
+    .option(
+      "--start-review-policy <policy>",
+      "confirm, block, or bypass",
+      "confirm",
+    )
+    .option("--yes", "non-interactive mode")
+    .action(async (opts: HubInitCliOptions) => {
+      await run(async () =>
+        hubInit({
+          cwd: process.cwd(),
+          apiBaseUrl: opts.apiBaseUrl,
+          projectApiBaseUrl: opts.projectApiBaseUrl,
+          projectId: opts.projectId,
+          developerId: opts.developerId,
+          startReviewPolicy: opts.startReviewPolicy,
+          yes: opts.yes,
+        }),
+      );
+    });
+
+  hub
+    .command("login")
+    .description("Login to Suncode Hub with email and password")
+    .option("--api-base-url <url>", "Hub API base URL")
+    .option("--email <email>", "Hub email")
+    .option("--username <username>", "Hub email alias")
+    .option("--password <password>", "Hub password")
+    .action(async (opts: HubLoginCliOptions) => {
+      await run(async () =>
+        hubLogin({
+          cwd: process.cwd(),
+          apiBaseUrl: opts.apiBaseUrl,
+          email: opts.email,
+          username: opts.username,
+          password: opts.password,
+        }),
+      );
+    });
+
+  hub
+    .command("logout")
+    .description("Logout from the current Hub service")
+    .option("--api-base-url <url>", "Hub API base URL")
+    .action((opts: HubLogoutCliOptions) => {
+      runSync(() =>
+        hubLogout({
+          cwd: process.cwd(),
+          apiBaseUrl: opts.apiBaseUrl,
+        }),
+      );
+    });
+
+  hub
+    .command("state")
+    .description("Show Hub config, login, service, work, and current task state")
+    .option("--json", "print raw JSON")
+    .action(async (opts: HubStateCliOptions) => {
+      await runState(opts);
+    });
 
   hub
     .command("status")
@@ -333,6 +427,23 @@ function runSync(action: () => HubCommandResult): void {
 async function runJson(action: () => Promise<unknown>): Promise<void> {
   try {
     console.log(JSON.stringify(await action(), null, 2));
+  } catch (error) {
+    console.error(
+      chalk.red("Error:"),
+      error instanceof Error ? error.message : error,
+    );
+    process.exit(1);
+  }
+}
+
+async function runState(options: HubStateCliOptions): Promise<void> {
+  try {
+    const result = await hubState({ cwd: process.cwd() });
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      printHubState(result);
+    }
   } catch (error) {
     console.error(
       chalk.red("Error:"),

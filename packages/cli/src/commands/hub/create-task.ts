@@ -12,6 +12,7 @@ export interface HubCreateTaskOptions {
   cwd?: string;
   taskJsonPath: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
   fetch?: FetchLike;
 }
 
@@ -35,6 +36,7 @@ export async function hubCreateTask(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {
@@ -76,6 +78,9 @@ export async function hubCreateTask(
   }
 
   const developerId = task.meta.developerId ?? config.developerId;
+  const taskTitle = stringField(task.task.title);
+  const taskDisplayName =
+    taskTitle ?? stringField(task.task.name) ?? task.localTaskId;
   const body = {
     developerId,
     requirementRevision: task.meta.requirementRevision,
@@ -83,9 +88,9 @@ export async function hubCreateTask(
     parentRemoteTaskId: task.meta.parentRemoteTaskId ?? null,
     parentLocalTaskId: task.meta.parentLocalTaskId ?? null,
     localTaskId: task.localTaskId,
-    localTaskName: stringField(task.task.name) ?? task.localTaskId,
+    localTaskName: taskDisplayName,
     localTaskPath: task.localTaskPath,
-    title: stringField(task.task.title) ?? task.localTaskId,
+    title: taskTitle ?? taskDisplayName,
     source: "suncode",
   };
 

@@ -4,6 +4,7 @@ import type { HubCommandResult } from "./types.js";
 export interface HubStatusOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
 }
 
 export function hubStatus(options: HubStatusOptions = {}): HubCommandResult {
@@ -11,6 +12,7 @@ export function hubStatus(options: HubStatusOptions = {}): HubCommandResult {
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: false,
   });
   if (!config.enabled) {

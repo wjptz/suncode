@@ -10,6 +10,9 @@ import {
   parseHubSection,
   resolveHubConfig,
 } from "../../src/commands/hub/config.js";
+import { hubInit } from "../../src/commands/hub/init.js";
+import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
+import { hubState } from "../../src/commands/hub/state.js";
 import {
   collectPlanArtifacts,
   collectCompletionArtifacts,
@@ -50,6 +53,48 @@ function writeJson(file: string, data: unknown): void {
 function writeProjectConfig(tmpDir: string, content: string): void {
   fs.mkdirSync(path.join(tmpDir, ".suncode"), { recursive: true });
   fs.writeFileSync(path.join(tmpDir, ".suncode", "config.yaml"), content);
+}
+
+function writeGlobalHubConfig(
+  homeDir: string,
+  defaultApiBaseUrl: string,
+): void {
+  const filePath = path.join(homeDir, ".suncode", "hub", "config.json");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    `${JSON.stringify({ version: 1, defaultApiBaseUrl }, null, 2)}\n`,
+    "utf-8",
+  );
+}
+
+function writeHubAuth(
+  homeDir: string,
+  apiBaseUrl = "https://hub.example.test",
+  token = "login-token",
+): void {
+  const filePath = path.join(homeDir, ".suncode", "hub", "auth.json");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    `${JSON.stringify(
+      {
+        version: 1,
+        sessions: {
+          [apiBaseUrl]: {
+            developerId: "dev_456",
+            displayName: "kangmeng",
+            token,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            loggedInAt: "2026-07-01T12:00:00.000Z",
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf-8",
+  );
 }
 
 function makeTask(tmpDir: string, dirName = "06-30-payment-retry"): string {
@@ -208,9 +253,11 @@ function createMockFetch(): {
 
 describe("hub config", () => {
   let tmpDir: string;
+  let homeDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-hub-test-"));
+    homeDir = path.join(tmpDir, "home");
   });
 
   afterEach(() => {
@@ -248,24 +295,229 @@ hub:
     expect(config.enabled).toBe(false);
   });
 
-  it("fails fast when enabled config misses apiBaseUrl or token", () => {
+  it("uses global apiBaseUrl and login session, ignoring SUNCODE_HUB_TOKEN", () => {
     writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeGlobalHubConfig(homeDir, "https://hub.example.test/");
+    writeHubAuth(homeDir, "https://hub.example.test", "login-token");
+
+    const config = resolveHubConfig({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "env-token" },
+      requireAuth: true,
+    });
+
+    expect(config.enabled).toBe(true);
+    if (!config.enabled) return;
+    expect(config.apiBaseUrl).toBe("https://hub.example.test");
+    expect(config.apiBaseUrlSource).toBe("global");
+    expect(config.token).toBe("login-token");
+  });
+
+  it("fails fast when enabled config has no project or resolved apiBaseUrl", () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n");
 
     expect(() =>
       resolveHubConfig({
         cwd: tmpDir,
+        homeDir,
         env: { SUNCODE_HUB_TOKEN: "jwt" },
         requireAuth: true,
       }),
     ).toThrow(HubConfigError);
 
-    writeProjectConfig(
-      tmpDir,
-      "hub:\n  enabled: true\n  projectId: proj_123\n  apiBaseUrl: https://hub.example.test\n",
-    );
+    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
     expect(() =>
-      resolveHubConfig({ cwd: tmpDir, env: {}, requireAuth: true }),
-    ).toThrow("SUNCODE_HUB_TOKEN");
+      resolveHubConfig({ cwd: tmpDir, homeDir, env: {}, requireAuth: true }),
+    ).toThrow("Hub apiBaseUrl is required");
+  });
+});
+
+describe("hub init login logout state", () => {
+  let tmpDir: string;
+  let homeDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-hub-test-"));
+    homeDir = path.join(tmpDir, "home");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("init writes global default apiBaseUrl and project Hub config without secrets", async () => {
+    writeProjectConfig(tmpDir, "session_commit_message: keep me\n");
+
+    const result = await hubInit({
+      cwd: tmpDir,
+      homeDir,
+      apiBaseUrl: "https://hub.example.test/",
+      projectId: "proj_123",
+      developerId: "dev_456",
+      yes: true,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(homeDir, ".suncode", "hub", "config.json"),
+          "utf-8",
+        ),
+      ),
+    ).toEqual({
+      version: 1,
+      defaultApiBaseUrl: "https://hub.example.test",
+    });
+    const projectConfig = fs.readFileSync(
+      path.join(tmpDir, ".suncode", "config.yaml"),
+      "utf-8",
+    );
+    expect(projectConfig).toContain("session_commit_message: keep me");
+    expect(projectConfig).toContain("projectId: proj_123");
+    expect(projectConfig).not.toContain("token");
+  });
+
+  it("login stores a session by apiBaseUrl and logout removes only that session", async () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeGlobalHubConfig(homeDir, "https://hub.example.test");
+    const fetch = vi.fn(async () =>
+      jsonResponse({
+        token: "login-token",
+        user: {
+          id: 1,
+          email: "admin@example.com",
+          display_name: "Admin",
+          role: "admin",
+          created_at: "2026-06-29T12:18:41.892335+08:00",
+          updated_at: "2026-06-29T12:18:41.892335+08:00",
+        },
+      }),
+    );
+
+    const login = await hubLogin({
+      cwd: tmpDir,
+      homeDir,
+      email: "admin@example.com",
+      password: "secret",
+      fetch,
+    });
+
+    expect(login.status).toBe("updated");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const call = fetch.mock.calls[0];
+    expect(String(call[0])).toBe("https://hub.example.test/api/auth/login");
+    expect(JSON.parse(String(call[1]?.body))).toEqual({
+      email: "admin@example.com",
+      password: "secret",
+    });
+
+    const authPath = path.join(homeDir, ".suncode", "hub", "auth.json");
+    const auth = JSON.parse(fs.readFileSync(authPath, "utf-8")) as {
+      sessions: Record<string, { developerId: string; displayName?: string }>;
+    };
+    expect(auth.sessions["https://hub.example.test"]).toMatchObject({
+      developerId: "1",
+      displayName: "Admin",
+    });
+
+    const logout = hubLogout({ cwd: tmpDir, homeDir });
+
+    expect(logout.status).toBe("updated");
+    expect(fs.readFileSync(authPath, "utf-8")).not.toContain("login-token");
+  });
+
+  it("state reports hub off without network and writes a project cache", async () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: false\n");
+    const fetch = vi.fn();
+
+    const result = await hubState({ cwd: tmpDir, homeDir, fetch });
+
+    expect(result.summary.hub).toBe("off");
+    expect(fetch).not.toHaveBeenCalled();
+    const cache = fs.readFileSync(
+      path.join(tmpDir, ".suncode", ".runtime", "hub-state.json"),
+      "utf-8",
+    );
+    expect(cache).toContain('"hub": "off"');
+  });
+
+  it("state reports missing login before service probing", async () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeGlobalHubConfig(homeDir, "https://hub.example.test");
+    const fetch = vi.fn();
+
+    const result = await hubState({ cwd: tmpDir, homeDir, fetch });
+
+    expect(result.summary).toMatchObject({
+      hub: "on",
+      config: "ok",
+      login: "missing",
+      service: "skipped",
+      work: "skipped",
+    });
+    expect(result.nextAction).toContain("suncode hub login");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("state checks service/work and marks an active ordinary task as local-only", async () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeGlobalHubConfig(homeDir, "https://hub.example.test");
+    writeHubAuth(homeDir);
+    const taskDir = path.join(tmpDir, ".suncode", "tasks", "07-01-local-work");
+    writeJson(path.join(taskDir, "task.json"), {
+      id: "local-work",
+      status: "in_progress",
+      meta: {},
+    });
+    writeJson(
+      path.join(
+        tmpDir,
+        ".suncode",
+        ".runtime",
+        "sessions",
+        "session-a.json",
+      ),
+      { current_task: ".suncode/tasks/07-01-local-work" },
+    );
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/health")) {
+        return jsonResponse({ status: "ok", version: "1.2.3", name: "Hub" });
+      }
+      if (String(url).includes("/requirements?")) {
+        return jsonResponse({
+          requirements: [
+            { id: "REQ-1001", title: "Do team work", status: "ready" },
+          ],
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${String(url)}`);
+    });
+
+    const result = await hubState({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_CONTEXT_ID: "session-a" },
+      fetch,
+    });
+
+    expect(result.summary).toMatchObject({
+      hub: "on",
+      config: "ok",
+      login: "ok",
+      service: "ok",
+      work: "available",
+      currentTask: "local-only",
+    });
+    expect(result.nextAction).toContain("不要执行 Hub 任务提交命令");
+    const cache = fs.readFileSync(
+      path.join(tmpDir, ".suncode", ".runtime", "hub-state.json"),
+      "utf-8",
+    );
+    expect(cache).not.toContain("login-token");
+    expect(cache).toContain('"currentTask": "local-only"');
   });
 });
 
@@ -432,9 +684,11 @@ describe("hub task resolution", () => {
 
 describe("hub commands", () => {
   let tmpDir: string;
+  let homeDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-hub-test-"));
+    homeDir = path.join(tmpDir, "home");
     writeProjectConfig(
       tmpDir,
       [
@@ -448,6 +702,7 @@ describe("hub commands", () => {
         "",
       ].join("\n"),
     );
+    writeHubAuth(homeDir);
   });
 
   afterEach(() => {
@@ -461,6 +716,7 @@ describe("hub commands", () => {
 
     const result = await hubCreateTask({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch,
@@ -471,7 +727,7 @@ describe("hub commands", () => {
     expect(post?.url).toBe(
       "https://hub.example.test/api/v1/projects/proj_123/requirements/REQ-1001/tasks",
     );
-    expect(post?.headers.authorization).toBe("Bearer jwt-token");
+    expect(post?.headers.authorization).toBe("Bearer login-token");
     expect(post?.headers["idempotency-key"]).toBe(
       "hub:create-task:proj_123:REQ-1001:06-30-payment-retry",
     );
@@ -485,6 +741,7 @@ describe("hub commands", () => {
     calls.length = 0;
     const second = await hubCreateTask({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch,
@@ -508,6 +765,7 @@ describe("hub commands", () => {
 
     await hubCreateTask({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch,
@@ -519,6 +777,33 @@ describe("hub commands", () => {
     );
   });
 
+  it("uses the human task title as the Hub local task name", async () => {
+    const taskJsonPath = makeTask(tmpDir, "06-30-login-state");
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      name: string;
+      title: string;
+    };
+    taskJson.name = "login-state";
+    taskJson.title = "登录状态识别";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+    });
+
+    const post = calls.find((call) => call.method === "POST");
+    const payload = JSON.parse(post?.body ?? "{}") as {
+      localTaskName?: string;
+      title?: string;
+    };
+    expect(payload.localTaskName).toBe("登录状态识别");
+    expect(payload.title).toBe("登录状态识别");
+  });
+
   it("submit-plan uploads file bodies to MinIO and sends only object refs to Hub", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);
@@ -528,6 +813,7 @@ describe("hub commands", () => {
     const { fetch } = createMockFetch();
     await hubCreateTask({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch,
@@ -543,6 +829,7 @@ describe("hub commands", () => {
 
     const result = await submitPlan({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch: trackedFetch,
@@ -598,6 +885,7 @@ describe("hub commands", () => {
     const { fetch } = createMockFetch();
     await hubCreateTask({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch,
@@ -613,6 +901,7 @@ describe("hub commands", () => {
 
     const result = await submitSpec({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch: trackedFetch,
@@ -697,6 +986,7 @@ describe("hub commands", () => {
     const { fetch } = createMockFetch();
     await hubCreateTask({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch,
@@ -705,6 +995,7 @@ describe("hub commands", () => {
     const { calls, fetch: trackedFetch } = createMockFetch();
     const result = await submitSubtasks({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch: trackedFetch,
@@ -742,6 +1033,7 @@ describe("hub commands", () => {
     calls.length = 0;
     const second = await submitSubtasks({
       cwd: tmpDir,
+      homeDir,
       taskJsonPath,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       fetch: trackedFetch,
@@ -753,9 +1045,11 @@ describe("hub commands", () => {
 
 describe("hub document downloads", () => {
   let tmpDir: string;
+  let homeDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-hub-test-"));
+    homeDir = path.join(tmpDir, "home");
     writeProjectConfig(
       tmpDir,
       [
@@ -767,6 +1061,7 @@ describe("hub document downloads", () => {
         "",
       ].join("\n"),
     );
+    writeHubAuth(homeDir);
   });
 
   afterEach(() => {
@@ -778,6 +1073,7 @@ describe("hub document downloads", () => {
     const fetch = vi.fn();
     const result = await downloadDocumentPayload({
       cwd: tmpDir,
+      homeDir,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       payload: { kind: "text", text: "short change", document: null },
       targetDir: tmpDir,
@@ -823,6 +1119,7 @@ describe("hub document downloads", () => {
 
     const result = await downloadDocumentPayload({
       cwd: tmpDir,
+      homeDir,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       payload: {
         kind: "document",
@@ -885,6 +1182,7 @@ describe("hub document downloads", () => {
 
     const result = await downloadHubDocument({
       cwd: tmpDir,
+      homeDir,
       env: { SUNCODE_HUB_TOKEN: "jwt-token" },
       documentId: "DOC-2002",
       filename: "fallback.md",

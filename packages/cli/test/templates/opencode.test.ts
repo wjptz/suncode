@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -421,6 +421,90 @@ function writeSessionFile(dir: string, key: string, taskRef: string): void {
   writeFileSync(file, JSON.stringify({ current_task: taskRef }, null, 2));
 }
 
+function setupOpencodeHubState(dir: string, home: string): void {
+  writeFileSync(
+    join(dir, ".suncode", "config.yaml"),
+    ["hub:", "  enabled: true", "  projectId: proj_123", ""].join("\n"),
+  );
+  mkdirSync(join(home, ".suncode", "hub"), { recursive: true });
+  writeFileSync(
+    join(home, ".suncode", "hub", "config.json"),
+    `${JSON.stringify(
+      { version: 1, defaultApiBaseUrl: "https://hub.example.test" },
+      null,
+      2,
+    )}\n`,
+  );
+  writeFileSync(
+    join(home, ".suncode", "hub", "auth.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        sessions: {
+          "https://hub.example.test": {
+            developerId: "dev_456",
+            displayName: "Dev",
+            token: "secret-token",
+            expiresAt: "2099-01-01T00:00:00.000Z",
+            loggedInAt: "2026-07-01T12:00:00.000Z",
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  mkdirSync(join(dir, ".suncode", ".runtime"), { recursive: true });
+  writeFileSync(
+    join(dir, ".suncode", ".runtime", "hub-state.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        summary: {
+          hub: "on",
+          config: "ok",
+          login: "ok",
+          service: "ok",
+          work: "none",
+          currentTask: "none",
+        },
+        work: { availableCount: 0, items: [] },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+function writeFakeSuncodeExecutable(dir: string, body: string): string {
+  const scriptPath = join(dir, "fake-suncode.mjs");
+  writeFileSync(scriptPath, `#!/usr/bin/env node\n${body}\n`, "utf-8");
+  chmodSync(scriptPath, 0o755);
+  return scriptPath;
+}
+
+async function withEnv(
+  env: Record<string, string>,
+  fn: () => Promise<void>,
+): Promise<void> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of Object.keys(env)) {
+    previous.set(key, process.env[key]);
+    process.env[key] = env[key];
+  }
+  try {
+    await fn();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 describe("opencode subagent helper", () => {
   it("isSuncodeSubagent matches the three suncode sub-agent names", () => {
     expect(isSuncodeSubagent({ agent: "suncode-implement" })).toBe(true);
@@ -716,6 +800,71 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     );
 
     expect(parts[0].text).toContain("<workflow-state>");
+    expect(parts[0].text).toContain("<hub-state>");
     expect(parts[0].text).toContain("user prompt");
+  });
+
+  it("inject-workflow-state.js refreshes Hub state through the suncode CLI", async () => {
+    const home = join(dir, "home");
+    setupOpencodeHubState(dir, home);
+    const fakeSuncode = writeFakeSuncodeExecutable(
+      dir,
+      [
+        'if (process.argv.slice(2).join(" ") !== "hub state --json") process.exit(9)',
+        "console.log(JSON.stringify({",
+        '  summary: { hub: "on", config: "ok", login: "ok", service: "ok", work: "available", currentTask: "none" },',
+        '  project: { projectId: "proj_123" },',
+        "  work: { availableCount: 2, items: [] },",
+        '  nextAction: "实时状态显示有可接需求。",',
+        "}))",
+      ].join("\n"),
+    );
+
+    await withEnv({ HOME: home, SUNCODE_CLI: fakeSuncode }, async () => {
+      const hooks = (await injectWorkflowStatePlugin({
+        directory: dir,
+      })) as ChatMessageHooks;
+      const parts: ChatMessagePart[] = [{ type: "text", text: "user prompt" }];
+
+      await hooks["chat.message"](
+        { sessionID: "main-session", agent: "build" },
+        { parts },
+      );
+
+      expect(parts[0].text).toContain("<hub-state>");
+      expect(parts[0].text).toContain("Source: live");
+      expect(parts[0].text).toContain("Service: ok");
+      expect(parts[0].text).toContain("Work: 2 available requirements");
+      expect(parts[0].text).toContain("实时状态显示有可接需求。");
+    });
+  });
+
+  it("inject-workflow-state.js treats Hub state refresh failure as unavailable", async () => {
+    const home = join(dir, "home");
+    setupOpencodeHubState(dir, home);
+    const fakeSuncode = writeFakeSuncodeExecutable(
+      dir,
+      [
+        'if (process.argv.slice(2).join(" ") !== "hub state --json") process.exit(9)',
+        "process.exit(7)",
+      ].join("\n"),
+    );
+
+    await withEnv({ HOME: home, SUNCODE_CLI: fakeSuncode }, async () => {
+      const hooks = (await injectWorkflowStatePlugin({
+        directory: dir,
+      })) as ChatMessageHooks;
+      const parts: ChatMessagePart[] = [{ type: "text", text: "user prompt" }];
+
+      await hooks["chat.message"](
+        { sessionID: "main-session", agent: "build" },
+        { parts },
+      );
+
+      expect(parts[0].text).toContain("<hub-state>");
+      expect(parts[0].text).toContain("Service: unavailable");
+      expect(parts[0].text).toContain("Hub state refresh failed");
+      expect(parts[0].text).not.toContain("Service: ok");
+    });
   });
 });

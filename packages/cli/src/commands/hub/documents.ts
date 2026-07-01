@@ -45,6 +45,7 @@ interface DownloadUrlResponse {
 export interface DownloadDocumentPayloadOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
   payload: HubTextOrDocumentPayload;
   targetDir: string;
   fetch?: FetchLike;
@@ -53,6 +54,7 @@ export interface DownloadDocumentPayloadOptions {
 export interface DownloadHubDocumentOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
   payloadJsonPath?: string;
   documentId?: string;
   filename?: string;
@@ -76,6 +78,7 @@ export async function downloadHubDocument(
   return downloadDocumentPayload({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     payload,
     targetDir,
     fetch: options.fetch,
@@ -93,6 +96,7 @@ export async function downloadDocumentPayload(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {

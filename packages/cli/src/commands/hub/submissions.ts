@@ -32,6 +32,7 @@ export interface SubmitArtifactsOptions {
   cwd?: string;
   taskJsonPath: string;
   env?: Record<string, string | undefined>;
+  homeDir?: string;
   fetch?: FetchLike;
   force?: boolean;
 }
@@ -123,6 +124,7 @@ export async function submitSubtasks(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {
@@ -201,6 +203,7 @@ async function submitArtifacts(
   const config = resolveHubConfig({
     cwd,
     env: options.env,
+    homeDir: options.homeDir,
     requireAuth: true,
   });
   if (!config.enabled) {

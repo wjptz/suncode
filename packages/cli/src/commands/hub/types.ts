@@ -19,6 +19,7 @@ export interface EnabledHubConfig {
   mode: "team";
   projectId: string;
   apiBaseUrl: string;
+  apiBaseUrlSource: "project" | "global";
   developerId: string;
   token?: string;
   startReviewPolicy: StartReviewPolicy;

@@ -132,10 +132,10 @@ _SUBAGENT_CONFIG_DIRS: tuple[str, ...] = (
 )
 
 _SEED_EXAMPLE = (
-    "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. "
-    "Put spec/research files only — no code paths. "
-    "Run `python3 .suncode/scripts/get_context.py --mode packages` to list available specs. "
-    "Delete this line once real entries are added."
+    "填写 {\"file\": \"<path>\", \"reason\": \"<why>\"}。"
+    "这里只放 spec/research 文件，不放代码路径。"
+    "运行 `python3 .suncode/scripts/get_context.py --mode packages` 查看可用 spec。"
+    "补入真实条目后删除这一行。"
 )
 
 
@@ -165,27 +165,29 @@ def _write_seed_jsonl(path: Path) -> None:
 
 def _default_prd_content(title: str, description: str | None = None) -> str:
     """Return the default PRD skeleton created with every task."""
-    goal = (description or "").strip() or "TBD."
-    heading = title.strip() or "Untitled task"
+    goal = (description or "").strip() or "待补充。"
+    heading = title.strip() or "未命名任务"
     return f"""# {heading}
 
-## Goal
+## 目标
 
 {goal}
 
-## Requirements
+## 需求
 
-- TBD
+- 待补充
 
-## Acceptance Criteria
+## 验收标准
 
-- [ ] TBD
+- [ ] 待补充
 
-## Notes
+## 说明
 
-- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+- 优先使用简体中文编写任务文档、需求、设计、实施计划和 spec 更新。
+- 代码标识符、API 字段、命令、错误原文和外部引用术语保留原文。
+- `prd.md` 只写需求、约束和验收标准；不要放技术设计或执行清单。
+- 轻量任务可以只保留 PRD。
+- 复杂任务在 `task.py start` 前补充 `design.md` 和 `implement.md`。
 """
 
 
@@ -333,7 +335,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     hub_meta = _hub_meta_from_args(args)
     task_data = {
         "id": slug,
-        "name": slug,
+        "name": args.title,
         "title": args.title,
         "description": args.description or "",
         "status": "planning",
@@ -420,16 +422,16 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     print(colored(f"Created task: {dir_name}", Colors.GREEN), file=sys.stderr)
     print("", file=sys.stderr)
-    print(colored("Next steps:", Colors.BLUE), file=sys.stderr)
-    print("  - Fill prd.md with requirements and acceptance criteria", file=sys.stderr)
-    print("  - Lightweight task: PRD-only is valid", file=sys.stderr)
-    print("  - Complex task: add design.md and implement.md before task.py start", file=sys.stderr)
+    print(colored("后续步骤:", Colors.BLUE), file=sys.stderr)
+    print("  - 补充 prd.md 的需求、约束和验收标准，优先使用简体中文", file=sys.stderr)
+    print("  - 轻量任务可以只保留 PRD", file=sys.stderr)
+    print("  - 复杂任务在 task.py start 前补充 design.md 和 implement.md", file=sys.stderr)
     if seeded_jsonl:
         print(
-            "  - Curate implement.jsonl / check.jsonl as spec/research manifests when sub-agents need context",
+            "  - 子代理需要上下文时，整理 implement.jsonl / check.jsonl 作为 spec/research 清单",
             file=sys.stderr,
         )
-    print("  - Use /suncode:continue or phase context to decide the next step", file=sys.stderr)
+    print("  - 使用 /suncode:continue 或 phase context 决定下一步", file=sys.stderr)
     print("", file=sys.stderr)
 
     # Output relative path for script chaining
