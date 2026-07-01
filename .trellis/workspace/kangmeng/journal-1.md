@@ -210,3 +210,38 @@ Added submit-subtasks command, Hub after_start subtask upload, workflow/API docs
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Docs-site Suncode migration
+
+**Date**: 2026-07-01
+**Task**: Docs-site Suncode migration
+**Package**: docs-site
+**Branch**: `main`
+
+### Summary
+
+Archived the completed docs-site Suncode migration after retaining only Start Here/Advanced docs, removing old Trellis navigation/modules/assets, recording validation, and committing the docs-site submodule pointer plus task metadata.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `894f153` | (see git log) |
+| `17d9a85` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
-- **Last Active**: 2026-06-30
+- **Total Sessions**: 7
+- **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~212 | Active |
+| `journal-1.md` | ~247 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-07-01 | Docs-site Suncode migration | `894f153`, `17d9a85` | `main` |
 | 6 | 2026-06-30 | Hub structured subtask upload | `b7dd97f` | `main` |
 | 5 | 2026-06-30 | Suncode runtime identity migration | `45e8c6f` | `main` |
 | 4 | 2026-06-30 | Rename Suncode generated interactions | `459a36d` | `main` |
