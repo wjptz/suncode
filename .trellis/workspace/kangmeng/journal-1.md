@@ -245,3 +245,38 @@ Archived the completed docs-site Suncode migration after retaining only Start He
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Hub 初始化登录和状态识别
+
+**Date**: 2026-07-01
+**Task**: Hub 初始化登录和状态识别
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+新增 suncode hub init/login/logout/state，移除 SUNCODE_HUB_TOKEN 鉴权路径；hook 注入实时 <hub-state>，失败或超时按 Hub 不可用处理；补充中文任务/spec 语言策略。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e431a5d` | (see git log) |
+| `ce564f0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
