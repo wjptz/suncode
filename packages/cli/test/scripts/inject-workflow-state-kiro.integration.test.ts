@@ -228,9 +228,10 @@ describeFn("Kiro hook output branch", () => {
     };
     const context = parsed.hookSpecificOutput?.additionalContext;
     expect(context).toContain("<hub-state>");
-    expect(context).toContain("Hub: on");
-    expect(context).toContain("Login: ok");
-    expect(context).not.toContain("Hub: off");
+    expect(context).toContain("hub:ok");
+    expect(context).toContain("workflow:primary");
+    expect(context).toContain("hub-task:none");
+    expect(context).not.toContain("hub:off");
     expect(context).not.toContain("secret-token");
   });
 
@@ -246,6 +247,7 @@ describeFn("Kiro hook output branch", () => {
         '  "summary": {"hub": "on", "config": "ok", "login": "ok", "service": "ok", "work": "available", "currentTask": "none"},',
         '  "project": {"projectId": "proj_123"},',
         '  "work": {"availableCount": 2, "items": []},',
+        '  "spec": {"status": "synced-with-local-only", "policy": "remote_wins", "localRevision": "spec-rev-42", "localOnlyCount": 1, "deletionCandidateCount": 1},',
         '  "nextAction": "实时状态显示有可接需求。"',
         "}, ensure_ascii=False))",
         "",
@@ -268,10 +270,66 @@ describeFn("Kiro hook output branch", () => {
     };
     const context = parsed.hookSpecificOutput?.additionalContext;
     expect(context).toContain("<hub-state>");
-    expect(context).toContain("Source: live");
-    expect(context).toContain("Service: ok");
-    expect(context).toContain("Work: 2 available requirements");
-    expect(context).toContain("实时状态显示有可接需求。");
+    expect(context).toContain("hub:ok");
+    expect(context).toContain("workflow:primary");
+    expect(context).toContain("hub-task:none");
+    expect(context).toContain("work:2 available");
+    expect(context).toContain(
+      "Flow add-on: follow workflow-state; ask before pulling Hub work.",
+    );
+    expect(context).not.toContain("spec:");
+    expect(context).not.toContain("local-only=1");
+    expect(context).not.toContain("deleted=1");
+    expect(context).not.toContain("manual compare");
+    expect(context).not.toContain("Source: live");
+    expect(context).not.toContain("Service: ok");
+    expect(context).not.toContain("实时状态显示有可接需求。");
+  });
+
+  it("inject-workflow-state.py warns local-only tasks not to use Hub lifecycle commands", () => {
+    const home = path.join(tmp, "home");
+    setupHubState(tmp, home);
+    const fakeSuncode = writeFakeSuncode(
+      tmp,
+      [
+        "import json, sys",
+        'assert sys.argv[1:] == ["hub", "state", "--json"], sys.argv',
+        "print(json.dumps({",
+        '  "summary": {"hub": "on", "config": "ok", "login": "ok", "service": "ok", "work": "available", "currentTask": "local-only"},',
+        '  "project": {"projectId": "proj_123"},',
+        '  "work": {"availableCount": 3, "items": []},',
+        '  "spec": {"status": "synced", "localRevision": "spec-rev-42"}',
+        "}, ensure_ascii=False))",
+        "",
+      ].join("\n"),
+    );
+
+    const { stdout, status } = runHook(
+      tmp,
+      "inject-workflow-state.py",
+      "CLAUDE_PROJECT_DIR",
+      {
+        HOME: home,
+        SUNCODE_CLI: `python3 ${fakeSuncode}`,
+      },
+    );
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout) as {
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+    const context = parsed.hookSpecificOutput?.additionalContext;
+    expect(context).toContain("hub:ok");
+    expect(context).toContain("workflow:primary");
+    expect(context).toContain("hub-task:local-only");
+    expect(context).toContain(
+      "Flow add-on: follow workflow-state; keep this workflow task local unless the user asks to bind Hub work.",
+    );
+    expect(context).toContain(
+      "Do not: run submit-plan, submit-completion, or mark-started for this local task.",
+    );
+    expect(context).not.toContain("spec:");
+    expect(context).not.toContain("Flow add-on: follow workflow-state; ask before pulling Hub work.");
   });
 
   it("inject-workflow-state.py treats Hub state refresh failure as unavailable", () => {
@@ -303,9 +361,10 @@ describeFn("Kiro hook output branch", () => {
     };
     const context = parsed.hookSpecificOutput?.additionalContext;
     expect(context).toContain("<hub-state>");
-    expect(context).toContain("Service: unavailable");
+    expect(context).toContain("hub:server-error");
+    expect(context).toContain("workflow:primary");
     expect(context).toContain("Hub state refresh failed");
-    expect(context).not.toContain("Service: ok");
+    expect(context).not.toContain("hub:ok");
   });
 
   it("inject-workflow-state.py treats invalid Hub state JSON as unavailable", () => {
@@ -335,9 +394,10 @@ describeFn("Kiro hook output branch", () => {
     };
     const context = parsed.hookSpecificOutput?.additionalContext;
     expect(context).toContain("<hub-state>");
-    expect(context).toContain("Service: unavailable");
+    expect(context).toContain("hub:server-error");
+    expect(context).toContain("workflow:primary");
     expect(context).toContain("Hub state refresh failed");
-    expect(context).not.toContain("Service: ok");
+    expect(context).not.toContain("hub:ok");
   });
 
   it("inject-workflow-state.py treats Hub state refresh timeout as unavailable", () => {
@@ -370,9 +430,10 @@ describeFn("Kiro hook output branch", () => {
     };
     const context = parsed.hookSpecificOutput?.additionalContext;
     expect(context).toContain("<hub-state>");
-    expect(context).toContain("Service: unavailable");
+    expect(context).toContain("hub:server-error");
+    expect(context).toContain("workflow:primary");
     expect(context).toContain("Hub state refresh timed out");
-    expect(context).not.toContain("Service: ok");
+    expect(context).not.toContain("hub:ok");
   });
 
   it("session-start.py emits plain-text overview for Kiro", () => {

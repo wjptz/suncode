@@ -576,6 +576,7 @@ describe("resolveBundledSkills", () => {
 
     expect(files).toContain("suncode-hub-requirements/SKILL.md");
     expect(files).toContain("suncode-hub-finish/SKILL.md");
+    expect(files).toContain("suncode-hub-spec-sync/SKILL.md");
 
     const requirements = bundled.find(
       (file) => file.relativePath === "suncode-hub-requirements/SKILL.md",
@@ -583,5 +584,6 @@ describe("resolveBundledSkills", () => {
     expect(requirements?.content).toContain("suncode hub login");
     expect(requirements?.content).toContain("MinIO");
     expect(requirements?.content).toContain("suncode hub create-task");
+    expect(requirements?.content).toContain("suncode-hub-spec-sync");
   });
 });

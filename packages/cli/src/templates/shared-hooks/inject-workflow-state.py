@@ -322,22 +322,24 @@ def build_hub_state(root: Path, config: dict, input_data: dict) -> str:
     current_task = _current_hub_task_state(root, input_data)
     hub = config.get("hub") if isinstance(config, dict) else None
     if not isinstance(hub, dict) or not _yaml_bool_true(hub.get("enabled")):
-        return "\n".join([
-            "<hub-state>",
-            "Hub: off",
-            "Reason: hub.enabled is not true or .suncode/config.yaml is missing",
-            f"Current task: {current_task}",
-            "AI: use the local Suncode workflow; do not run Hub-specific commands.",
-            "</hub-state>",
+        return _hub_state_block([
+            "hub:off",
+            "workflow:primary",
+            f"hub-task:{current_task}",
+            "reason:hub.enabled is not true or .suncode/config.yaml is missing",
+            "Flow add-on: follow workflow-state; Hub is disabled for this project.",
+            "Do not: run Hub-specific commands.",
         ])
 
     project_id = _string_value(hub.get("projectId"))
     if not project_id:
         return _hub_state_block([
-            "Hub: on",
-            "Config: invalid (hub.projectId missing)",
-            f"Current task: {current_task}",
-            "AI: ask the user to run `suncode hub init` before using Hub workflows.",
+            "hub:config-error",
+            "workflow:primary",
+            f"hub-task:{current_task}",
+            "reason:hub.projectId missing",
+            "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed.",
+            "Do not: enter Hub workflow until config is fixed.",
         ])
 
     project_api_base_url = _normalize_api_base_url(_string_value(hub.get("apiBaseUrl")))
@@ -345,50 +347,50 @@ def build_hub_state(root: Path, config: dict, input_data: dict) -> str:
     api_base_url = project_api_base_url or global_api_base_url
     if not api_base_url:
         return _hub_state_block([
-            "Hub: on",
-            f"Project: {project_id}",
-            "Config: missing global apiBaseUrl",
-            f"Current task: {current_task}",
-            "AI: ask the user to run `suncode hub init` to set Hub apiBaseUrl.",
+            "hub:config-error",
+            "workflow:primary",
+            f"hub-task:{current_task}",
+            "reason:apiBaseUrl missing",
+            "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed.",
+            "Do not: enter Hub workflow until config is fixed.",
         ])
 
     session = _hub_auth_session(api_base_url)
     if session is None:
         return _hub_state_block([
-            "Hub: on",
-            f"Project: {project_id}",
-            f"Login: missing for {api_base_url}",
-            f"Current task: {current_task}",
-            "AI: ask the user to run `suncode hub login` before using Hub workflows.",
+            "hub:not-login",
+            "workflow:primary",
+            f"hub-task:{current_task}",
+            f"reason:no login for {api_base_url}",
+            "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed.",
+            "Do not: enter Hub workflow until login is ok.",
         ])
     if _hub_session_expired(session):
         return _hub_state_block([
-            "Hub: on",
-            f"Project: {project_id}",
-            f"Login: expired for {api_base_url}",
-            f"Current task: {current_task}",
-            "AI: ask the user to run `suncode hub login` before using Hub workflows.",
+            "hub:not-login",
+            "workflow:primary",
+            f"hub-task:{current_task}",
+            f"reason:login expired for {api_base_url}",
+            "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed.",
+            "Do not: enter Hub workflow until login is ok.",
         ])
 
     live_state, refresh_error = _refresh_hub_state_via_cli(root, input_data)
     if live_state is None:
         return _hub_unavailable_block(
-            project_id,
             current_task,
             refresh_error or "Hub state refresh failed",
         )
 
-    return _format_live_hub_state(live_state, project_id, current_task)
+    return _format_live_hub_state(live_state, current_task)
 
 
-def _format_live_hub_state(
-    state: dict, fallback_project_id: str, fallback_current_task: str
-) -> str:
-    summary = state.get("summary") if isinstance(state.get("summary"), dict) else {}
-    project = state.get("project") if isinstance(state.get("project"), dict) else {}
-    current = state.get("currentTask") if isinstance(state.get("currentTask"), dict) else {}
+def _format_live_hub_state(state: dict, fallback_current_task: str) -> str:
+    summary_candidate = state.get("summary")
+    current_candidate = state.get("currentTask")
+    summary = summary_candidate if isinstance(summary_candidate, dict) else {}
+    current = current_candidate if isinstance(current_candidate, dict) else {}
     hub = _string_value(summary.get("hub")) or "unknown"
-    project_id = _string_value(project.get("projectId")) or fallback_project_id
     config = _string_value(summary.get("config")) or "unknown"
     login = _string_value(summary.get("login")) or "unknown"
     service = _string_value(summary.get("service")) or "unknown"
@@ -398,41 +400,27 @@ def _format_live_hub_state(
         or _string_value(summary.get("currentTask"))
         or fallback_current_task
     )
+    hub_code = _hub_status_code(hub, config, login, service)
+    work_count = _work_available_count(state)
     lines = [
-        f"Hub: {hub}",
-        "Source: live (`suncode hub state --json`)",
-        f"Project: {project_id}",
-        f"Config: {config}",
-        f"Login: {login}",
-        f"Service: {service}",
-        f"Work: {_work_line(state, work)}",
-        f"Current task: {current_task}",
+        f"hub:{hub_code}",
+        "workflow:primary",
+        f"hub-task:{current_task}",
+        f"work:{_work_summary(state, work)}",
+        _hub_flow_line(hub_code, current_task, work_count),
     ]
-    next_action = _string_value(state.get("nextAction"))
-    if next_action:
-        lines.append(f"AI: {next_action}")
-    elif service == "unavailable":
-        lines.append("AI: Hub service is currently unavailable; do not use Hub-specific workflows.")
-    elif current_task == "local-only":
-        lines.append(
-            "AI: 当前任务未绑定 Hub；不要运行 submit-plan、submit-completion、mark-started 等 Hub 任务命令，除非用户明确要求绑定 Hub 需求。"
-        )
-    elif work == "available":
-        lines.append("AI: ask the user whether to pull/select Hub work with `suncode hub pull`.")
-    else:
-        lines.append("AI: use Hub commands only for Hub-bound tasks.")
+    lines.extend(_hub_do_not_lines(hub_code, current_task))
     return _hub_state_block(lines)
 
 
-def _hub_unavailable_block(project_id: str, current_task: str, reason: str) -> str:
+def _hub_unavailable_block(current_task: str, reason: str) -> str:
     return _hub_state_block([
-        "Hub: on",
-        "Source: live refresh failed",
-        f"Project: {project_id}",
-        "Service: unavailable",
+        "hub:server-error",
+        "workflow:primary",
+        f"hub-task:{current_task}",
         f"Reason: {reason}",
-        f"Current task: {current_task}",
-        "AI: Hub state refresh failed or timed out; treat Hub as currently unavailable and do not use Hub-specific workflows.",
+        "Flow add-on: follow workflow-state; treat Hub as unavailable until `suncode hub state` is ok.",
+        "Do not: use Hub-specific workflows.",
     ])
 
 
@@ -570,14 +558,65 @@ def _current_hub_task_state(root: Path, input_data: dict) -> str:
     return "local-only"
 
 
-def _work_line(state: object, fallback: str) -> str:
+def _hub_status_code(hub: str, config: str, login: str, service: str) -> str:
+    if hub == "off":
+        return "off"
+    if config != "ok":
+        return "unknown" if config == "unknown" else "config-error"
+    if login != "ok":
+        return "unknown" if login == "unknown" else "not-login"
+    if service != "ok":
+        return "unknown" if service == "unknown" else "server-error"
+    return "ok" if hub == "on" else "unknown"
+
+
+def _work_available_count(state: object) -> int | None:
     if isinstance(state, dict):
         work = state.get("work")
         if isinstance(work, dict):
             count = work.get("availableCount")
             if isinstance(count, int):
-                return f"{count} available requirements" if count > 0 else "none"
+                return count
+    return None
+
+
+def _work_summary(state: object, fallback: str) -> str:
+    count = _work_available_count(state)
+    if count is not None:
+        return f"{count} available" if count > 0 else "none"
     return fallback
+
+
+def _hub_flow_line(
+    code: str,
+    current_task: str,
+    work_count: int | None,
+) -> str:
+    if code == "off":
+        return "Flow add-on: follow workflow-state; Hub is disabled for this project."
+    if code == "config-error":
+        return "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed."
+    if code == "not-login":
+        return "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed."
+    if code == "server-error":
+        return "Flow add-on: follow workflow-state; treat Hub as unavailable until `suncode hub state` is ok."
+    if current_task == "local-only":
+        return "Flow add-on: follow workflow-state; keep this workflow task local unless the user asks to bind Hub work."
+    if current_task in ("hub-bound", "hub-pending"):
+        return "Flow add-on: follow workflow-state; Hub lifecycle commands are allowed for this Hub task."
+    if work_count is not None and work_count > 0:
+        return "Flow add-on: follow workflow-state; ask before pulling Hub work."
+    return "Flow add-on: follow workflow-state; keep using the active local flow unless user asks for Hub work."
+
+
+def _hub_do_not_lines(code: str, current_task: str) -> list[str]:
+    if code in ("off", "config-error", "not-login", "server-error"):
+        return ["Do not: use Hub-specific workflows."]
+    if current_task == "local-only":
+        return [
+            "Do not: run submit-plan, submit-completion, or mark-started for this local task."
+        ]
+    return []
 
 
 def _read_json(path: Path) -> object | None:

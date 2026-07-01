@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/cli/backend/suncode-hub-collaboration.md", "reason": "Review Hub command, hook, auth, state, and workflow boundary compliance"}
+{"file": ".trellis/spec/cli/unit-test/conventions.md", "reason": "Review command and template tests against project Vitest conventions"}

@@ -127,6 +127,12 @@ Hook contract:
   look usable.
 - Per-turn hooks append a compact `<hub-state>...</hub-state>` block next to
   `<workflow-state>...</workflow-state>`.
+- `<hub-state>` 首行必须是短状态码：`hub:ok`、`hub:off`、
+  `hub:not-login`、`hub:config-error`、`hub:server-error` 或
+  `hub:unknown`。其余行使用 `workflow:primary`、`hub-task:*`、`work:*`
+  摘要和 `Flow add-on:` / `Do not:` 提示，明确它只是
+  `<workflow-state>` 的补充层；不输出 spec 摘要、完整
+  config/login/service 明细，也不复述 `nextAction` 长句。
 
 Task display and language contract:
 
@@ -144,12 +150,12 @@ Task display and language contract:
 
 | Condition | Behavior |
 | --- | --- |
-| Hub disabled or missing config | Report `hub off`; no network |
-| Project enabled but no `apiBaseUrl` from project or global config | Report config error; no network |
-| Login session missing for resolved `apiBaseUrl` | Ask user to run `suncode hub login`; no network |
-| Login session expired | Report expired login; no network |
-| Service health check fails | Report Hub unavailable; do not enter Hub workflows |
-| Service ok and work available | Report available work and suggest `suncode hub pull` / task selection |
+| Hub disabled or missing config | Report `hub:off`; no network |
+| Project enabled but no `apiBaseUrl` from project or global config | Report `hub:config-error`; no network |
+| Login session missing for resolved `apiBaseUrl` | Report `hub:not-login` and ask user to run `suncode hub login`; no network |
+| Login session expired | Report `hub:not-login`; no network |
+| Service health check fails | Report `hub:server-error`; do not enter Hub workflows |
+| Service ok and work available | Report `hub:ok` plus `work:N available` and suggest task selection |
 | Active task has Hub metadata | Allow Hub task lifecycle commands for that task |
 | Active task has no Hub metadata | Report local-only; do not run Hub submit/mark commands |
 | `SUNCODE_HUB_TOKEN` is set | Ignore it; behavior depends only on login session |
@@ -161,7 +167,9 @@ Task display and language contract:
   files.
 - Good: `hub state` writes available-work counts and current-task classification
   without caching credentials.
-- Base: Local-only project has no Hub config; hook emits `hub off` and tells the
+- Good: `<hub-state>` says `workflow:primary` and uses `Flow add-on:` so the
+  AI keeps following `<workflow-state>` first.
+- Base: Local-only project has no Hub config; hook emits `hub:off` and tells the
   AI to use normal local workflow.
 - Bad: A hook performs a live Hub request on every user prompt.
 - Bad: A hook reads stale `hub-state.json` after live refresh failed and tells
@@ -199,6 +207,8 @@ Task display and language contract:
     unavailable, not as cached-ok state
   - hook output does not contain tokens or passwords
   - local-only current task warns against Hub-specific task commands
+  - hook output does not contain `spec:*`, spec revision, signed URLs, or
+    deletion-candidate counts
 - Task-name and language tests:
   - `task.py create` keeps `task.json.id` as the slug and writes Chinese
     `name` / `title`
@@ -233,6 +243,179 @@ if (currentTask.state === "local-only") {
 
 This keeps auth explicit, bound to the resolved Hub service, and scoped to tasks
 that actually carry Hub metadata.
+
+## Scenario: Hub Spec 拉取
+
+### 1. 范围 / 触发
+
+- 触发：Hub 任务规划或实现前，需要通过 CLI、生命周期 hook、工作流模板或 bundled skill 拉取 Hub 上的项目权威 spec。
+- 适用范围：`packages/cli/src/commands/hub/**`、生成的 `<hub-state>` hook、OpenCode plugin、以及 Hub 相关 bundled skill。
+- Hub spec 同步是固定 CLI 流程。AI 只允许调度命令并读取结构化结果，不允许手工逐文件对比、合并、重写、删除或恢复 spec。
+
+### 2. 命令与接口
+
+CLI 命令：
+
+```text
+suncode hub pull-spec [--json]
+suncode hub spec-deletions list [--json]
+suncode hub spec-deletions keep --id <id> --as .suncode/spec/local/<name>.md
+suncode hub spec-deletions discard --id <id>
+```
+
+Hub API：
+
+```http
+GET /api/v1/projects/{projectId}/specs/bundle
+Authorization: Bearer <token>
+```
+
+推荐 Hub 响应：
+
+```json
+{
+  "revision": "spec-rev-42",
+  "etag": "\"sha256:bundle\"",
+  "bundleHash": "sha256:bundle",
+  "basePath": ".suncode/spec",
+  "files": [
+    {
+      "path": "cli/backend/index.md",
+      "sha256": "sha256:file",
+      "size": 1234,
+      "contentType": "text/markdown",
+      "download": {
+        "url": "https://minio.example.test/presigned/specs/proj_123/spec-rev-42/index.md",
+        "method": "GET",
+        "expiresAt": "2026-07-01T12:10:00+08:00"
+      },
+      "objectRef": {
+        "provider": "minio",
+        "bucket": "suncode-hub",
+        "objectKey": "specs/proj_123/spec-rev-42/cli/backend/index.md"
+      },
+      "language": "zh-CN",
+      "updatedAt": "2026-07-01T12:00:00+08:00"
+    }
+  ],
+  "deleted": ["old/path.md"]
+}
+```
+
+### 3. 契约
+
+Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`：
+
+| 条件 | 行为 |
+| --- | --- |
+| Hub 有、本地没有 | 写入 `.suncode/spec/**` |
+| Hub 与本地内容不同 | 使用 Hub 内容覆盖本地 |
+| Hub 删除了之前由 Hub 管理的 spec | 先保存删除候选，再删除本地权威路径 |
+| 本地存在 Hub 从未管理过的 spec | 报告为 `localOnly`，不阻塞、不删除 |
+
+项目同步 manifest：
+
+```text
+.suncode/.runtime/hub-specs.json
+```
+
+```json
+{
+  "version": 1,
+  "projectId": "proj_123",
+  "apiBaseUrl": "https://hub.example.test",
+  "policy": "remote_wins",
+  "revision": "spec-rev-42",
+  "etag": "\"sha256:bundle\"",
+  "bundleHash": "sha256:bundle",
+  "syncedAt": "2026-07-01T12:00:00.000Z",
+  "files": {
+    ".suncode/spec/cli/backend/index.md": {
+      "sha256": "sha256",
+      "managedBy": "hub"
+    }
+  }
+}
+```
+
+删除候选保存位置：
+
+```text
+.suncode/.runtime/hub-spec-deletions/<revision>/manifest.json
+.suncode/.runtime/hub-spec-deletions/<revision>/<previous-spec-relative-path>
+```
+
+删除候选不是权威 spec，不能被当作普通 `.suncode/spec/**` 指导加载。它只用于用户显式要求时的可选复盘。
+
+保留删除候选时，只能写入 `.suncode/spec/local/**` 作为本地补充，并添加说明：该文件不是 Hub 权威规范；如与 Hub spec 冲突，以 Hub spec 为准。命令必须拒绝把候选恢复到旧的 Hub-managed 路径。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 行为 |
+| --- | --- |
+| Hub disabled | 返回 `disabled`，不访问网络 |
+| 配置缺失、登录缺失或登录过期 | 与其他 Hub 命令一样抛出配置/鉴权错误 |
+| 服务请求失败或超时 | fail closed，不更新 manifest |
+| bundle path 是绝对路径、空路径或包含 `..` | 拒绝 bundle，不写文件 |
+| 文件缺少 MinIO download URL，或下载文本 hash/size 不匹配 | 拒绝 bundle，不写文件 |
+| Hub 更新或删除了本地改过的 Hub-managed spec | 执行 Hub 结果；删除前保存旧内容 |
+| 存在 local-only spec | 报告它，不阻塞、不删除 |
+| `spec-deletions keep` 目标不在 `.suncode/spec/local/**` | 抛出面向用户的错误 |
+
+### 5. 正例 / 基线 / 反例
+
+- 正例：`pull-spec` 收到全量 bundle 后，覆盖过期的 Hub-managed 文件、删除远端已删除文件、写入删除候选，并更新 `.suncode/.runtime/hub-specs.json`。
+- 正例：本地 `.suncode/spec/local/debugging.md` 被报告为 local-only，但不阻塞 Hub 任务继续。
+- 正例：`pull-spec --json` 展示 revision、local-only 和 deletion candidates；
+  `<hub-state>` 不展示 spec 摘要，只提示 Hub 是否可用于当前 workflow。
+- 基线：没有历史 spec manifest 时，第一次 bundle 写入所有远端文件，同时保留无关 local-only 文件。
+- 反例：AI 手工 diff 每个 spec 文件并决定如何合并。
+- 反例：被 Hub 删除的 Hub-managed spec 被恢复到旧路径，导致下一次 Hub 同步继续冲突。
+- 反例：hook 在每次用户 prompt 都拉取全量 spec bundle。
+
+### 6. 必测项
+
+- `pull-spec` 命令测试：
+  - 写入新的远端 spec。
+  - 使用远端内容覆盖已变化的 Hub-managed spec。
+  - 删除本地权威路径前，把被 Hub 删除的 Hub-managed spec 保存成 deletion candidate。
+  - 报告 local-only spec，且不阻塞、不删除。
+  - 配置/登录缺失、服务失败、非法路径、hash/size 不匹配时，不写成功 manifest。
+- `spec-deletions` 命令测试：
+  - `list` 返回 pending/kept/discarded 候选。
+  - `keep` 只能写入 `.suncode/spec/local/**`。
+  - `discard` 将候选标记为 discarded。
+- State/hook 测试：
+  - `hub state --json` 不包含 spec 摘要。
+  - `<hub-state>` 使用 `hub:*`、`workflow:primary`、`hub-task:*`、`work:*` 紧凑行，并通过 `Flow add-on:` 表达对 `<workflow-state>` 的补充关系。
+  - hook 输出不包含 token、password、auth header、spec 摘要或 signed URL。
+- Skill/template 测试：
+  - `suncode-hub-spec-sync` 会被安装到各平台 skill root。
+  - `suncode-hub-requirements` 在写规划 artifact 前触发 spec sync。
+
+### 7. 错误与正确示例
+
+#### 错误
+
+```ts
+for (const file of localSpecs) {
+  const remote = await askAiWhetherToKeep(file);
+  if (remote === "delete") fs.rmSync(file);
+}
+```
+
+这会让 AI 变成同步引擎，破坏 Hub 审核人员作为权威来源的模型。
+
+#### 正确
+
+```ts
+const result = await pullHubSpecs({ cwd, homeDir, fetch });
+if (result.status !== "updated") {
+  throw new Error("Hub specs are not available for this Hub task.");
+}
+```
+
+这让同步保持确定、可审计，并由 CLI 负责。AI 只调度命令并遵循结构化结果。
 
 ## Scenario: Structured Subtask Sync
 

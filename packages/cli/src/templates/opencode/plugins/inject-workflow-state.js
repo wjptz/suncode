@@ -107,10 +107,12 @@ function buildHubState(ctx, input = null) {
   if (!hub || typeof hub !== "object" || hub.enabled !== true) {
     return [
       "<hub-state>",
-      "Hub: off",
-      "Reason: hub.enabled is not true or .suncode/config.yaml is missing",
-      `Current task: ${currentTask}`,
-      "AI: use the local Suncode workflow; do not run Hub-specific commands.",
+      "hub:off",
+      "workflow:primary",
+      `hub-task:${currentTask}`,
+      "reason:hub.enabled is not true or .suncode/config.yaml is missing",
+      "Flow add-on: follow workflow-state; Hub is disabled for this project.",
+      "Do not: run Hub-specific commands.",
       "</hub-state>",
     ].join("\n")
   }
@@ -118,10 +120,12 @@ function buildHubState(ctx, input = null) {
   const projectId = stringValue(hub.projectId)
   if (!projectId) {
     return hubStateBlock([
-      "Hub: on",
-      "Config: invalid (hub.projectId missing)",
-      `Current task: ${currentTask}`,
-      "AI: ask the user to run `suncode hub init` before using Hub workflows.",
+      "hub:config-error",
+      "workflow:primary",
+      `hub-task:${currentTask}`,
+      "reason:hub.projectId missing",
+      "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed.",
+      "Do not: enter Hub workflow until config is fixed.",
     ])
   }
 
@@ -129,57 +133,55 @@ function buildHubState(ctx, input = null) {
     normalizeApiBaseUrl(stringValue(hub.apiBaseUrl)) || globalApiBaseUrl()
   if (!apiBaseUrl) {
     return hubStateBlock([
-      "Hub: on",
-      `Project: ${projectId}`,
-      "Config: missing global apiBaseUrl",
-      `Current task: ${currentTask}`,
-      "AI: ask the user to run `suncode hub init` to set Hub apiBaseUrl.",
+      "hub:config-error",
+      "workflow:primary",
+      `hub-task:${currentTask}`,
+      "reason:apiBaseUrl missing",
+      "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed.",
+      "Do not: enter Hub workflow until config is fixed.",
     ])
   }
 
   const session = hubAuthSession(apiBaseUrl)
   if (!session) {
     return hubStateBlock([
-      "Hub: on",
-      `Project: ${projectId}`,
-      `Login: missing for ${apiBaseUrl}`,
-      `Current task: ${currentTask}`,
-      "AI: ask the user to run `suncode hub login` before using Hub workflows.",
+      "hub:not-login",
+      "workflow:primary",
+      `hub-task:${currentTask}`,
+      `reason:no login for ${apiBaseUrl}`,
+      "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed.",
+      "Do not: enter Hub workflow until login is ok.",
     ])
   }
   if (hubSessionExpired(session)) {
     return hubStateBlock([
-      "Hub: on",
-      `Project: ${projectId}`,
-      `Login: expired for ${apiBaseUrl}`,
-      `Current task: ${currentTask}`,
-      "AI: ask the user to run `suncode hub login` before using Hub workflows.",
+      "hub:not-login",
+      "workflow:primary",
+      `hub-task:${currentTask}`,
+      `reason:login expired for ${apiBaseUrl}`,
+      "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed.",
+      "Do not: enter Hub workflow until login is ok.",
     ])
   }
 
   const refreshed = refreshHubStateViaCli(ctx, input)
   if (!refreshed.state) {
     return hubUnavailableBlock(
-      projectId,
       currentTask,
       refreshed.error || "Hub state refresh failed",
     )
   }
-  return formatLiveHubState(refreshed.state, projectId, currentTask)
+  return formatLiveHubState(refreshed.state, currentTask)
 }
 
-function formatLiveHubState(state, fallbackProjectId, fallbackCurrentTask) {
+function formatLiveHubState(state, fallbackCurrentTask) {
   const summary = state && typeof state === "object" && state.summary && typeof state.summary === "object"
     ? state.summary
-    : {}
-  const project = state && typeof state === "object" && state.project && typeof state.project === "object"
-    ? state.project
     : {}
   const current = state && typeof state === "object" && state.currentTask && typeof state.currentTask === "object"
     ? state.currentTask
     : {}
   const hub = stringValue(summary.hub) || "unknown"
-  const projectId = stringValue(project.projectId) || fallbackProjectId
   const config = stringValue(summary.config) || "unknown"
   const login = stringValue(summary.login) || "unknown"
   const service = stringValue(summary.service) || "unknown"
@@ -188,40 +190,27 @@ function formatLiveHubState(state, fallbackProjectId, fallbackCurrentTask) {
     stringValue(current.state) ||
     stringValue(summary.currentTask) ||
     fallbackCurrentTask
+  const hubCode = hubStatusCode(hub, config, login, service)
+  const workCount = workAvailableCount(state)
   const lines = [
-    `Hub: ${hub}`,
-    "Source: live (`suncode hub state --json`)",
-    `Project: ${projectId}`,
-    `Config: ${config}`,
-    `Login: ${login}`,
-    `Service: ${service}`,
-    `Work: ${workLine(state, work)}`,
-    `Current task: ${currentTask}`,
+    `hub:${hubCode}`,
+    "workflow:primary",
+    `hub-task:${currentTask}`,
+    `work:${workSummary(state, work)}`,
+    hubFlowLine(hubCode, currentTask, workCount),
   ]
-  const nextAction = stringValue(state.nextAction)
-  if (nextAction) {
-    lines.push(`AI: ${nextAction}`)
-  } else if (service === "unavailable") {
-    lines.push("AI: Hub service is currently unavailable; do not use Hub-specific workflows.")
-  } else if (currentTask === "local-only") {
-    lines.push("AI: 当前任务未绑定 Hub；不要运行 submit-plan、submit-completion、mark-started 等 Hub 任务命令，除非用户明确要求绑定 Hub 需求。")
-  } else if (work === "available") {
-    lines.push("AI: ask the user whether to pull/select Hub work with `suncode hub pull`.")
-  } else {
-    lines.push("AI: use Hub commands only for Hub-bound tasks.")
-  }
+  lines.push(...hubDoNotLines(hubCode, currentTask))
   return hubStateBlock(lines)
 }
 
-function hubUnavailableBlock(projectId, currentTask, reason) {
+function hubUnavailableBlock(currentTask, reason) {
   return hubStateBlock([
-    "Hub: on",
-    "Source: live refresh failed",
-    `Project: ${projectId}`,
-    "Service: unavailable",
+    "hub:server-error",
+    "workflow:primary",
+    `hub-task:${currentTask}`,
     `Reason: ${reason}`,
-    `Current task: ${currentTask}`,
-    "AI: Hub state refresh failed or timed out; treat Hub as currently unavailable and do not use Hub-specific workflows.",
+    "Flow add-on: follow workflow-state; treat Hub as unavailable until `suncode hub state` is ok.",
+    "Do not: use Hub-specific workflows.",
   ])
 }
 
@@ -349,13 +338,59 @@ function readJson(filePath) {
   }
 }
 
-function workLine(state, fallback) {
+function hubStatusCode(hub, config, login, service) {
+  if (hub === "off") return "off"
+  if (config !== "ok") return config === "unknown" ? "unknown" : "config-error"
+  if (login !== "ok") return login === "unknown" ? "unknown" : "not-login"
+  if (service !== "ok") return service === "unknown" ? "unknown" : "server-error"
+  return hub === "on" ? "ok" : "unknown"
+}
+
+function workAvailableCount(state) {
   const work = state && typeof state === "object" ? state.work : null
   const count = work && typeof work === "object" ? work.availableCount : null
-  if (Number.isInteger(count)) {
-    return count > 0 ? `${count} available requirements` : "none"
-  }
+  return Number.isInteger(count) ? count : null
+}
+
+function workSummary(state, fallback) {
+  const count = workAvailableCount(state)
+  if (count !== null) return count > 0 ? `${count} available` : "none"
   return fallback
+}
+
+function hubFlowLine(code, currentTask, workCount) {
+  if (code === "off") return "Flow add-on: follow workflow-state; Hub is disabled for this project."
+  if (code === "config-error") {
+    return "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed."
+  }
+  if (code === "not-login") {
+    return "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed."
+  }
+  if (code === "server-error") {
+    return "Flow add-on: follow workflow-state; treat Hub as unavailable until `suncode hub state` is ok."
+  }
+  if (currentTask === "local-only") {
+    return "Flow add-on: follow workflow-state; keep this workflow task local unless the user asks to bind Hub work."
+  }
+  if (["hub-bound", "hub-pending"].includes(currentTask)) {
+    return "Flow add-on: follow workflow-state; Hub lifecycle commands are allowed for this Hub task."
+  }
+  if (workCount !== null && workCount > 0) {
+    return "Flow add-on: follow workflow-state; ask before pulling Hub work."
+  }
+  return "Flow add-on: follow workflow-state; keep using the active local flow unless user asks for Hub work."
+}
+
+function hubDoNotLines(code, currentTask) {
+  if (["off", "config-error", "not-login", "server-error"].includes(code)) {
+    return ["Do not: use Hub-specific workflows."]
+  }
+  if (currentTask === "local-only") {
+    return [
+      "Do not: run submit-plan, submit-completion, or mark-started for this local task.",
+    ]
+  }
+  return []
 }
 
 function normalizeApiBaseUrl(value) {

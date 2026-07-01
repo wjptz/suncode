@@ -13,7 +13,7 @@ Use this skill only when the current task is bound to Suncode Hub. If the projec
 - Do not upload sibling task PRD, design, implement, summary, or retrospective documents.
 - Do not submit empty summaries or unverified claims.
 - Do not print or persist Hub tokens, passwords, or auth headers.
-- If `<hub-state>` says the current task is local-only, stop this Hub-specific flow unless the user explicitly asks to bind a Hub requirement.
+- If `<hub-state>` says `hub-task:local-only`, stop this Hub-specific flow unless the user explicitly asks to bind a Hub requirement.
 - Long documents are uploaded through Hub-signed MinIO URLs by `suncode hub`; Hub API payloads must contain object references and hashes, not document bodies.
 
 ## Required Local Artifacts

@@ -14,6 +14,12 @@ import { hubInit } from "../../src/commands/hub/init.js";
 import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
 import { hubState } from "../../src/commands/hub/state.js";
 import {
+  discardSpecDeletion,
+  keepSpecDeletion,
+  listSpecDeletions,
+  pullHubSpecs,
+} from "../../src/commands/hub/specs.js";
+import {
   collectPlanArtifacts,
   collectCompletionArtifacts,
   collectSpecArtifacts,
@@ -97,6 +103,31 @@ function writeHubAuth(
   );
 }
 
+function writeHubSpecManifest(
+  tmpDir: string,
+  data: Record<string, unknown>,
+): void {
+  writeJson(path.join(tmpDir, ".suncode", ".runtime", "hub-specs.json"), data);
+}
+
+function writeSpecDeletionManifest(
+  tmpDir: string,
+  revision: string,
+  data: Record<string, unknown>,
+): void {
+  writeJson(
+    path.join(
+      tmpDir,
+      ".suncode",
+      ".runtime",
+      "hub-spec-deletions",
+      revision,
+      "manifest.json",
+    ),
+    data,
+  );
+}
+
 function makeTask(tmpDir: string, dirName = "06-30-payment-retry"): string {
   const taskDir = path.join(tmpDir, ".suncode", "tasks", dirName);
   writeJson(path.join(taskDir, "task.json"), {
@@ -140,6 +171,13 @@ function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { "content-type": "application/json" },
+  });
+}
+
+function textResponse(data: string, status = 200): Response {
+  return new Response(data, {
+    status,
+    headers: { "content-type": "text/markdown" },
   });
 }
 
@@ -519,6 +557,68 @@ describe("hub init login logout state", () => {
     expect(cache).not.toContain("login-token");
     expect(cache).toContain('"currentTask": "local-only"');
   });
+
+  it("state omits Hub spec sync summary and does not fetch service-side specs", async () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeGlobalHubConfig(homeDir, "https://hub.example.test");
+    writeHubAuth(homeDir);
+    fs.mkdirSync(path.join(tmpDir, ".suncode", "spec", "local"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, ".suncode", "spec", "local", "debugging.md"),
+      "# Local only\n",
+      "utf-8",
+    );
+    writeHubSpecManifest(tmpDir, {
+      version: 1,
+      projectId: "proj_123",
+      apiBaseUrl: "https://hub.example.test",
+      policy: "remote_wins",
+      revision: "spec-rev-42",
+      bundleHash: "sha256:bundle",
+      syncedAt: "2026-07-01T12:00:00.000Z",
+      files: {},
+    });
+    writeSpecDeletionManifest(tmpDir, "spec-rev-42", {
+      version: 1,
+      revision: "spec-rev-42",
+      deletedAt: "2026-07-01T12:00:00.000Z",
+      items: [
+        {
+          id: "del_001",
+          previousPath: ".suncode/spec/cli/backend/old.md",
+          backupPath:
+            ".suncode/.runtime/hub-spec-deletions/spec-rev-42/cli/backend/old.md",
+          previousSha256: "old-sha",
+          reason: "remote deleted this Hub-managed spec",
+          status: "pending",
+        },
+      ],
+    });
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/health")) return jsonResponse({ status: "ok" });
+      if (String(url).includes("/requirements?")) {
+        return jsonResponse({ requirements: [] });
+      }
+      throw new Error(`Unexpected fetch call: ${String(url)}`);
+    });
+
+    const result = await hubState({ cwd: tmpDir, homeDir, fetch });
+
+    expect((result as Record<string, unknown>).spec).toBeUndefined();
+    const cache = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", ".runtime", "hub-state.json"),
+        "utf-8",
+      ),
+    ) as Record<string, unknown>;
+    expect(cache.spec).toBeUndefined();
+    expect(fetch.mock.calls.map((call) => String(call[0]))).toEqual([
+      "https://hub.example.test/api/v1/health",
+      "https://hub.example.test/api/v1/projects/proj_123/requirements?developerId=dev_456&status=ready%2Cin_review%2Cchanges_requested",
+    ]);
+  });
 });
 
 describe("hub artifacts and hashing", () => {
@@ -616,6 +716,352 @@ describe("hub artifacts and hashing", () => {
     expect(collectPlanArtifacts({ cwd: tmpDir, taskJsonPath }).map((a) => a.path)).toEqual([
       "prd.md",
     ]);
+  });
+});
+
+describe("hub spec sync", () => {
+  let tmpDir: string;
+  let homeDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-hub-test-"));
+    homeDir = path.join(tmpDir, "home");
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "",
+      ].join("\n"),
+    );
+    writeHubAuth(homeDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("pull-spec applies remote-wins, preserves deleted managed specs, and keeps local-only files", async () => {
+    fs.mkdirSync(path.join(tmpDir, ".suncode", "spec", "cli", "backend"), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(tmpDir, ".suncode", "spec", "local"), {
+      recursive: true,
+    });
+    const stalePath = path.join(
+      tmpDir,
+      ".suncode",
+      "spec",
+      "cli",
+      "backend",
+      "index.md",
+    );
+    const deletedPath = path.join(
+      tmpDir,
+      ".suncode",
+      "spec",
+      "cli",
+      "backend",
+      "old-rule.md",
+    );
+    fs.writeFileSync(stalePath, "# Local stale\n", "utf-8");
+    fs.writeFileSync(deletedPath, "# Deleted but useful\n", "utf-8");
+    fs.writeFileSync(
+      path.join(tmpDir, ".suncode", "spec", "local", "debugging.md"),
+      "# Local only\n",
+      "utf-8",
+    );
+    writeHubSpecManifest(tmpDir, {
+      version: 1,
+      projectId: "proj_123",
+      apiBaseUrl: "https://hub.example.test",
+      policy: "remote_wins",
+      revision: "spec-rev-41",
+      files: {
+        ".suncode/spec/cli/backend/index.md": {
+          sha256: hashText("# Local stale\n"),
+          managedBy: "hub",
+        },
+        ".suncode/spec/cli/backend/old-rule.md": {
+          sha256: hashText("# Deleted but useful\n"),
+          managedBy: "hub",
+        },
+      },
+    });
+    const remoteIndex = "# Remote index\n";
+    const remoteNew = "# New rule\n";
+    const fetch = vi.fn(async (url: unknown) => {
+      const urlText = String(url);
+      if (urlText === "https://minio.example.test/download/index") {
+        return textResponse(remoteIndex);
+      }
+      if (urlText === "https://minio.example.test/download/new") {
+        return textResponse(remoteNew);
+      }
+      expect(urlText).toBe(
+        "https://hub.example.test/api/v1/projects/proj_123/specs/bundle",
+      );
+      return jsonResponse({
+        revision: "spec-rev-42",
+        etag: '"spec-rev-42"',
+        bundleHash: "sha256:bundle",
+        basePath: ".suncode/spec",
+        files: [
+          {
+            path: "cli/backend/index.md",
+            sha256: hashText(remoteIndex),
+            size: Buffer.byteLength(remoteIndex),
+            contentType: "text/markdown",
+            download: {
+              url: "https://minio.example.test/download/index",
+              method: "GET",
+              expiresAt: "2026-07-01T12:10:00+08:00",
+            },
+            objectRef: {
+              provider: "minio",
+              bucket: "suncode-hub",
+              objectKey: "specs/proj_123/spec-rev-42/index.md",
+            },
+            language: "zh-CN",
+            updatedAt: "2026-07-01T12:00:00+08:00",
+          },
+          {
+            path: "cli/backend/new-rule.md",
+            sha256: hashText(remoteNew),
+            size: Buffer.byteLength(remoteNew),
+            contentType: "text/markdown",
+            download: {
+              url: "https://minio.example.test/download/new",
+              method: "GET",
+              expiresAt: "2026-07-01T12:10:00+08:00",
+            },
+            objectRef: {
+              provider: "minio",
+              bucket: "suncode-hub",
+              objectKey: "specs/proj_123/spec-rev-42/new-rule.md",
+            },
+            language: "zh-CN",
+            updatedAt: "2026-07-01T12:00:00+08:00",
+          },
+        ],
+        deleted: ["cli/backend/old-rule.md"],
+      });
+    });
+
+    const result = await pullHubSpecs({ cwd: tmpDir, homeDir, fetch });
+
+    expect(result).toMatchObject({
+      status: "updated",
+      policy: "remote_wins",
+      revision: "spec-rev-42",
+      bundleHash: "sha256:bundle",
+    });
+    expect(result.actions.added).toEqual([
+      ".suncode/spec/cli/backend/new-rule.md",
+    ]);
+    expect(result.actions.updated).toEqual([
+      ".suncode/spec/cli/backend/index.md",
+    ]);
+    expect(result.actions.deleted).toEqual([
+      ".suncode/spec/cli/backend/old-rule.md",
+    ]);
+    expect(result.localOnly).toEqual([
+      ".suncode/spec/local/debugging.md",
+    ]);
+    expect(result.deletionCandidates).toHaveLength(1);
+    expect(fs.readFileSync(stalePath, "utf-8")).toBe(remoteIndex);
+    expect(fs.existsSync(deletedPath)).toBe(false);
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", "spec", "cli", "backend", "new-rule.md"),
+        "utf-8",
+      ),
+    ).toBe(remoteNew);
+    const candidate = result.deletionCandidates[0];
+    expect(
+      fs.readFileSync(path.join(tmpDir, candidate.backupPath), "utf-8"),
+    ).toBe("# Deleted but useful\n");
+    const manifest = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", ".runtime", "hub-specs.json"),
+        "utf-8",
+      ),
+    );
+    expect(manifest.files).toEqual({
+      ".suncode/spec/cli/backend/index.md": {
+        sha256: hashText(remoteIndex),
+        managedBy: "hub",
+      },
+      ".suncode/spec/cli/backend/new-rule.md": {
+        sha256: hashText(remoteNew),
+        managedBy: "hub",
+      },
+    });
+    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer login-token",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://minio.example.test/download/index",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://minio.example.test/download/new",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("pull-spec fails closed without writing success manifest when bundle hashes are invalid", async () => {
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url) === "https://minio.example.test/download/bad") {
+        return textResponse("# Remote index\n");
+      }
+      return jsonResponse({
+        revision: "spec-rev-bad",
+        files: [
+          {
+            path: "cli/backend/index.md",
+            sha256: "not-the-content-hash",
+            download: {
+              url: "https://minio.example.test/download/bad",
+              method: "GET",
+            },
+          },
+        ],
+      });
+    });
+
+    await expect(
+      pullHubSpecs({ cwd: tmpDir, homeDir, fetch }),
+    ).rejects.toThrow("sha256");
+
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".suncode", ".runtime", "hub-specs.json"),
+      ),
+    ).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".suncode", "spec", "cli", "backend", "index.md"),
+      ),
+    ).toBe(false);
+  });
+
+  it("pull-spec fails closed when login is missing, service fails, or bundle paths are invalid", async () => {
+    const missingLoginHome = path.join(tmpDir, "missing-login-home");
+    const skippedFetch = vi.fn();
+
+    await expect(
+      pullHubSpecs({ cwd: tmpDir, homeDir: missingLoginHome, fetch: skippedFetch }),
+    ).rejects.toThrow("login");
+    expect(skippedFetch).not.toHaveBeenCalled();
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".suncode", ".runtime", "hub-specs.json"),
+      ),
+    ).toBe(false);
+
+    const serviceFetch = vi.fn(async () => {
+      throw new Error("service down");
+    });
+    await expect(
+      pullHubSpecs({ cwd: tmpDir, homeDir, fetch: serviceFetch }),
+    ).rejects.toThrow("service down");
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".suncode", ".runtime", "hub-specs.json"),
+      ),
+    ).toBe(false);
+
+    const invalidPathFetch = vi.fn(async () =>
+      jsonResponse({
+        revision: "spec-rev-bad-path",
+        files: [
+          {
+            path: "../outside.md",
+            sha256: hashText("# Outside\n"),
+            download: {
+              url: "https://minio.example.test/download/outside",
+              method: "GET",
+            },
+          },
+        ],
+      }),
+    );
+    await expect(
+      pullHubSpecs({ cwd: tmpDir, homeDir, fetch: invalidPathFetch }),
+    ).rejects.toThrow("Invalid Hub spec path");
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".suncode", ".runtime", "hub-specs.json"),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps and discards deletion candidates through fixed commands", async () => {
+    const backupPath = path.join(
+      tmpDir,
+      ".suncode",
+      ".runtime",
+      "hub-spec-deletions",
+      "spec-rev-42",
+      "cli",
+      "backend",
+      "old-rule.md",
+    );
+    fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+    fs.writeFileSync(backupPath, "# Old useful rule\n", "utf-8");
+    writeSpecDeletionManifest(tmpDir, "spec-rev-42", {
+      version: 1,
+      revision: "spec-rev-42",
+      deletedAt: "2026-07-01T12:00:00.000Z",
+      items: [
+        {
+          id: "del_001",
+          previousPath: ".suncode/spec/cli/backend/old-rule.md",
+          backupPath:
+            ".suncode/.runtime/hub-spec-deletions/spec-rev-42/cli/backend/old-rule.md",
+          previousSha256: hashText("# Old useful rule\n"),
+          reason: "remote deleted this Hub-managed spec",
+          status: "pending",
+        },
+      ],
+    });
+
+    expect(listSpecDeletions({ cwd: tmpDir }).items).toHaveLength(1);
+    await expect(
+      keepSpecDeletion({
+        cwd: tmpDir,
+        id: "del_001",
+        asPath: ".suncode/spec/cli/backend/old-rule.md",
+      }),
+    ).rejects.toThrow(".suncode/spec/local/");
+
+    const keep = await keepSpecDeletion({
+      cwd: tmpDir,
+      id: "del_001",
+      asPath: ".suncode/spec/local/old-rule.md",
+    });
+
+    expect(keep.status).toBe("updated");
+    const keptText = fs.readFileSync(
+      path.join(tmpDir, ".suncode", "spec", "local", "old-rule.md"),
+      "utf-8",
+    );
+    expect(keptText).toContain("本地补充");
+    expect(keptText).toContain("# Old useful rule");
+    expect(listSpecDeletions({ cwd: tmpDir }).items[0]?.status).toBe("kept");
+
+    const discard = await discardSpecDeletion({ cwd: tmpDir, id: "del_001" });
+
+    expect(discard.status).toBe("updated");
+    expect(listSpecDeletions({ cwd: tmpDir }).items[0]?.status).toBe(
+      "discarded",
+    );
   });
 });
 

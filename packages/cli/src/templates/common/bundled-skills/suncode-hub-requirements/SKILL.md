@@ -10,7 +10,7 @@ Use this skill only for projects that have Suncode Hub enabled. If Hub is disabl
 ## Rules
 
 - Never print or persist Hub tokens, passwords, or auth headers.
-- If `<hub-state>` says the current task is local-only, do not run Hub task submission or lifecycle commands unless the user explicitly asks to bind a Hub requirement.
+- If `<hub-state>` says `hub-task:local-only`, do not run Hub task submission or lifecycle commands unless the user explicitly asks to bind a Hub requirement.
 - Do not ask the user to leave the agent and run a separate Hub command unless a command fails and manual recovery is needed.
 - Do not create or bind a task without a concrete Hub requirement ID.
 - Do not upload documents from unrelated task directories.
@@ -52,8 +52,16 @@ For a parent task, use `--hub-task-role parent`. For a child task, use `--parent
 suncode hub create-task --task-json "$TASK_JSON_PATH"
 ```
 
-7. Write or update only the new task's `prd.md`, `design.md`, `implement.md`, and optional `research/**` files.
-8. After planning is complete, run:
+7. 写规划 artifacts 前，先使用 `suncode-hub-spec-sync`。该 skill 会运行：
+
+```bash
+suncode hub pull-spec --json
+```
+
+Hub spec 是权威约束。不要手工对比或合并 spec 文件。
+
+8. Write or update only the new task's `prd.md`, `design.md`, `implement.md`, and optional `research/**` files.
+9. After planning is complete, run:
 
 ```bash
 suncode hub submit-plan --task <task-dir>

@@ -7,6 +7,12 @@ import { hubInit } from "./init.js";
 import { preflightStart, markStarted } from "./lifecycle.js";
 import { hubLogin, hubLogout } from "./login.js";
 import { pullRequirements, pullReview, syncRequirement } from "./pull.js";
+import {
+  discardSpecDeletion,
+  keepSpecDeletion,
+  listSpecDeletions,
+  pullHubSpecs,
+} from "./specs.js";
 import { hubState, printHubState } from "./state.js";
 import { hubStatus } from "./status.js";
 import {
@@ -56,6 +62,19 @@ interface DownloadDocumentOptions extends TaskOptions {
   sha256?: string;
   size?: string;
   targetDir?: string;
+}
+
+interface JsonCliOptions {
+  json?: boolean;
+}
+
+interface KeepSpecDeletionCliOptions {
+  id?: string;
+  as?: string;
+}
+
+interface DiscardSpecDeletionCliOptions {
+  id?: string;
 }
 
 export function registerHubCommand(program: Command): void {
@@ -144,6 +163,66 @@ export function registerHubCommand(program: Command): void {
     .description("Pull requirements assigned to the current developer")
     .action(async () => {
       await runJson(async () => pullRequirements());
+    });
+
+  hub
+    .command("pull-spec")
+    .description("Pull the authoritative project spec bundle from Suncode Hub")
+    .option("--json", "print raw JSON")
+    .action(async (opts: JsonCliOptions) => {
+      await runStructured(
+        async () =>
+          pullHubSpecs({
+            cwd: process.cwd(),
+          }),
+        opts.json,
+      );
+    });
+
+  const specDeletions = hub
+    .command("spec-deletions")
+    .description("Manage local candidates preserved when Hub deletes specs");
+
+  specDeletions
+    .command("list")
+    .description("List preserved deleted Hub spec candidates")
+    .option("--json", "print raw JSON")
+    .action((opts: JsonCliOptions) => {
+      runStructuredSync(
+        () =>
+          listSpecDeletions({
+            cwd: process.cwd(),
+          }),
+        opts.json,
+      );
+    });
+
+  specDeletions
+    .command("keep")
+    .description("Keep a deleted Hub spec candidate as a local-only supplement")
+    .requiredOption("--id <id>", "deletion candidate ID")
+    .requiredOption("--as <path>", "target path under .suncode/spec/local/")
+    .action(async (opts: KeepSpecDeletionCliOptions) => {
+      await run(async () =>
+        keepSpecDeletion({
+          cwd: process.cwd(),
+          id: requireOption(opts.id, "--id"),
+          asPath: requireOption(opts.as, "--as"),
+        }),
+      );
+    });
+
+  specDeletions
+    .command("discard")
+    .description("Mark a deleted Hub spec candidate as discarded")
+    .requiredOption("--id <id>", "deletion candidate ID")
+    .action(async (opts: DiscardSpecDeletionCliOptions) => {
+      await run(async () =>
+        discardSpecDeletion({
+          cwd: process.cwd(),
+          id: requireOption(opts.id, "--id"),
+        }),
+      );
     });
 
   hub
@@ -436,6 +515,43 @@ async function runJson(action: () => Promise<unknown>): Promise<void> {
   }
 }
 
+async function runStructured(
+  action: () => Promise<unknown>,
+  asJson = false,
+): Promise<void> {
+  try {
+    const result = await action();
+    if (asJson) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    printResult(result as HubCommandResult);
+  } catch (error) {
+    console.error(
+      chalk.red("Error:"),
+      error instanceof Error ? error.message : error,
+    );
+    process.exit(1);
+  }
+}
+
+function runStructuredSync(action: () => unknown, asJson = false): void {
+  try {
+    const result = action();
+    if (asJson) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    printResult(result as HubCommandResult);
+  } catch (error) {
+    console.error(
+      chalk.red("Error:"),
+      error instanceof Error ? error.message : error,
+    );
+    process.exit(1);
+  }
+}
+
 async function runState(options: HubStateCliOptions): Promise<void> {
   try {
     const result = await hubState({ cwd: process.cwd() });
@@ -460,4 +576,9 @@ function printResult(result: HubCommandResult): void {
   } else {
     console.log(line);
   }
+}
+
+function requireOption(value: string | undefined, name: string): string {
+  if (!value) throw new Error(`${name} is required.`);
+  return value;
 }

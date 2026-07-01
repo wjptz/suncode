@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/cli/backend/suncode-hub-collaboration.md", "reason": "Hub collaboration contracts for commands, hooks, auth, state, and task ownership"}
+{"file": ".trellis/spec/cli/unit-test/conventions.md", "reason": "Vitest conventions and required test coverage for CLI command changes"}
