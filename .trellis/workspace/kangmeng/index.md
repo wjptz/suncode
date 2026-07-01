@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-07-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~282 | Active |
+| `journal-1.md` | ~316 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-07-01 | Docs site hub style refresh | `81f8261` | `main` |
 | 8 | 2026-07-01 | Hub 初始化登录和状态识别 | `e431a5d`, `ce564f0` | `main` |
 | 7 | 2026-07-01 | Docs-site Suncode migration | `894f153`, `17d9a85` | `main` |
 | 6 | 2026-06-30 | Hub structured subtask upload | `b7dd97f` | `main` |

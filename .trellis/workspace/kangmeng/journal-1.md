@@ -280,3 +280,37 @@ Archived the completed docs-site Suncode migration after retaining only Start He
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Docs site hub style refresh
+
+**Date**: 2026-07-01
+**Task**: Docs site hub style refresh
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Refreshed Mintlify docs-site theme and custom accents, added bilingual Team Hub guide, linked it from navigation and homepages, and verified lint plus sensitive-detail grep.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `81f8261` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
