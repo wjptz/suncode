@@ -349,3 +349,37 @@ Refreshed Mintlify docs-site theme and custom accents, added bilingual Team Hub 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Hub Review CLI workflow
+
+**Date**: 2026-07-02
+**Task**: Hub Review CLI workflow
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Added task-centered Hub review workflow with Engineer provider support, review artifacts/submissions, completion gate, bundled skill, docs, and tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6798fcd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
