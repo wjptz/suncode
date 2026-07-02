@@ -383,3 +383,37 @@ Added task-centered Hub review workflow with Engineer provider support, review a
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Hub skill package sync
+
+**Date**: 2026-07-02
+**Task**: Hub skill package sync
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Implemented Hub skill package push/pull commands, added API contract specs, tests, and archived the Trellis task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a5c4681` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
