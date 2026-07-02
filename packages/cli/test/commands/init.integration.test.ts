@@ -721,6 +721,17 @@ describe("init() integration", () => {
         path.join(tmpDir, ".engineer", "plugins", "inject-workflow-state.js"),
       ),
     ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          tmpDir,
+          ".engineer",
+          "skills",
+          "suncode-hub-review",
+          "SKILL.md",
+        ),
+      ),
+    ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".opencode"))).toBe(false);
   });
 

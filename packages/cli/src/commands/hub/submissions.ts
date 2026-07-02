@@ -6,6 +6,7 @@ import { resolveHubConfig } from "./config.js";
 import {
   collectCompletionArtifacts,
   collectPlanArtifacts,
+  collectReviewArtifacts,
   collectSpecArtifacts,
   filterChangedArtifacts,
 } from "./artifacts.js";
@@ -19,12 +20,14 @@ import {
   upsertManifestArtifact,
 } from "./manifest.js";
 import { uploadArtifactToMinio, type UploadTarget } from "./minio.js";
+import { collectReviewCodeSnapshot } from "./review-state.js";
 import { readHubTask } from "./task.js";
 import type {
   FetchLike,
   HubArtifact,
   HubCommandResult,
   HubManifest,
+  HubReviewStatus,
   UploadedArtifact,
 } from "./types.js";
 
@@ -41,11 +44,30 @@ export interface SubmitSpecOptions extends SubmitArtifactsOptions {
   files?: readonly string[];
 }
 
+export interface HubReviewSubmissionSummary {
+  round: number;
+  provider: string;
+  status: HubReviewStatus;
+  diffHash: string;
+  headCommit?: string;
+  summary: string;
+  mustFixCount: number;
+  advisoryCount: number;
+}
+
+export interface SubmitReviewOptions extends SubmitArtifactsOptions {
+  round: number;
+  review: HubReviewSubmissionSummary;
+}
+
 export interface HubStructuredSubtask {
   priority: string;
   name: string;
   description: string;
 }
+
+type SubmissionKind = "plan" | "spec" | "completion" | "review";
+type ArtifactScope = "current_task" | "project_spec";
 
 interface UploadSessionResponse {
   uploadSession: {
@@ -114,6 +136,18 @@ export async function submitCompletion(
     submissionKind: "completion",
     collect: (cwd, taskJsonPath) =>
       collectCompletionArtifacts({ cwd, taskJsonPath }),
+  });
+}
+
+export async function submitReviewArtifacts(
+  options: SubmitReviewOptions,
+): Promise<HubCommandResult> {
+  return submitArtifacts({
+    ...options,
+    submissionKind: "review",
+    collect: (cwd, taskJsonPath) =>
+      collectReviewArtifacts({ cwd, taskJsonPath, round: options.round }),
+    reviewSummary: options.review,
   });
 }
 
@@ -195,8 +229,9 @@ export async function submitSubtasks(
 
 async function submitArtifacts(
   options: SubmitArtifactsOptions & {
-    submissionKind: "plan" | "spec" | "completion";
+    submissionKind: SubmissionKind;
     collect: (cwd: string, taskJsonPath: string) => HubArtifact[];
+    reviewSummary?: HubReviewSubmissionSummary;
   },
 ): Promise<HubCommandResult> {
   const cwd = options.cwd ?? process.cwd();
@@ -222,6 +257,10 @@ async function submitArtifacts(
       status: "skipped",
       message: "Task is not bound to a remote Hub task.",
     };
+  }
+
+  if (options.submissionKind === "completion" && config.review.required) {
+    assertCompletionReviewGate(cwd, taskManifest);
   }
 
   const artifacts = options.collect(cwd, task.taskJsonPath);
@@ -280,6 +319,7 @@ async function submitArtifacts(
       commit: stringField(task.task.commit),
       prUrl: stringField(task.task.pr_url),
     },
+    reviewSummary: options.reviewSummary,
   });
 
   if (options.submissionKind === "spec") {
@@ -301,6 +341,7 @@ async function submitArtifacts(
     options.submissionKind,
     bundleHash,
     submission,
+    options.reviewSummary,
   );
   for (const artifact of uploaded) {
     const remote = submission.artifacts?.find(
@@ -341,8 +382,8 @@ async function createUploadSession(options: {
   developerId: string;
   localTaskId: string;
   localTaskPath: string;
-  artifactScope: "current_task" | "project_spec";
-  submissionKind: "plan" | "spec" | "completion";
+  artifactScope: ArtifactScope;
+  submissionKind: SubmissionKind;
   artifactBundleHash: string;
   artifacts: readonly HubArtifact[];
 }): Promise<UploadSessionResponse> {
@@ -407,13 +448,14 @@ async function submitUploadedArtifacts(options: {
   requirementRevision?: number;
   localTaskId: string;
   localTaskPath: string;
-  artifactScope: "current_task" | "project_spec";
-  submissionKind: "plan" | "spec" | "completion";
+  artifactScope: ArtifactScope;
+  submissionKind: SubmissionKind;
   bundleHash: string;
   uploadSessionId: string;
   artifacts: readonly UploadedArtifact[];
   manifest: HubManifest;
   taskSummary: { status?: string; commit?: string; prUrl?: string };
+  reviewSummary?: HubReviewSubmissionSummary;
 }): Promise<SubmissionResponse> {
   const path = submissionApiPath(
     options.projectId,
@@ -425,6 +467,7 @@ async function submitUploadedArtifacts(options: {
     options.submissionKind,
     options.bundleHash,
     options.manifest,
+    options.reviewSummary,
   );
   return options.client.requestJson<SubmissionResponse>(
     "POST",
@@ -441,12 +484,13 @@ function submissionPayload(options: {
   localTaskId: string;
   localTaskPath: string;
   artifactScope: "current_task" | "project_spec";
-  submissionKind: "plan" | "spec" | "completion";
+  submissionKind: SubmissionKind;
   bundleHash: string;
   uploadSessionId: string;
   artifacts: readonly UploadedArtifact[];
   manifest: HubManifest;
   taskSummary: { status?: string; commit?: string; prUrl?: string };
+  reviewSummary?: HubReviewSubmissionSummary;
 }): Record<string, unknown> {
   const common = {
     developerId: options.developerId,
@@ -484,6 +528,17 @@ function submissionPayload(options: {
     };
   }
 
+  if (options.submissionKind === "review") {
+    if (!options.reviewSummary) {
+      throw new Error("Review submission requires a review summary.");
+    }
+    return {
+      ...common,
+      reviewBundleHash: options.bundleHash,
+      review: options.reviewSummary,
+    };
+  }
+
   return {
     ...common,
     includedChildTaskIds: [],
@@ -495,22 +550,25 @@ function submissionPayload(options: {
 function submissionApiPath(
   projectId: string,
   remoteTaskId: string,
-  kind: "plan" | "spec" | "completion",
+  kind: SubmissionKind,
 ): string {
   const suffix =
     kind === "plan"
       ? "plan-submissions"
       : kind === "spec"
         ? "spec-submissions"
-        : "completion-submissions";
+        : kind === "review"
+          ? "review-submissions"
+          : "completion-submissions";
   return `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(remoteTaskId)}/${suffix}`;
 }
 
 function submissionIdempotencyKey(
   remoteTaskId: string,
-  kind: "plan" | "spec" | "completion",
+  kind: SubmissionKind,
   bundleHash: string,
   manifest: HubManifest,
+  reviewSummary?: HubReviewSubmissionSummary,
 ): string {
   if (kind === "plan") {
     return [
@@ -520,14 +578,26 @@ function submissionIdempotencyKey(
       bundleHash,
     ].join(":");
   }
+  if (kind === "review") {
+    if (!reviewSummary) {
+      throw new Error("Review submission requires a review summary.");
+    }
+    return [
+      "hub:submit-review",
+      remoteTaskId,
+      String(reviewSummary.round),
+      bundleHash,
+    ].join(":");
+  }
   return [`hub:submit-${kind}`, remoteTaskId, bundleHash].join(":");
 }
 
 function recordSubmission(
   manifest: HubManifest,
-  kind: "plan" | "spec" | "completion",
+  kind: SubmissionKind,
   bundleHash: string,
   submission: SubmissionResponse,
+  reviewSummary?: HubReviewSubmissionSummary,
 ): void {
   if (kind === "plan") {
     manifest.planRevision = (manifest.planRevision ?? 0) + 1;
@@ -541,7 +611,54 @@ function recordSubmission(
     manifest.lastSpecBundleHash = bundleHash;
     return;
   }
+  if (kind === "review") {
+    if (!reviewSummary) {
+      throw new Error("Review submission requires a review summary.");
+    }
+    manifest.lastReviewBundleHash = bundleHash;
+    manifest.lastReviewRound = reviewSummary.round;
+    manifest.lastReviewStatus = reviewSummary.status;
+    if (submission.submission?.id) {
+      manifest.lastReviewSubmissionId = submission.submission.id;
+    }
+    if (reviewSummary.status === "approved") {
+      manifest.approvedReviewDiffHash = reviewSummary.diffHash;
+      if (reviewSummary.headCommit) {
+        manifest.approvedReviewHeadCommit = reviewSummary.headCommit;
+      }
+    }
+    return;
+  }
   manifest.lastCompletionBundleHash = bundleHash;
+}
+
+function assertCompletionReviewGate(cwd: string, manifest: HubManifest): void {
+  if (manifest.lastReviewStatus !== "approved") {
+    throw new Error(
+      "An approved Hub review is required before submit-completion. Run `suncode hub review` until it is approved.",
+    );
+  }
+  if (!manifest.approvedReviewDiffHash) {
+    throw new Error(
+      "The latest approved Hub review is missing its diff hash. Run `suncode hub review` again.",
+    );
+  }
+
+  const current = collectReviewCodeSnapshot(cwd);
+  if (manifest.approvedReviewDiffHash !== current.diffHash) {
+    throw new Error(
+      "The latest approved Hub review no longer matches the current diff. Run `suncode hub review` again.",
+    );
+  }
+  if (
+    manifest.approvedReviewHeadCommit &&
+    current.headCommit &&
+    manifest.approvedReviewHeadCommit !== current.headCommit
+  ) {
+    throw new Error(
+      "The latest approved Hub review no longer matches the current commit. Run `suncode hub review` again.",
+    );
+  }
 }
 
 function currentHashes(

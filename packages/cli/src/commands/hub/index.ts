@@ -7,6 +7,7 @@ import { hubInit } from "./init.js";
 import { preflightStart, markStarted } from "./lifecycle.js";
 import { hubLogin, hubLogout } from "./login.js";
 import { pullRequirements, pullReview, syncRequirement } from "./pull.js";
+import { hubReview } from "./review.js";
 import {
   discardSpecDeletion,
   keepSpecDeletion,
@@ -28,6 +29,11 @@ interface TaskOptions {
   taskJson?: string;
   task?: string;
   bestEffort?: boolean;
+}
+
+interface ReviewCliOptions extends TaskOptions {
+  module?: string[];
+  provider?: string;
 }
 
 interface HubInitCliOptions {
@@ -276,6 +282,41 @@ export function registerHubCommand(program: Command): void {
               task: opts.task,
             }),
           }),
+        opts.bestEffort,
+      );
+    });
+
+  hub
+    .command("review")
+    .description("Run a Suncode Hub review round for the current task")
+    .option("--task-json <path>", "path to task.json")
+    .option("--task <task>", "task directory/name fallback")
+    .option(
+      "--module <path>",
+      "module or path scope to include in review (repeatable)",
+      (value: string, previous: string[] | undefined) => [
+        ...(previous ?? []),
+        value,
+      ],
+      [] as string[],
+    )
+    .option("--provider <provider>", "review provider override (engineer)")
+    .option("--best-effort", "warn and exit 0 on failure")
+    .action(async (opts: ReviewCliOptions) => {
+      await run(
+        async () => {
+          if (opts.provider && opts.provider !== "engineer") {
+            throw new Error("Hub review provider must be engineer.");
+          }
+          return hubReview({
+            taskJsonPath: resolveTaskJsonPath({
+              cwd: process.cwd(),
+              taskJsonPath: opts.taskJson,
+              task: opts.task ?? "current",
+            }),
+            modules: opts.module ?? [],
+          });
+        },
         opts.bestEffort,
       );
     });

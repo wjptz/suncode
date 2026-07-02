@@ -79,6 +79,23 @@ max_journal_lines: 2000
 #   # block: require Hub review approval before starting
 #   # bypass: skip review-state gating
 #   startReviewPolicy: confirm
+#   review:
+#     enabled: false
+#     provider: engineer
+#     # Default false: review syncs to Hub but does not block submit-completion.
+#     # Set true when the team requires the latest approved review for finish.
+#     required: false
+#     trigger: manual
+#     # bypass: skip review when provider is unavailable
+#     # warn: skip review and surface a warning
+#     # block: fail when provider is unavailable
+#     unavailablePolicy: bypass
+#     engineer:
+#       command: engineer
+#       args: ["run"]
+#       timeoutSeconds: 900
+#       # Set false to avoid storing the provider's original stdout/stderr.
+#       saveRawOutput: true
 #   sync:
 #     afterCreate: true
 #     afterStart: true
@@ -92,6 +109,8 @@ max_journal_lines: 2000
 # - after_create: suncode hub create-task
 # - after_start: suncode hub submit-subtasks, then suncode hub mark-started
 # - after_archive: suncode hub submit-completion
+# Hub review is explicit: run suncode hub review --task current when
+# hub.review.enabled is true.
 #
 # Note: after_finish only clears the active task in Suncode; it is not the final
 # task-completion signal. Use submit-completion explicitly or via after_archive.

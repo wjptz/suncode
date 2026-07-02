@@ -22,6 +22,7 @@ import {
 import {
   collectPlanArtifacts,
   collectCompletionArtifacts,
+  collectReviewArtifacts,
   collectSpecArtifacts,
 } from "../../src/commands/hub/artifacts.js";
 import { hubCreateTask } from "../../src/commands/hub/create-task.js";
@@ -36,9 +37,11 @@ import {
 } from "../../src/commands/hub/manifest.js";
 import {
   submitPlan,
+  submitCompletion,
   submitSpec,
   submitSubtasks,
 } from "../../src/commands/hub/submissions.js";
+import { hubReview } from "../../src/commands/hub/review.js";
 import {
   HubTaskError,
   resolveTaskJsonPath,
@@ -229,13 +232,16 @@ function createMockFetch(): {
     if (
       String(url).endsWith("/plan-submissions") ||
       String(url).endsWith("/spec-submissions") ||
-      String(url).endsWith("/completion-submissions")
+      String(url).endsWith("/completion-submissions") ||
+      String(url).endsWith("/review-submissions")
     ) {
       return jsonResponse({
         submission: {
           id: String(url).endsWith("/spec-submissions")
             ? "SPEC-4001"
-            : "PLAN-3001",
+            : String(url).endsWith("/review-submissions")
+              ? "REVIEW-6001"
+              : "PLAN-3001",
           remoteRevision: 4,
           reviewStatus: "pending",
           createdAt: "2026-06-30T12:00:00Z",
@@ -250,6 +256,14 @@ function createMockFetch(): {
             objectRef: artifact.objectRef,
           }),
         ),
+      });
+    }
+
+    if (method === "PATCH" && String(url).endsWith("/status")) {
+      return jsonResponse({
+        task: {
+          status: (JSON.parse(body ?? "{}") as { status?: string }).status,
+        },
       });
     }
 
@@ -325,6 +339,43 @@ hub:
     });
   });
 
+  it("parses nested hub review configuration with provider defaults", () => {
+    const config = parseHubSection(`
+hub:
+  enabled: true
+  mode: team
+  projectId: proj_123
+  apiBaseUrl: https://hub.example.test
+  review:
+    enabled: true
+    provider: engineer
+    required: true
+    trigger: manual
+    unavailablePolicy: block
+    engineer:
+      command: engineer
+      args: ["run", "--no-write"]
+      timeoutSeconds: 1200
+      saveRawOutput: false
+`);
+
+    expect(config).toMatchObject({
+      review: {
+        enabled: true,
+        provider: "engineer",
+        required: true,
+        trigger: "manual",
+        unavailablePolicy: "block",
+        engineer: {
+          command: "engineer",
+          args: ["run", "--no-write"],
+          timeoutSeconds: 1200,
+          saveRawOutput: false,
+        },
+      },
+    });
+  });
+
   it("does not require SUNCODE_HUB_TOKEN while hub is disabled", () => {
     writeProjectConfig(tmpDir, "hub:\n  enabled: false\n");
 
@@ -350,6 +401,46 @@ hub:
     expect(config.apiBaseUrl).toBe("https://hub.example.test");
     expect(config.apiBaseUrlSource).toBe("global");
     expect(config.token).toBe("login-token");
+  });
+
+  it("resolves hub review defaults without making review required by default", () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  projectId: proj_123",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "",
+      ].join("\n"),
+    );
+    writeHubAuth(homeDir);
+
+    const config = resolveHubConfig({
+      cwd: tmpDir,
+      homeDir,
+      env: {},
+      requireAuth: true,
+    });
+
+    expect(config).toMatchObject({
+      enabled: true,
+      review: {
+        enabled: true,
+        provider: "engineer",
+        required: false,
+        trigger: "manual",
+        unavailablePolicy: "bypass",
+        engineer: {
+          command: "engineer",
+          args: ["run"],
+          timeoutSeconds: 900,
+          saveRawOutput: true,
+        },
+      },
+    });
   });
 
   it("fails fast when enabled config has no project or resolved apiBaseUrl", () => {
@@ -684,6 +775,44 @@ describe("hub artifacts and hashing", () => {
 
     expect(artifacts.map((artifact) => artifact.path)).toEqual([
       "implementation-summary.md",
+    ]);
+  });
+
+  it("collects review round artifacts as current-task review artifacts", () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const roundDir = path.join(taskDir, "reviews", "round-001");
+    fs.mkdirSync(roundDir, { recursive: true });
+    fs.writeFileSync(path.join(roundDir, "review.json"), "{}\n", "utf-8");
+    fs.writeFileSync(path.join(roundDir, "result.md"), "# Result\n", "utf-8");
+    fs.writeFileSync(
+      path.join(roundDir, "raw-output.md"),
+      "raw provider output\n",
+      "utf-8",
+    );
+    fs.writeFileSync(path.join(roundDir, "diff.patch"), "diff --git\n", "utf-8");
+    fs.writeFileSync(path.join(roundDir, "prompt.md"), "# Prompt\n", "utf-8");
+    fs.mkdirSync(path.join(taskDir, "reviews", "round-002"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(taskDir, "reviews", "round-002", "review.json"),
+      "{}\n",
+      "utf-8",
+    );
+
+    const artifacts = collectReviewArtifacts({
+      cwd: tmpDir,
+      taskJsonPath,
+      round: 1,
+    });
+
+    expect(artifacts.map((artifact) => [artifact.path, artifact.type])).toEqual([
+      ["reviews/round-001/diff.patch", "review"],
+      ["reviews/round-001/prompt.md", "review"],
+      ["reviews/round-001/raw-output.md", "review"],
+      ["reviews/round-001/result.md", "review"],
+      ["reviews/round-001/review.json", "review"],
     ]);
   });
 
@@ -1486,6 +1615,438 @@ describe("hub commands", () => {
     });
     expect(second.status).toBe("skipped");
     expect(calls).toHaveLength(0);
+  });
+
+  it("hub review creates a review round, syncs statuses, and submits review artifacts", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    fs.writeFileSync(path.join(taskDir, "design.md"), "# Design\n", "utf-8");
+    fs.writeFileSync(path.join(taskDir, "implement.md"), "# Impl\n", "utf-8");
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      modules: ["packages/cli/src/commands/hub"],
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => true,
+        run: async () => ({
+          exitCode: 0,
+          output: [
+            "Review complete.",
+            "```json",
+            JSON.stringify({
+              status: "changes_requested",
+              summary: "需要修复 review gate。",
+              mustFix: [
+                {
+                  severity: "high",
+                  file: "packages/cli/src/commands/hub/config.ts",
+                  line: 42,
+                  title: "Result report must not store raw provider log",
+                  detail: "result.md should contain reviewer findings only.",
+                },
+              ],
+              advisory: [
+                {
+                  severity: "low",
+                  file: "docs-site/advanced/configuration.mdx",
+                  title: "Document raw output location",
+                  detail: "Mention raw-output.md for diagnostics.",
+                },
+              ],
+            }),
+            "```",
+          ].join("\n"),
+        }),
+      },
+    });
+
+    expect(result.status).toBe("updated");
+    const reviewJsonPath = path.join(
+      taskDir,
+      "reviews",
+      "round-001",
+      "review.json",
+    );
+    const review = JSON.parse(fs.readFileSync(reviewJsonPath, "utf-8")) as {
+      round: number;
+      provider: string;
+      status: string;
+      scope: string[];
+      mustFixCount: number;
+      advisoryCount: number;
+      artifacts: Record<string, string>;
+    };
+    expect(review).toMatchObject({
+      round: 1,
+      provider: "engineer",
+      status: "changes_requested",
+      scope: ["packages/cli/src/commands/hub"],
+      mustFixCount: 1,
+      advisoryCount: 1,
+      artifacts: {
+        prompt: "reviews/round-001/prompt.md",
+        result: "reviews/round-001/result.md",
+        diff: "reviews/round-001/diff.patch",
+        rawOutput: "reviews/round-001/raw-output.md",
+      },
+    });
+    const resultMd = fs.readFileSync(
+      path.join(taskDir, "reviews", "round-001", "result.md"),
+      "utf-8",
+    );
+    expect(resultMd).toContain("# Hub Review Result");
+    expect(resultMd).toContain("## Must Fix");
+    expect(resultMd).toContain("Result report must not store raw provider log");
+    expect(resultMd).toContain("packages/cli/src/commands/hub/config.ts:42");
+    expect(resultMd).toContain("## Advisory");
+    expect(resultMd).toContain("Document raw output location");
+    expect(resultMd).not.toContain("Review complete.");
+    const rawOutput = fs.readFileSync(
+      path.join(taskDir, "reviews", "round-001", "raw-output.md"),
+      "utf-8",
+    );
+    expect(rawOutput).toContain("Review complete.");
+    expect(
+      calls
+        .filter((call) => call.method === "PATCH" && call.url.endsWith("/status"))
+        .map((call) => (JSON.parse(call.body ?? "{}") as { status: string }).status),
+    ).toEqual(["in_review", "changes_requested"]);
+    const uploadSession = calls.find((call) =>
+      call.url.endsWith("/artifact-upload-sessions"),
+    );
+    expect(JSON.parse(uploadSession?.body ?? "{}")).toMatchObject({
+      submissionKind: "review",
+      artifactScope: "current_task",
+    });
+    const reviewSubmission = calls.find((call) =>
+      call.url.endsWith("/review-submissions"),
+    );
+    expect(JSON.parse(reviewSubmission?.body ?? "{}")).toMatchObject({
+      reviewBundleHash: expect.any(String),
+      review: {
+        round: 1,
+        status: "changes_requested",
+        mustFixCount: 1,
+        advisoryCount: 1,
+      },
+    });
+    const manifest = loadHubManifest(taskDir);
+    expect(manifest.lastReviewStatus).toBe("changes_requested");
+    expect(manifest.lastReviewRound).toBe(1);
+    expect(manifest.lastReviewSubmissionId).toBe("REVIEW-6001");
+  });
+
+  it("hub review advances rounds and status idempotency keys after local review artifacts are deleted", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+    const provider = {
+      name: "engineer" as const,
+      isAvailable: () => true,
+      run: async () => ({
+        exitCode: 0,
+        output: [
+          "```json",
+          JSON.stringify({
+            status: "changes_requested",
+            summary: "需要修复。",
+            mustFix: [{ title: "Fix review finding" }],
+            advisory: [],
+          }),
+          "```",
+        ].join("\n"),
+      }),
+    };
+
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider,
+    });
+    fs.rmSync(path.join(taskDir, "reviews"), { recursive: true, force: true });
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider,
+    });
+
+    const reviewSubmissions = calls.filter((call) =>
+      call.url.endsWith("/review-submissions"),
+    );
+    expect(
+      reviewSubmissions.map(
+        (call) =>
+          (JSON.parse(call.body ?? "{}") as { review: { round: number } }).review
+            .round,
+      ),
+    ).toEqual([1, 2]);
+    expect(
+      reviewSubmissions.map((call) => call.headers["idempotency-key"]),
+    ).toEqual([
+      expect.stringMatching(/^hub:submit-review:TASK-2001:1:/),
+      expect.stringMatching(/^hub:submit-review:TASK-2001:2:/),
+    ]);
+    const statusKeys = calls
+      .filter((call) => call.method === "PATCH" && call.url.endsWith("/status"))
+      .map((call) => call.headers["idempotency-key"]);
+    expect(new Set(statusKeys).size).toBe(statusKeys.length);
+  });
+
+  it("hub review can disable raw provider output artifacts", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "    engineer:",
+        "      saveRawOutput: false",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const { fetch } = createMockFetch();
+
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => true,
+        run: async () => ({
+          exitCode: 0,
+          output: [
+            "Raw engineer execution transcript.",
+            "```json",
+            JSON.stringify({
+              status: "approved",
+              summary: "可以合并。",
+              mustFix: [],
+              advisory: [],
+            }),
+            "```",
+          ].join("\n"),
+        }),
+      },
+    });
+
+    const roundDir = path.join(taskDir, "reviews", "round-001");
+    const review = JSON.parse(
+      fs.readFileSync(path.join(roundDir, "review.json"), "utf-8"),
+    ) as { artifacts: Record<string, string> };
+    const resultMd = fs.readFileSync(path.join(roundDir, "result.md"), "utf-8");
+
+    expect(fs.existsSync(path.join(roundDir, "raw-output.md"))).toBe(false);
+    expect(review.artifacts.rawOutput).toBeUndefined();
+    expect(resultMd).toContain("可以合并。");
+    expect(resultMd).not.toContain("Raw engineer execution transcript.");
+  });
+
+  it("hub review skips without changing status when the provider is unavailable and bypass is allowed", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "    unavailablePolicy: bypass",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => false,
+        run: async () => {
+          throw new Error("should not run");
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message: "Review provider engineer is unavailable.",
+    });
+    expect(fs.existsSync(path.join(taskDir, "reviews"))).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("submit-completion blocks when review is required and no approved current review exists", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    required: true",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    fs.writeFileSync(
+      path.join(taskDir, "implementation-summary.md"),
+      "# Done\n",
+      "utf-8",
+    );
+    const { fetch } = createMockFetch();
+
+    await expect(
+      submitCompletion({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        fetch,
+      }),
+    ).rejects.toThrow("approved Hub review");
+  });
+
+  it("submit-completion proceeds when the required approved review matches the current diff", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    required: true",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    fs.writeFileSync(
+      path.join(taskDir, "implementation-summary.md"),
+      "# Done\n",
+      "utf-8",
+    );
+    writeJson(path.join(taskDir, "hub-manifest.json"), {
+      version: 1,
+      remoteTaskId: "TASK-2001",
+      lastReviewStatus: "approved",
+      approvedReviewDiffHash: hashText(""),
+      artifacts: {},
+    });
+    const { calls, fetch } = createMockFetch();
+
+    const result = await submitCompletion({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+    });
+
+    expect(result.status).toBe("submitted");
+    expect(calls.some((call) => call.url.endsWith("/completion-submissions"))).toBe(
+      true,
+    );
   });
 });
 

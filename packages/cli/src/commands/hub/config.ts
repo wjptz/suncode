@@ -8,7 +8,24 @@ import {
   loadGlobalHubConfig,
   normalizeApiBaseUrl,
 } from "./auth.js";
-import type { HubConfig, StartReviewPolicy } from "./types.js";
+import type {
+  HubConfig,
+  HubEngineerReviewConfig,
+  HubReviewConfig,
+  HubReviewProvider,
+  HubReviewTrigger,
+  HubReviewUnavailablePolicy,
+  StartReviewPolicy,
+} from "./types.js";
+
+interface HubReviewSection {
+  enabled?: boolean;
+  provider?: string;
+  required?: boolean;
+  trigger?: string;
+  unavailablePolicy?: string;
+  engineer?: Partial<HubEngineerReviewConfig>;
+}
 
 interface HubSection {
   enabled?: boolean;
@@ -17,6 +34,7 @@ interface HubSection {
   developerId?: string;
   apiBaseUrl?: string;
   startReviewPolicy?: string;
+  review?: HubReviewSection;
 }
 
 export class HubConfigError extends Error {
@@ -37,6 +55,8 @@ export function parseHubSection(content: string): HubSection {
   const lines = content.split("\n");
   const parsed: HubSection = {};
   let inHub = false;
+  let inReview = false;
+  let inReviewEngineer = false;
 
   for (const raw of lines) {
     const line = raw.replace(/\r$/, "");
@@ -56,16 +76,87 @@ export function parseHubSection(content: string): HubSection {
 
     if (!inHub) continue;
 
+    const engineerMatch = trimmedRight.match(
+      /^ {6}([A-Za-z][\w]*):\s*(.*)$/,
+    );
+    if (inReviewEngineer && engineerMatch) {
+      parsed.review ??= {};
+      parsed.review.engineer ??= {};
+      const [, key, rawValue] = engineerMatch;
+      const value = stripYamlScalar(rawValue);
+      if (value === "" || value === "null" || value === "~") continue;
+      switch (key) {
+        case "command":
+          parsed.review.engineer.command = value;
+          break;
+        case "args":
+          parsed.review.engineer.args = parseYamlStringArray(value, "hub.review.engineer.args");
+          break;
+        case "timeoutSeconds":
+          parsed.review.engineer.timeoutSeconds = parsePositiveInteger(
+            value,
+            "hub.review.engineer.timeoutSeconds",
+          );
+          break;
+        case "saveRawOutput":
+          parsed.review.engineer.saveRawOutput = parseYamlBool(
+            value,
+            "hub.review.engineer.saveRawOutput",
+          );
+          break;
+        default:
+          break;
+      }
+      continue;
+    }
+
+    const reviewMatch = trimmedRight.match(/^ {4}([A-Za-z][\w]*):\s*(.*)$/);
+    if (inReview && reviewMatch) {
+      inReviewEngineer = false;
+      parsed.review ??= {};
+      const [, key, rawValue] = reviewMatch;
+      const value = stripYamlScalar(rawValue);
+      if (key === "engineer" && (value === "" || value === "null" || value === "~")) {
+        parsed.review.engineer ??= {};
+        inReviewEngineer = true;
+        continue;
+      }
+      if (value === "" || value === "null" || value === "~") continue;
+      switch (key) {
+        case "enabled":
+          parsed.review.enabled = parseYamlBool(value, "hub.review.enabled");
+          break;
+        case "required":
+          parsed.review.required = parseYamlBool(value, "hub.review.required");
+          break;
+        case "provider":
+        case "trigger":
+        case "unavailablePolicy":
+          parsed.review[key] = value;
+          break;
+        default:
+          break;
+      }
+      continue;
+    }
+
     const match = trimmedRight.match(/^ {2}([A-Za-z][\w]*):\s*(.*)$/);
     if (!match) continue;
 
+    inReview = false;
+    inReviewEngineer = false;
     const [, key, rawValue] = match;
     const value = stripYamlScalar(rawValue);
+    if (key === "review" && (value === "" || value === "null" || value === "~")) {
+      parsed.review ??= {};
+      inReview = true;
+      continue;
+    }
     if (value === "" || value === "null" || value === "~") continue;
 
     switch (key) {
       case "enabled":
-        parsed.enabled = parseYamlBool(value);
+        parsed.enabled = parseYamlBool(value, "hub.enabled");
         break;
       case "mode":
       case "projectId":
@@ -158,6 +249,7 @@ export function resolveHubConfig(
     developerId,
     ...(session?.token ? { token: session.token } : {}),
     startReviewPolicy: parseStartReviewPolicy(hub.startReviewPolicy),
+    review: parseHubReviewConfig(hub.review),
   };
 }
 
@@ -187,11 +279,33 @@ function stripInlineComment(value: string): string {
   return value;
 }
 
-function parseYamlBool(value: string): boolean {
+function parseYamlBool(value: string, field: string): boolean {
   const normalized = value.toLowerCase();
   if (["true", "yes", "1", "on"].includes(normalized)) return true;
   if (["false", "no", "0", "off"].includes(normalized)) return false;
-  throw new HubConfigError(`hub.enabled must be a boolean (got ${value})`);
+  throw new HubConfigError(`${field} must be a boolean (got ${value})`);
+}
+
+function parseYamlStringArray(value: string, field: string): string[] {
+  if (!value.startsWith("[") || !value.endsWith("]")) {
+    return value.trim() ? [value] : [];
+  }
+  const parsed = JSON.parse(value) as unknown;
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((item) => typeof item !== "string")
+  ) {
+    throw new HubConfigError(`${field} must be a string array.`);
+  }
+  return parsed;
+}
+
+function parsePositiveInteger(value: string, field: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new HubConfigError(`${field} must be a positive integer.`);
+  }
+  return parsed;
 }
 
 function parseStartReviewPolicy(value: string | undefined): StartReviewPolicy {
@@ -201,6 +315,52 @@ function parseStartReviewPolicy(value: string | undefined): StartReviewPolicy {
   }
   throw new HubConfigError(
     `hub.startReviewPolicy must be confirm, block, or bypass (got ${value})`,
+  );
+}
+
+function parseHubReviewConfig(value: HubReviewSection | undefined): HubReviewConfig {
+  return {
+    enabled: value?.enabled ?? false,
+    provider: parseReviewProvider(value?.provider),
+    required: value?.required ?? false,
+    trigger: parseReviewTrigger(value?.trigger),
+    unavailablePolicy: parseReviewUnavailablePolicy(value?.unavailablePolicy),
+    engineer: {
+      command: value?.engineer?.command ?? "engineer",
+      args: value?.engineer?.args ?? ["run"],
+      timeoutSeconds: value?.engineer?.timeoutSeconds ?? 900,
+      saveRawOutput: value?.engineer?.saveRawOutput ?? true,
+    },
+  };
+}
+
+function parseReviewProvider(
+  value: string | undefined,
+): HubReviewProvider {
+  if (value === undefined || value === "") return "engineer";
+  if (value === "engineer") return value;
+  throw new HubConfigError(
+    `hub.review.provider must be engineer (got ${value})`,
+  );
+}
+
+function parseReviewTrigger(value: string | undefined): HubReviewTrigger {
+  if (value === undefined || value === "") return "manual";
+  if (value === "manual" || value === "beforeCompletion") return value;
+  throw new HubConfigError(
+    `hub.review.trigger must be manual or beforeCompletion (got ${value})`,
+  );
+}
+
+function parseReviewUnavailablePolicy(
+  value: string | undefined,
+): HubReviewUnavailablePolicy {
+  if (value === undefined || value === "") return "bypass";
+  if (value === "bypass" || value === "warn" || value === "block") {
+    return value;
+  }
+  throw new HubConfigError(
+    `hub.review.unavailablePolicy must be bypass, warn, or block (got ${value})`,
   );
 }
 

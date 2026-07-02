@@ -44,6 +44,7 @@ const BUNDLED_SKILL_NAMES = [
   "suncode-channel",
   "suncode-hub-finish",
   "suncode-hub-requirements",
+  "suncode-hub-review",
   "suncode-hub-spec-sync",
   "suncode-meta",
   "suncode-session-insight",

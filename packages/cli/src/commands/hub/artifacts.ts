@@ -12,6 +12,10 @@ export interface CollectArtifactsOptions {
   taskJsonPath: string;
 }
 
+export interface CollectReviewArtifactsOptions extends CollectArtifactsOptions {
+  round: number;
+}
+
 const PLAN_FILES: readonly {
   file: string;
   type: HubArtifact["type"];
@@ -62,6 +66,19 @@ export function collectCompletionArtifacts(
       if (!fs.existsSync(absolutePath)) return [];
       return [artifactFromFile(file, type, absolutePath)];
     }),
+  );
+}
+
+export function collectReviewArtifacts(
+  options: CollectReviewArtifactsOptions,
+): HubArtifact[] {
+  const task = readHubTask(options.taskJsonPath, options.cwd);
+  const reviewDir = path.join(task.taskDir, "reviews", reviewRoundName(options.round));
+  if (!fs.existsSync(reviewDir)) return [];
+  return sortArtifacts(
+    listFiles(reviewDir).map((file) =>
+      artifactFromFile(toPosix(path.relative(task.taskDir, file)), "review", file),
+    ),
   );
 }
 
@@ -135,6 +152,10 @@ function contentTypeForPath(filePath: string): string {
 
 function sortArtifacts(artifacts: HubArtifact[]): HubArtifact[] {
   return [...artifacts].sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function reviewRoundName(round: number): string {
+  return `round-${String(round).padStart(3, "0")}`;
 }
 
 function isInside(root: string, target: string): boolean {

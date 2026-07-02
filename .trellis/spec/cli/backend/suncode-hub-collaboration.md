@@ -562,3 +562,110 @@ await client.requestJson(
 
 This keeps ownership anchored to one resolved local task and makes retries
 idempotent.
+
+## Scenario: Hub Review Round and Idempotency State
+
+### 1. Scope / Trigger
+
+- Trigger: CLI code that creates Hub review rounds, patches Hub task review
+  status, submits review artifacts, or computes review idempotency keys.
+- Applies to `packages/cli/src/commands/hub/review.ts`,
+  `lifecycle.ts`, `submissions.ts`, `manifest.ts`, and review tests.
+
+### 2. Signatures
+
+CLI command:
+
+```text
+suncode hub review [--task <task>] [--task-json <path>] [--provider engineer]
+```
+
+Hub writes:
+
+```http
+PATCH /api/v1/projects/{projectId}/tasks/{remoteTaskId}/status
+POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
+```
+
+### 3. Contracts
+
+- Review round selection must use both durable manifest state and local artifact
+  directories:
+  `max(nextReviewRoundFromFiles(taskDir), (manifest.lastReviewRound ?? 0) + 1)`.
+- Local `reviews/round-NNN/` directories are artifacts, not the only source of
+  review history. Deleting them must not make the CLI reuse a previously
+  submitted round number when `hub-manifest.json` still records that round.
+- Review submission idempotency keys must use the review summary round that is
+  sent in the payload:
+  `hub:submit-review:{remoteTaskId}:{review.round}:{reviewBundleHash}`.
+- Status patch payloads include `updatedAt`, so the status idempotency key must
+  include a payload discriminator:
+  `hub:review-status:{remoteTaskId}:{status}:{payloadHash}`.
+- `payloadHash` must be derived from the exact status body passed to
+  `requestJson`; otherwise the same key can be reused with a different body.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Previous review artifacts were deleted but `hub-manifest.json` has `lastReviewRound = 1` | Next review is round 2 |
+| Same task enters `in_review` again in a later review run | Status patch uses a different idempotency key because `updatedAt` changed |
+| Review summary missing when submitting review artifacts | Throw `Review submission requires a review summary.` |
+| Review submission key round and payload `review.round` disagree | Bug; add/keep a regression test before changing the key logic |
+| `hub-manifest.json` is also deleted | CLI cannot infer remote review history locally; Hub may still reject reused server-side keys |
+
+### 5. Good/Base/Bad Cases
+
+- Good: User deletes `reviews/round-001/` after a successful review, reruns
+  `suncode hub review`, and the CLI submits `review.round = 2` with a
+  `hub:submit-review:*:2:*` key.
+- Good: Two separate review runs patch `in_review`; both use distinct
+  idempotency keys because their payloads have distinct `updatedAt` values.
+- Base: Fresh Hub-bound task with no manifest and no review artifacts starts at
+  round 1.
+- Bad: Round calculation scans only `reviews/` and ignores
+  `manifest.lastReviewRound`.
+- Bad: Status patch key is only `hub:review-status:{remoteTaskId}:{status}`
+  while the body still includes `updatedAt`.
+
+### 6. Tests Required
+
+- Regression test for rerunning `hubReview` after deleting local `reviews/`:
+  - first submission body has `review.round = 1`
+  - second submission body has `review.round = 2`
+  - submission idempotency keys contain matching round numbers
+  - all status patch idempotency keys are unique across the two runs
+- Existing review artifact tests must still prove only the target round is
+  uploaded.
+- Existing completion-gate tests must still prove approved reviews bind to the
+  current diff/head.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const round = nextReviewRound(task.taskDir);
+const statusKey = ["hub:review-status", remoteTaskId, status].join(":");
+```
+
+This makes local artifact deletion reset the round counter and reuses the same
+status key with a different `updatedAt` body.
+
+#### Correct
+
+```ts
+const round = Math.max(
+  nextReviewRound(task.taskDir),
+  (manifest.lastReviewRound ?? 0) + 1,
+);
+const statusKey = [
+  "hub:review-status",
+  remoteTaskId,
+  status,
+  hashText(JSON.stringify(payload)).slice(0, 16),
+].join(":");
+```
+
+This treats the manifest as durable review history and keeps idempotency keys
+aligned with the payload actually sent to Hub.

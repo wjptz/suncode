@@ -4,6 +4,26 @@ export type FetchLike = (
 ) => Promise<Response>;
 
 export type StartReviewPolicy = "confirm" | "block" | "bypass";
+export type HubReviewProvider = "engineer";
+export type HubReviewStatus = "approved" | "changes_requested" | "blocked";
+export type HubReviewTrigger = "manual" | "beforeCompletion";
+export type HubReviewUnavailablePolicy = "bypass" | "warn" | "block";
+
+export interface HubEngineerReviewConfig {
+  command: string;
+  args: string[];
+  timeoutSeconds: number;
+  saveRawOutput: boolean;
+}
+
+export interface HubReviewConfig {
+  enabled: boolean;
+  provider: HubReviewProvider;
+  required: boolean;
+  trigger: HubReviewTrigger;
+  unavailablePolicy: HubReviewUnavailablePolicy;
+  engineer: HubEngineerReviewConfig;
+}
 
 export interface DisabledHubConfig {
   enabled: false;
@@ -23,6 +43,7 @@ export interface EnabledHubConfig {
   developerId: string;
   token?: string;
   startReviewPolicy: StartReviewPolicy;
+  review: HubReviewConfig;
 }
 
 export type HubConfig = DisabledHubConfig | EnabledHubConfig;
@@ -65,7 +86,8 @@ export interface HubArtifact {
     | "implementation_summary"
     | "validation_summary"
     | "retrospective"
-    | "reuse_assessment";
+    | "reuse_assessment"
+    | "review";
   absolutePath: string;
   sha256: string;
   size: number;
@@ -106,6 +128,12 @@ export interface HubManifest {
   lastSubtasksRevision?: number;
   lastSpecBundleHash?: string;
   lastCompletionBundleHash?: string;
+  lastReviewBundleHash?: string;
+  lastReviewSubmissionId?: string;
+  lastReviewRound?: number;
+  lastReviewStatus?: HubReviewStatus;
+  approvedReviewDiffHash?: string;
+  approvedReviewHeadCommit?: string;
   reviewCursor?: string;
   requirementChangeCursor?: string;
   artifacts: Record<string, HubManifestArtifact>;

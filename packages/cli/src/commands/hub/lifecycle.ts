@@ -1,6 +1,6 @@
 import { createHubApiClient } from "./client.js";
 import { resolveHubConfig } from "./config.js";
-import { hashArtifactBundle } from "./hash.js";
+import { hashArtifactBundle, hashText } from "./hash.js";
 import { loadHubManifest } from "./manifest.js";
 import { readHubTask } from "./task.js";
 import type { FetchLike, HubCommandResult } from "./types.js";
@@ -20,6 +20,16 @@ export interface PreflightStartOptions extends MarkStartedOptions {
 
 export async function markStarted(
   options: MarkStartedOptions,
+): Promise<HubCommandResult> {
+  return markTaskStatus({
+    ...options,
+    status: options.status ?? "in_progress",
+    idempotencyPrefix: "hub:mark-started",
+  });
+}
+
+export async function markTaskStatus(
+  options: MarkStartedOptions & { idempotencyPrefix?: string },
 ): Promise<HubCommandResult> {
   const cwd = options.cwd ?? process.cwd();
   const config = resolveHubConfig({
@@ -41,20 +51,22 @@ export async function markStarted(
 
   const client = createHubApiClient(config, options.fetch);
   const status = options.status ?? "in_progress";
+  const payload = {
+    developerId: task.meta.developerId ?? config.developerId,
+    status,
+    localStatus: stringField(task.task.status) ?? status,
+    localTaskPath: task.localTaskPath,
+    updatedAt: new Date().toISOString(),
+  };
   await client.requestJson(
     "PATCH",
     `/projects/${encodeURIComponent(config.projectId)}/tasks/${encodeURIComponent(remoteTaskId)}/status`,
-    {
-      developerId: task.meta.developerId ?? config.developerId,
-      status,
-      localStatus: stringField(task.task.status) ?? status,
-      localTaskPath: task.localTaskPath,
-      updatedAt: new Date().toISOString(),
-    },
+    payload,
     [
-      "hub:mark-started",
+      options.idempotencyPrefix ?? "hub:mark-status",
       remoteTaskId,
-      stringField(task.task.status) ?? status,
+      status,
+      hashText(JSON.stringify(payload)).slice(0, 16),
     ].join(":"),
   );
 
