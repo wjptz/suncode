@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
+- **Total Sessions**: 13
 - **Last Active**: 2026-07-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~419 | Active |
+| `journal-1.md` | ~453 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-07-02 | Hub knowledge search | `7efe392` | `main` |
 | 12 | 2026-07-02 | Hub skill package sync | `a5c4681` | `main` |
 | 11 | 2026-07-02 | Hub Review CLI workflow | `6798fcd` | `main` |
 | 10 | 2026-07-02 | 完成 Hub spec 同步流程 | `c2dc6ed`, `2106040` | `main` |

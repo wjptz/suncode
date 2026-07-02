@@ -417,3 +417,37 @@ Implemented Hub skill package push/pull commands, added API contract specs, test
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Hub knowledge search
+
+**Date**: 2026-07-02
+**Task**: Hub knowledge search
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Implemented the Hub knowledge search command, shared agent-hub client, tests, and Hub code-spec contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7efe392` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
