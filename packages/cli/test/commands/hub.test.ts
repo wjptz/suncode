@@ -14,6 +14,7 @@ import {
 import { hubInit } from "../../src/commands/hub/init.js";
 import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
 import { pullLatestReview } from "../../src/commands/hub/pull.js";
+import { hubSkillPull, hubSkillPush } from "../../src/commands/hub/skills.js";
 import { hubState } from "../../src/commands/hub/state.js";
 import {
   discardSpecDeletion,
@@ -1293,8 +1294,252 @@ describe("hub commands", () => {
     registerHubCommand(program);
 
     const hub = program.commands.find((command) => command.name() === "hub");
-    expect(hub?.commands.map((command) => command.name())).toContain(
-      "latest-review",
+    expect(hub?.commands.map((command) => command.name())).toEqual(
+      expect.arrayContaining(["latest-review", "skill-pull", "skill-push"]),
+    );
+  });
+
+  it("skill-push uploads every local .agents skill file through presign, PUT, and finalize", async () => {
+    const skillDir = path.join(tmpDir, ".agents", "skills", "code-review");
+    fs.mkdirSync(path.join(skillDir, "references"), { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# Code Review\n", "utf-8");
+    fs.writeFileSync(
+      path.join(skillDir, "references", "rules.md"),
+      "# Rules\n",
+      "utf-8",
+    );
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      const body =
+        typeof init?.body === "string"
+          ? init.body
+          : init?.body === undefined
+            ? undefined
+            : Buffer.from(init.body as ArrayBuffer).toString("utf-8");
+      calls.push({ url: String(url), method, headers, body });
+
+      if (method === "PUT") {
+        return new Response(null, { status: 200 });
+      }
+      if (String(url).endsWith("/skill-packages/presign-upload")) {
+        const payload = JSON.parse(body ?? "{}") as {
+          file_path: string;
+          content_type: string;
+        };
+        return jsonResponse({
+          presign: {
+            upload_url: `https://minio.example.test/upload/${payload.file_path}`,
+            method: "PUT",
+            object_key: `skills/project/proj_123/code-review/${payload.file_path}`,
+            headers: { "Content-Type": payload.content_type },
+          },
+        });
+      }
+      if (String(url).endsWith("/skill-packages/finalize-upload")) {
+        return jsonResponse({
+          skill_package: {
+            id: 7,
+            scope: "project",
+            project_key: "proj_123",
+            name: "code-review",
+            file_count: 2,
+            files: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${String(url)}`);
+    });
+
+    const result = await hubSkillPush({
+      cwd: tmpDir,
+      homeDir,
+      skillName: "code-review",
+      fetch,
+    });
+
+    expect(result).toEqual({
+      status: "submitted",
+      message: "skill package code-review uploaded (2 file(s)).",
+    });
+    expect(calls.map((call) => [call.method, call.url])).toEqual([
+      [
+        "POST",
+        "https://hub.example.test/api/agent-hub/skill-packages/presign-upload",
+      ],
+      ["PUT", "https://minio.example.test/upload/SKILL.md"],
+      [
+        "POST",
+        "https://hub.example.test/api/agent-hub/skill-packages/finalize-upload",
+      ],
+      [
+        "POST",
+        "https://hub.example.test/api/agent-hub/skill-packages/presign-upload",
+      ],
+      ["PUT", "https://minio.example.test/upload/references/rules.md"],
+      [
+        "POST",
+        "https://hub.example.test/api/agent-hub/skill-packages/finalize-upload",
+      ],
+    ]);
+    expect(calls[0]?.headers.authorization).toBe("Bearer login-token");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      scope: "project",
+      project_key: "proj_123",
+      skill_name: "code-review",
+      file_path: "SKILL.md",
+      size: Buffer.byteLength("# Code Review\n"),
+      content_type: "text/markdown",
+    });
+    expect(calls[1]?.headers["content-type"]).toBe("text/markdown");
+    expect(calls[1]?.body).toBe("# Code Review\n");
+    expect(JSON.parse(calls[2]?.body ?? "{}")).toEqual({
+      scope: "project",
+      project_key: "proj_123",
+      skill_name: "code-review",
+      file_path: "SKILL.md",
+      object_key: "skills/project/proj_123/code-review/SKILL.md",
+    });
+  });
+
+  it("skill-push requires a local SKILL.md at the skill package root", async () => {
+    fs.mkdirSync(path.join(tmpDir, ".agents", "skills", "broken-skill"), {
+      recursive: true,
+    });
+
+    await expect(
+      hubSkillPush({
+        cwd: tmpDir,
+        homeDir,
+        skillName: "broken-skill",
+        fetch: vi.fn(),
+      }),
+    ).rejects.toThrow("SKILL.md");
+  });
+
+  it("skill-pull downloads a Hub skill package into .agents/skills and overwrites same-name files", async () => {
+    const skillDir = path.join(tmpDir, ".agents", "skills", "code-review");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# Old\n", "utf-8");
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      calls.push({ url: String(url), method, headers });
+
+      if (
+        String(url) ===
+        "https://hub.example.test/api/agent-hub/projects/proj_123/skill-packages"
+      ) {
+        return jsonResponse({
+          skill_packages: [
+            {
+              id: 7,
+              scope: "project",
+              project_key: "proj_123",
+              name: "code-review",
+              file_count: 2,
+            },
+          ],
+        });
+      }
+      if (
+        String(url) ===
+        "https://hub.example.test/api/agent-hub/skill-packages/7"
+      ) {
+        return jsonResponse({
+          skill_package: {
+            id: 7,
+            scope: "project",
+            project_key: "proj_123",
+            name: "code-review",
+            file_count: 2,
+            files: [
+              { id: 71, relative_path: "SKILL.md", file_name: "SKILL.md" },
+              {
+                id: 72,
+                relative_path: "references/rules.md",
+                file_name: "rules.md",
+              },
+            ],
+          },
+        });
+      }
+      if (
+        String(url) ===
+        "https://hub.example.test/api/agent-hub/skill-package-files/71/content"
+      ) {
+        return textResponse("# New\n");
+      }
+      if (
+        String(url) ===
+        "https://hub.example.test/api/agent-hub/skill-package-files/72/content"
+      ) {
+        return textResponse("# Rules\n");
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${String(url)}`);
+    });
+
+    const result = await hubSkillPull({
+      cwd: tmpDir,
+      homeDir,
+      skillName: "code-review",
+      fetch,
+    });
+
+    expect(result).toEqual({
+      status: "downloaded",
+      message: "skill package code-review downloaded (2 file(s)).",
+    });
+    expect(fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf-8")).toBe(
+      "# New\n",
+    );
+    expect(
+      fs.readFileSync(path.join(skillDir, "references", "rules.md"), "utf-8"),
+    ).toBe("# Rules\n");
+    expect(calls.every((call) => call.headers.authorization === "Bearer login-token")).toBe(
+      true,
+    );
+  });
+
+  it("skill-pull rejects Hub file paths that would escape the local skill directory", async () => {
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/projects/proj_123/skill-packages")) {
+        return jsonResponse({
+          skill_packages: [
+            { id: 7, scope: "project", project_key: "proj_123", name: "bad" },
+          ],
+        });
+      }
+      if (String(url).endsWith("/skill-packages/7")) {
+        return jsonResponse({
+          skill_package: {
+            id: 7,
+            name: "bad",
+            files: [
+              {
+                id: 71,
+                relative_path: "../escape.md",
+                file_name: "escape.md",
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${String(url)}`);
+    });
+
+    await expect(
+      hubSkillPull({
+        cwd: tmpDir,
+        homeDir,
+        skillName: "bad",
+        fetch,
+      }),
+    ).rejects.toThrow("Invalid skill package file path");
+    expect(fs.existsSync(path.join(tmpDir, ".agents", "skills", "escape.md"))).toBe(
+      false,
     );
   });
 

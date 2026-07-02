@@ -13,6 +13,7 @@ import {
   syncRequirement,
 } from "./pull.js";
 import { hubReview } from "./review.js";
+import { hubSkillPull, hubSkillPush } from "./skills.js";
 import {
   discardSpecDeletion,
   keepSpecDeletion,
@@ -460,6 +461,32 @@ export function registerHubCommand(program: Command): void {
             taskJsonPath: opts.taskJson,
             task: opts.task ?? "current",
           }),
+        }),
+      );
+    });
+
+  hub
+    .command("skill-push")
+    .description("Upload a local .agents skill package to Suncode Hub")
+    .argument("<skill-name>", "skill package name under .agents/skills/")
+    .action(async (skillName: string) => {
+      await run(async () =>
+        hubSkillPush({
+          cwd: process.cwd(),
+          skillName,
+        }),
+      );
+    });
+
+  hub
+    .command("skill-pull")
+    .description("Download a Suncode Hub skill package into .agents/skills/")
+    .argument("<skill-name>", "skill package name under .agents/skills/")
+    .action(async (skillName: string) => {
+      await run(async () =>
+        hubSkillPull({
+          cwd: process.cwd(),
+          skillName,
         }),
       );
     });

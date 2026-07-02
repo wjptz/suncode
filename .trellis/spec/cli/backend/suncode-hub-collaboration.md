@@ -417,6 +417,173 @@ if (result.status !== "updated") {
 
 这让同步保持确定、可审计，并由 CLI 负责。AI 只调度命令并遵循结构化结果。
 
+## Scenario: Hub Skill Package Pull/Push
+
+### 1. Scope / Trigger
+
+- Trigger: CLI commands that upload local Suncode skill packages to Hub or
+  download Hub skill packages into the project.
+- Applies to `packages/cli/src/commands/hub/**` and Hub command tests.
+- Skill package sync is deterministic CLI behavior. It must not invoke AI, read
+  task review state, or modify Trellis/Suncode workflow artifacts.
+
+### 2. Signatures
+
+CLI commands:
+
+```text
+suncode hub skill-push <skill-name>
+suncode hub skill-pull <skill-name>
+```
+
+Skill package API base path:
+
+```text
+{apiBaseUrl}/api/agent-hub
+```
+
+Hub JSON APIs:
+
+```http
+POST /api/agent-hub/skill-packages/presign-upload
+POST /api/agent-hub/skill-packages/finalize-upload
+GET /api/agent-hub/projects/{project_key}/skill-packages
+GET /api/agent-hub/skill-packages/{id}
+GET /api/agent-hub/skill-package-files/{fileId}/content
+```
+
+Object storage upload:
+
+```http
+PUT <presign.upload_url>
+```
+
+### 3. Contracts
+
+Local package path:
+
+```text
+<cwd>/.agents/skills/<skill-name>/
+```
+
+Required root file:
+
+```text
+<cwd>/.agents/skills/<skill-name>/SKILL.md
+```
+
+Command defaults:
+
+| Field | Value |
+| --- | --- |
+| `scope` | `project` |
+| `project_key` | resolved project `hub.projectId` |
+| auth source | existing `suncode hub login` session |
+| content transfer | raw bytes / `Buffer` |
+
+`skill-push` request flow per file:
+
+1. `POST /skill-packages/presign-upload` with `skill_name`,
+   `project_key`, `scope`, `file_path`, `file_size`, and `content_type`.
+2. `PUT presign.upload_url` with raw file bytes and presign response headers.
+3. `POST /skill-packages/finalize-upload` with `skill_name`,
+   `project_key`, `scope`, `file_path`, `file_size`, `content_type`,
+   `object_key`, and optional checksum metadata.
+
+`skill-pull` flow:
+
+1. List packages for the resolved `project_key`.
+2. Select the package with `name === <skill-name>`, preferring
+   `scope === "project"` and matching `project_key` when the list has multiple
+   same-name rows.
+3. Fetch package detail and file metadata.
+4. Download every file content endpoint as bytes.
+5. Write each file under `.agents/skills/<skill-name>/`, overwriting same-name
+   files without deleting unrelated local files.
+
+Relative paths stored in Hub must use POSIX `/`. Pull must reject empty paths,
+absolute paths, and any path that escapes the local skill directory after
+normalization.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Hub disabled, missing config, missing login, or expired login | Same user-facing error behavior as other authenticated Hub commands |
+| `<skill-name>` is empty, `.`, `..`, or contains `/` or `\` | Reject before touching filesystem or Hub |
+| Local skill directory does not exist | `skill-push` throws a clear local package error |
+| Local root `SKILL.md` missing or not a file | `skill-push` throws a clear root manifest error |
+| Local collected file is empty or exceeds the per-file limit | Reject that package before upload |
+| Presign or finalize returns non-2xx | Throw `HubHttpError`; do not hide the Hub status |
+| Object storage `PUT` returns non-2xx | Throw an upload error without logging signed URL secrets |
+| Hub list has no matching package | `skill-pull` reports the package is missing |
+| Hub list has multiple indistinguishable same-name packages | `skill-pull` reports ambiguity instead of guessing |
+| Hub file path is empty, absolute, contains `..`, or resolves outside package dir | Reject before writing any pulled file |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `skill-push code-review` uploads `SKILL.md` and
+  `references/rules.md` in deterministic order, using Hub auth only for
+  `/api/agent-hub` requests and not for object storage `PUT`.
+- Good: `skill-pull code-review` overwrites existing
+  `.agents/skills/code-review/SKILL.md` and writes nested reference files while
+  preserving unrelated local files.
+- Base: A project with Hub enabled and a valid login can sync a project-scoped
+  skill package without any active task.
+- Bad: The implementation reuses the existing `/api/v1` Hub client for
+  `/api/agent-hub` endpoints.
+- Bad: Pull accepts `../escape.md` from Hub and writes outside
+  `.agents/skills/<skill-name>/`.
+- Bad: The CLI prints or persists `Authorization` headers or presigned upload
+  URLs.
+
+### 6. Tests Required
+
+- Command registration test proving `hub skill-push` and `hub skill-pull` are
+  registered under `suncode hub`.
+- Push tests:
+  - local `.agents/skills/<skill-name>/SKILL.md` is required
+  - request order is presign, object storage `PUT`, finalize per file
+  - presign/finalize payloads include `skill_name`, `project_key`, `scope`,
+    `file_path`, `file_size`, and `content_type`
+  - Hub requests include login auth; object storage `PUT` does not include Hub
+    Authorization unless the presign response explicitly asks for headers
+- Pull tests:
+  - list, detail, and content endpoints are called in order
+  - same-name local files are overwritten
+  - nested relative paths are written under the package directory
+  - path traversal from Hub metadata is rejected before any outside write
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const client = createHubApiClient(config);
+await client.requestJson(
+  "POST",
+  "/skill-packages/presign-upload",
+  payload,
+);
+```
+
+This accidentally routes the request through the existing `/api/v1` client,
+which does not match the skill package API base path.
+
+#### Correct
+
+```ts
+await requestAgentHubJson(
+  config,
+  "POST",
+  "/skill-packages/presign-upload",
+  payload,
+);
+```
+
+This keeps `/api/agent-hub` isolated from the task/spec Hub client and avoids
+changing existing Hub workflow behavior.
+
 ## Scenario: Structured Subtask Sync
 
 ### 1. Scope / Trigger
