@@ -6,7 +6,12 @@ import { downloadHubDocument } from "./documents.js";
 import { hubInit } from "./init.js";
 import { preflightStart, markStarted } from "./lifecycle.js";
 import { hubLogin, hubLogout } from "./login.js";
-import { pullRequirements, pullReview, syncRequirement } from "./pull.js";
+import {
+  pullLatestReview,
+  pullRequirements,
+  pullReview,
+  syncRequirement,
+} from "./pull.js";
 import { hubReview } from "./review.js";
 import {
   discardSpecDeletion,
@@ -438,6 +443,23 @@ export function registerHubCommand(program: Command): void {
             task: opts.task,
           }),
           cursor: opts.cursor,
+        }),
+      );
+    });
+
+  hub
+    .command("latest-review")
+    .description("Read the latest local Hub review result for a task")
+    .option("--task-json <path>", "path to task.json")
+    .option("--task <task>", "task directory/name fallback")
+    .action(async (opts: TaskOptions) => {
+      await runJson(async () =>
+        pullLatestReview({
+          taskJsonPath: resolveTaskJsonPath({
+            cwd: process.cwd(),
+            taskJsonPath: opts.taskJson,
+            task: opts.task ?? "current",
+          }),
         }),
       );
     });

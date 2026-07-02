@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
+import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,6 +13,7 @@ import {
 } from "../../src/commands/hub/config.js";
 import { hubInit } from "../../src/commands/hub/init.js";
 import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
+import { pullLatestReview } from "../../src/commands/hub/pull.js";
 import { hubState } from "../../src/commands/hub/state.js";
 import {
   discardSpecDeletion,
@@ -31,6 +33,7 @@ import {
   downloadHubDocument,
 } from "../../src/commands/hub/documents.js";
 import { hashText } from "../../src/commands/hub/hash.js";
+import { registerHubCommand } from "../../src/commands/hub/index.js";
 import {
   loadHubManifest,
   loadProjectSpecManifest,
@@ -1285,6 +1288,16 @@ describe("hub commands", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("registers the latest-review Hub command", () => {
+    const program = new Command();
+    registerHubCommand(program);
+
+    const hub = program.commands.find((command) => command.name() === "hub");
+    expect(hub?.commands.map((command) => command.name())).toContain(
+      "latest-review",
+    );
+  });
+
   it("create-task is idempotent and records remote binding locally", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const { calls, fetch } = createMockFetch();
@@ -1323,6 +1336,63 @@ describe("hub commands", () => {
     });
     expect(second.status).toBe("skipped");
     expect(calls).toHaveLength(0);
+  });
+
+  it("reads the latest local review result without Hub config, auth, or network", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.rmSync(path.join(tmpDir, ".suncode", "config.yaml"), { force: true });
+    writeJson(path.join(taskDir, "reviews", "round-001", "review.json"), {
+      round: 1,
+      status: "changes_requested",
+      summary: "旧 review。",
+    });
+    fs.writeFileSync(
+      path.join(taskDir, "reviews", "round-001", "result.md"),
+      "# Old Review\n",
+      "utf-8",
+    );
+    writeJson(path.join(taskDir, "reviews", "round-002", "review.json"), {
+      round: 2,
+      status: "approved",
+      summary: "最新 review 已通过。",
+      mustFix: [],
+      advisory: [{ title: "Optional note" }],
+    });
+    fs.writeFileSync(
+      path.join(taskDir, "reviews", "round-002", "result.md"),
+      "# Latest Review\n\n最新 review 已通过。\n",
+      "utf-8",
+    );
+    const fetch = vi.fn(async () => {
+      throw new Error("network should not be used for local review results");
+    });
+
+    const result = await pullLatestReview({
+      cwd: tmpDir,
+      homeDir: path.join(tmpDir, "missing-home"),
+      taskJsonPath,
+      env: {},
+      fetch,
+    });
+
+    expect(result).toMatchObject({
+      status: "found",
+      round: 2,
+      roundName: "round-002",
+      files: {
+        reviewJson: "reviews/round-002/review.json",
+        resultMarkdown: "reviews/round-002/result.md",
+      },
+      review: {
+        round: 2,
+        status: "approved",
+        summary: "最新 review 已通过。",
+      },
+      resultMarkdown: "# Latest Review\n\n最新 review 已通过。\n",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("旧 review");
   });
 
   it("includes parent remote task in child task idempotency keys", async () => {

@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+
+import { toPosix } from "../../utils/posix.js";
 import { createHubApiClient } from "./client.js";
 import { resolveHubConfig } from "./config.js";
 import { loadHubManifest } from "./manifest.js";
@@ -11,6 +15,23 @@ export interface PullOptions {
   fetch?: FetchLike;
   taskJsonPath?: string;
   cursor?: string;
+}
+
+export interface LatestReviewResult {
+  status: "found" | "skipped";
+  message?: string;
+  task: {
+    localTaskId: string;
+    localTaskPath: string;
+  };
+  round?: number;
+  roundName?: string;
+  files?: {
+    reviewJson: string;
+    resultMarkdown?: string;
+  };
+  review?: unknown;
+  resultMarkdown?: string;
 }
 
 export async function pullRequirements(
@@ -45,6 +66,47 @@ export async function pullReview(options: PullOptions): Promise<unknown> {
     "GET",
     `/projects/${encodeURIComponent(config.projectId)}/tasks/${encodeURIComponent(remoteTaskId)}/reviews${query.size ? `?${query.toString()}` : ""}`,
   );
+}
+
+export async function pullLatestReview(
+  options: PullOptions,
+): Promise<LatestReviewResult> {
+  const cwd = options.cwd ?? process.cwd();
+  if (!options.taskJsonPath) {
+    throw new Error("taskJsonPath is required for this Hub command.");
+  }
+  const task = readHubTask(options.taskJsonPath, cwd);
+  const latest = latestLocalReviewRound(task.taskDir);
+  const taskSummary = {
+    localTaskId: task.localTaskId,
+    localTaskPath: task.localTaskPath,
+  };
+  if (!latest) {
+    return {
+      status: "skipped",
+      message: "No local review result found.",
+      task: taskSummary,
+    } satisfies LatestReviewResult;
+  }
+
+  const reviewJsonPath = path.join(latest.roundDir, "review.json");
+  const resultMarkdownPath = path.join(latest.roundDir, "result.md");
+  return {
+    status: "found",
+    task: taskSummary,
+    round: latest.round,
+    roundName: latest.roundName,
+    files: {
+      reviewJson: relativeToTask(task.taskDir, reviewJsonPath),
+      ...(fs.existsSync(resultMarkdownPath)
+        ? { resultMarkdown: relativeToTask(task.taskDir, resultMarkdownPath) }
+        : {}),
+    },
+    review: readReviewJson(reviewJsonPath),
+    ...(fs.existsSync(resultMarkdownPath)
+      ? { resultMarkdown: fs.readFileSync(resultMarkdownPath, "utf-8") }
+      : {}),
+  } satisfies LatestReviewResult;
 }
 
 export async function syncRequirement(options: PullOptions): Promise<unknown> {
@@ -104,4 +166,44 @@ function resolveTaskRequest(options: PullOptions): {
     remoteTaskId,
     client: createHubApiClient(config, options.fetch),
   };
+}
+
+function latestLocalReviewRound(
+  taskDir: string,
+): { round: number; roundName: string; roundDir: string } | undefined {
+  const reviewsDir = path.join(taskDir, "reviews");
+  if (!fs.existsSync(reviewsDir)) return undefined;
+
+  const rounds = fs
+    .readdirSync(reviewsDir, { withFileTypes: true })
+    .flatMap((entry) => {
+      if (!entry.isDirectory()) return [];
+      const match = /^round-(\d+)$/.exec(entry.name);
+      if (!match) return [];
+      const roundDir = path.join(reviewsDir, entry.name);
+      if (!fs.existsSync(path.join(roundDir, "review.json"))) return [];
+      return [
+        {
+          round: Number(match[1]),
+          roundName: entry.name,
+          roundDir,
+        },
+      ];
+    })
+    .sort((a, b) => b.round - a.round);
+
+  return rounds[0];
+}
+
+function readReviewJson(filePath: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to parse latest review JSON: ${message}`);
+  }
+}
+
+function relativeToTask(taskDir: string, filePath: string): string {
+  return toPosix(path.relative(taskDir, filePath));
 }
