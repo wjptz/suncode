@@ -1549,7 +1549,7 @@ describe("hub commands", () => {
     );
   });
 
-  it("knowledge searches the current Hub project knowledge base with default top_k", async () => {
+  it("knowledge searches the current Hub project knowledge base with compact AI-facing output", async () => {
     const calls: FetchCall[] = [];
     const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
       const method = init?.method ?? "GET";
@@ -1584,21 +1584,12 @@ describe("hub commands", () => {
     });
 
     expect(result).toEqual({
-      projectKey: "proj_123",
       query: "登录接口字段",
-      topK: 5,
-      count: 1,
-      artifacts: [
+      results: [
         {
-          artifact: {
-            id: 12,
-            title: "登录接口",
-            side: "backend",
-            module: "auth",
-            endpoint_path: "POST /api/auth/login",
-            tags: ["登录", "鉴权"],
-          },
-          score: 0.9125,
+          title: "登录接口",
+          module: "auth",
+          endpointPath: "POST /api/auth/login",
           snippet: "请求体包含 email 和 password。",
         },
       ],
@@ -1633,7 +1624,10 @@ describe("hub commands", () => {
       fetch,
     });
 
-    expect(result.topK).toBe(12);
+    expect(result).toEqual({
+      query: "页面契约",
+      results: [],
+    });
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
       query: "页面契约",
       top_k: 12,

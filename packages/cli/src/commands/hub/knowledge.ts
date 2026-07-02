@@ -27,11 +27,15 @@ interface VectorSearchResponse {
 }
 
 export interface HubKnowledgeSearchResult {
-  projectKey: string;
   query: string;
-  topK: number;
-  count: number;
-  artifacts: HubKnowledgeArtifact[];
+  results: HubKnowledgeSearchResultItem[];
+}
+
+export interface HubKnowledgeSearchResultItem {
+  title?: string;
+  module?: string;
+  endpointPath?: string;
+  snippet?: string;
 }
 
 export async function hubKnowledgeSearch(
@@ -60,12 +64,43 @@ export async function hubKnowledgeSearch(
   );
 
   return {
-    projectKey: config.projectId,
     query,
-    topK,
-    count: response.count ?? response.artifacts?.length ?? 0,
-    artifacts: response.artifacts ?? [],
+    results: (response.artifacts ?? [])
+      .map(compactKnowledgeArtifact)
+      .filter(hasKnowledgeResultContent),
   };
+}
+
+function compactKnowledgeArtifact(
+  result: HubKnowledgeArtifact,
+): HubKnowledgeSearchResultItem {
+  const artifact = result.artifact ?? {};
+  const item: HubKnowledgeSearchResultItem = {};
+  const title = stringField(artifact.title);
+  const moduleName = stringField(artifact.module);
+  const endpointPath = stringField(artifact.endpoint_path);
+  const snippet = stringField(result.snippet);
+
+  if (title) item.title = title;
+  if (moduleName) item.module = moduleName;
+  if (endpointPath) item.endpointPath = endpointPath;
+  if (snippet) item.snippet = snippet;
+
+  return item;
+}
+
+function hasKnowledgeResultContent(
+  result: HubKnowledgeSearchResultItem,
+): boolean {
+  return Boolean(
+    result.title ?? result.module ?? result.endpointPath ?? result.snippet,
+  );
+}
+
+function stringField(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function normalizeKnowledgeQuery(query: string | readonly string[]): string {

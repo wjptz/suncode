@@ -641,26 +641,21 @@ Command output shape:
 
 ```json
 {
-  "projectKey": "proj_123",
   "query": "登录接口字段",
-  "topK": 5,
-  "count": 1,
-  "artifacts": [
+  "results": [
     {
-      "artifact": {
-        "id": 12,
-        "title": "登录接口",
-        "side": "backend",
-        "module": "auth",
-        "endpoint_path": "POST /api/auth/login",
-        "tags": ["登录", "鉴权"]
-      },
-      "score": 0.9125,
+      "title": "登录接口",
+      "module": "auth",
+      "endpointPath": "POST /api/auth/login",
       "snippet": "请求体包含 email 和 password。"
     }
   ]
 }
 ```
+
+The CLI output is intentionally compact for AI consumption. It must not expose
+raw Hub `artifact` objects, score values, database ids, tag lists, `topK`, or
+`projectKey` unless a later command explicitly needs those fields.
 
 `/api/agent-hub` callers must use the shared agent-hub helper, not
 `createHubApiClient()`, because the latter is scoped to `/api/v1` task/spec
@@ -682,8 +677,8 @@ workflows.
 ### 5. Good/Base/Bad Cases
 
 - Good: `suncode hub knowledge 登录接口字段` sends a single vector-search request
-  with `{ query: "登录接口字段", top_k: 5 }` and prints JSON containing
-  `projectKey`, `query`, `topK`, `count`, and `artifacts`.
+  with `{ query: "登录接口字段", top_k: 5 }` and prints compact JSON containing
+  only the original `query` and AI-facing `results`.
 - Good: `suncode hub knowledge 页面契约 --top-k 12` sends `top_k: 12`.
 - Base: Hub is disabled locally; command returns disabled and does not perform
   network I/O.
@@ -698,6 +693,8 @@ workflows.
 - Command registration test proving `hub knowledge` is registered.
 - Function-level command tests:
   - default `top_k = 5` request URL, method, body, and Authorization header
+  - compact output removes raw Hub metadata while preserving title, module,
+    endpoint path, and snippet
   - custom `topK` request body
   - empty query rejects before `fetch`
   - invalid `topK` rejects before `fetch`
