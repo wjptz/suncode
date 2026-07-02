@@ -1549,7 +1549,7 @@ describe("hub commands", () => {
     );
   });
 
-  it("knowledge searches the current Hub project knowledge base with compact AI-facing output", async () => {
+  it("knowledge searches the current Hub project knowledge base with compact AI-facing output and default top_k 3", async () => {
     const calls: FetchCall[] = [];
     const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
       const method = init?.method ?? "GET";
@@ -1602,7 +1602,7 @@ describe("hub commands", () => {
     expect(calls[0]?.headers.authorization).toBe("Bearer login-token");
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
       query: "登录接口字段",
-      top_k: 5,
+      top_k: 3,
     });
   });
 

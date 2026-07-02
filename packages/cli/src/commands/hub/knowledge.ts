@@ -2,7 +2,7 @@ import { requestAgentHubJson } from "./agent-hub-client.js";
 import { resolveHubConfig } from "./config.js";
 import type { FetchLike, HubCommandResult } from "./types.js";
 
-const DEFAULT_TOP_K = 5;
+const DEFAULT_TOP_K = 3;
 const MIN_TOP_K = 1;
 const MAX_TOP_K = 20;
 

@@ -621,7 +621,7 @@ Request body:
 ```json
 {
   "query": "登录接口字段",
-  "top_k": 5
+  "top_k": 3
 }
 ```
 
@@ -633,7 +633,7 @@ Command defaults and validation:
 | --- | --- |
 | `project_key` | resolved project `hub.projectId` |
 | `query` | `<query...>` joined with spaces and trimmed; must be non-empty |
-| `top_k` | default `5`; valid integer range `1..20` |
+| `top_k` | default `3`; valid integer range `1..20` |
 | auth source | existing `suncode hub login` session |
 | output | JSON by default for AI/script consumption |
 
@@ -668,7 +668,7 @@ workflows.
 | Hub disabled | Return a disabled result and do not contact Hub |
 | Missing config, missing login, or expired login | Same user-facing error behavior as other authenticated Hub commands |
 | `<query...>` is empty after trimming | Throw `Knowledge query is required.` before network |
-| `--top-k` is missing | Use `5` |
+| `--top-k` is missing | Use `3` |
 | `--top-k` is non-integer or outside `1..20` | Throw `Knowledge top_k must be an integer between 1 and 20.` before network |
 | Hub returns `{ "error": "..." }` | Surface that message through `HubHttpError` |
 | Hub returns structured `{ error: { code, message, details } }` | Surface message/code/details through `HubHttpError` |
@@ -677,7 +677,7 @@ workflows.
 ### 5. Good/Base/Bad Cases
 
 - Good: `suncode hub knowledge 登录接口字段` sends a single vector-search request
-  with `{ query: "登录接口字段", top_k: 5 }` and prints compact JSON containing
+  with `{ query: "登录接口字段", top_k: 3 }` and prints compact JSON containing
   only the original `query` and AI-facing `results`.
 - Good: `suncode hub knowledge 页面契约 --top-k 12` sends `top_k: 12`.
 - Base: Hub is disabled locally; command returns disabled and does not perform
@@ -692,7 +692,7 @@ workflows.
 
 - Command registration test proving `hub knowledge` is registered.
 - Function-level command tests:
-  - default `top_k = 5` request URL, method, body, and Authorization header
+  - default `top_k = 3` request URL, method, body, and Authorization header
   - compact output removes raw Hub metadata while preserving title, module,
     endpoint path, and snippet
   - custom `topK` request body
