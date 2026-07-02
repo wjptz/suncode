@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { toPosix } from "../../utils/posix.js";
-import { HubHttpError } from "./client.js";
+import {
+  requestAgentHubJson,
+  requestAgentHubRaw,
+} from "./agent-hub-client.js";
 import { resolveHubConfig } from "./config.js";
 import type { EnabledHubConfig, FetchLike, HubCommandResult } from "./types.js";
 
-const AGENT_HUB_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_SKILL_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 export interface HubSkillPackageOptions {
@@ -103,6 +105,7 @@ export async function hubSkillPush(
         content_type: file.contentType,
       },
       fetchImpl,
+      "skill package",
     );
     await uploadPresignedFile(file, presign, fetchImpl);
     await requestAgentHubJson<FinalizeUploadResponse>(
@@ -117,6 +120,7 @@ export async function hubSkillPush(
         object_key: presign.presign.object_key,
       },
       fetchImpl,
+      "skill package",
     );
   }
 
@@ -148,6 +152,7 @@ export async function hubSkillPull(
     `/projects/${encodeURIComponent(config.projectId)}/skill-packages`,
     undefined,
     fetchImpl,
+    "skill package",
   );
   const selected = selectSkillPackage(
     list.skill_packages ?? [],
@@ -160,6 +165,7 @@ export async function hubSkillPull(
     `/skill-packages/${encodeURIComponent(packageId(selected))}`,
     undefined,
     fetchImpl,
+    "skill package",
   );
   const files = detail.skill_package?.files ?? [];
   const skillDir = resolveLocalSkillDir(cwd, skillName);
@@ -369,94 +375,7 @@ async function downloadSkillFile(
     `/skill-package-files/${encodeURIComponent(fileId)}/content`,
     undefined,
     fetchImpl,
+    "skill package",
   );
   return Buffer.from(await response.arrayBuffer());
-}
-
-async function requestAgentHubJson<T>(
-  config: EnabledHubConfig,
-  method: string,
-  apiPath: string,
-  body: unknown,
-  fetchImpl: FetchLike,
-): Promise<T> {
-  const response = await requestAgentHubRaw(config, method, apiPath, body, fetchImpl);
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    return undefined as T;
-  }
-  return (await response.json()) as T;
-}
-
-async function requestAgentHubRaw(
-  config: EnabledHubConfig,
-  method: string,
-  apiPath: string,
-  body: unknown,
-  fetchImpl: FetchLike,
-): Promise<Response> {
-  const url = `${config.apiBaseUrl}/api/agent-hub${apiPath}`;
-  const headers: Record<string, string> = { accept: "application/json" };
-  if (body !== undefined) headers["content-type"] = "application/json";
-  if (config.token) headers.authorization = `Bearer ${config.token}`;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    AGENT_HUB_REQUEST_TIMEOUT_MS,
-  );
-  try {
-    const response = await fetchImpl(url, {
-      method,
-      headers,
-      signal: controller.signal,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-    if (!response.ok) {
-      throw await parseAgentHubError(response);
-    }
-    return response;
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new HubHttpError(
-        `Hub skill package API request timed out after ${AGENT_HUB_REQUEST_TIMEOUT_MS}ms`,
-        408,
-        "REQUEST_TIMEOUT",
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function isAbortError(error: unknown): boolean {
-  return (
-    error instanceof DOMException && error.name === "AbortError"
-  ) || (
-    error instanceof Error && error.name === "AbortError"
-  );
-}
-
-async function parseAgentHubError(response: Response): Promise<HubHttpError> {
-  let message = `Hub skill package API request failed with HTTP ${response.status}`;
-  let code: string | undefined;
-  let details: unknown;
-
-  try {
-    const payload = (await response.json()) as {
-      error?: { code?: string; message?: string; details?: unknown };
-    };
-    if (payload.error?.message) message = payload.error.message;
-    if (payload.error?.code) code = payload.error.code;
-    details = payload.error?.details;
-  } catch {
-    const text = await response.text().catch(() => "");
-    if (text) message = text;
-  }
-
-  return new HubHttpError(message, response.status, code, details);
 }

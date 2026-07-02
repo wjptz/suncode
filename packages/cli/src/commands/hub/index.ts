@@ -4,6 +4,7 @@ import type { Command } from "commander";
 import { hubCreateTask } from "./create-task.js";
 import { downloadHubDocument } from "./documents.js";
 import { hubInit } from "./init.js";
+import { hubKnowledgeSearch } from "./knowledge.js";
 import { preflightStart, markStarted } from "./lifecycle.js";
 import { hubLogin, hubLogout } from "./login.js";
 import {
@@ -78,6 +79,10 @@ interface DownloadDocumentOptions extends TaskOptions {
 
 interface JsonCliOptions {
   json?: boolean;
+}
+
+interface KnowledgeCliOptions {
+  topK?: string;
 }
 
 interface KeepSpecDeletionCliOptions {
@@ -461,6 +466,21 @@ export function registerHubCommand(program: Command): void {
             taskJsonPath: opts.taskJson,
             task: opts.task ?? "current",
           }),
+        }),
+      );
+    });
+
+  hub
+    .command("knowledge")
+    .description("Search the current project's Suncode Hub knowledge base")
+    .argument("<query...>", "knowledge search query")
+    .option("--top-k <n>", "number of knowledge artifacts to return (1-20)")
+    .action(async (query: string[], opts: KnowledgeCliOptions) => {
+      await runJson(async () =>
+        hubKnowledgeSearch({
+          cwd: process.cwd(),
+          query,
+          topK: opts.topK,
         }),
       );
     });

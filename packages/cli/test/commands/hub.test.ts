@@ -12,6 +12,7 @@ import {
   resolveHubConfig,
 } from "../../src/commands/hub/config.js";
 import { hubInit } from "../../src/commands/hub/init.js";
+import { hubKnowledgeSearch } from "../../src/commands/hub/knowledge.js";
 import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
 import { pullLatestReview } from "../../src/commands/hub/pull.js";
 import { hubSkillPull, hubSkillPush } from "../../src/commands/hub/skills.js";
@@ -1295,7 +1296,12 @@ describe("hub commands", () => {
 
     const hub = program.commands.find((command) => command.name() === "hub");
     expect(hub?.commands.map((command) => command.name())).toEqual(
-      expect.arrayContaining(["latest-review", "skill-pull", "skill-push"]),
+      expect.arrayContaining([
+        "knowledge",
+        "latest-review",
+        "skill-pull",
+        "skill-push",
+      ]),
     );
   });
 
@@ -1541,6 +1547,135 @@ describe("hub commands", () => {
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills", "escape.md"))).toBe(
       false,
     );
+  });
+
+  it("knowledge searches the current Hub project knowledge base with default top_k", async () => {
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      const body = typeof init?.body === "string" ? init.body : undefined;
+      calls.push({ url: String(url), method, headers, body });
+
+      return jsonResponse({
+        artifacts: [
+          {
+            artifact: {
+              id: 12,
+              title: "登录接口",
+              side: "backend",
+              module: "auth",
+              endpoint_path: "POST /api/auth/login",
+              tags: ["登录", "鉴权"],
+            },
+            score: 0.9125,
+            snippet: "请求体包含 email 和 password。",
+          },
+        ],
+        count: 1,
+      });
+    });
+
+    const result = await hubKnowledgeSearch({
+      cwd: tmpDir,
+      homeDir,
+      query: "登录接口字段",
+      fetch,
+    });
+
+    expect(result).toEqual({
+      projectKey: "proj_123",
+      query: "登录接口字段",
+      topK: 5,
+      count: 1,
+      artifacts: [
+        {
+          artifact: {
+            id: 12,
+            title: "登录接口",
+            side: "backend",
+            module: "auth",
+            endpoint_path: "POST /api/auth/login",
+            tags: ["登录", "鉴权"],
+          },
+          score: 0.9125,
+          snippet: "请求体包含 email 和 password。",
+        },
+      ],
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      method: "POST",
+      url: "https://hub.example.test/api/agent-hub/projects/proj_123/knowledge/vector-search",
+    });
+    expect(calls[0]?.headers.authorization).toBe("Bearer login-token");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      query: "登录接口字段",
+      top_k: 5,
+    });
+  });
+
+  it("knowledge accepts a custom top_k", async () => {
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      const body = typeof init?.body === "string" ? init.body : undefined;
+      calls.push({ url: String(url), method, headers, body });
+      return jsonResponse({ artifacts: [], count: 0 });
+    });
+
+    const result = await hubKnowledgeSearch({
+      cwd: tmpDir,
+      homeDir,
+      query: "页面契约",
+      topK: 12,
+      fetch,
+    });
+
+    expect(result.topK).toBe(12);
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      query: "页面契约",
+      top_k: 12,
+    });
+  });
+
+  it("knowledge rejects empty query and invalid top_k before calling Hub", async () => {
+    const fetch = vi.fn();
+
+    await expect(
+      hubKnowledgeSearch({
+        cwd: tmpDir,
+        homeDir,
+        query: "   ",
+        fetch,
+      }),
+    ).rejects.toThrow("Knowledge query is required.");
+    await expect(
+      hubKnowledgeSearch({
+        cwd: tmpDir,
+        homeDir,
+        query: "接口契约",
+        topK: 21,
+        fetch,
+      }),
+    ).rejects.toThrow("Knowledge top_k must be an integer between 1 and 20.");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("knowledge returns disabled without calling Hub", async () => {
+    writeProjectConfig(tmpDir, ["hub:", "  enabled: false", ""].join("\n"));
+    const fetch = vi.fn();
+
+    const result = await hubKnowledgeSearch({
+      cwd: tmpDir,
+      homeDir,
+      query: "接口契约",
+      fetch,
+    });
+
+    expect(result.status).toBe("disabled");
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("create-task is idempotent and records remote binding locally", async () => {

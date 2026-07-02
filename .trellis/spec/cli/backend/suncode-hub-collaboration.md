@@ -584,6 +584,159 @@ await requestAgentHubJson(
 This keeps `/api/agent-hub` isolated from the task/spec Hub client and avoids
 changing existing Hub workflow behavior.
 
+## Scenario: Hub Knowledge Search
+
+### 1. Scope / Trigger
+
+- Trigger: CLI commands that search project knowledge in Suncode Hub so AI or
+  scripts can resolve unclear vocabulary, API contracts, or page contracts.
+- Applies to `packages/cli/src/commands/hub/**` and Hub command tests.
+- Knowledge search is deterministic CLI behavior. It must not invoke AI, mutate
+  task state, rebuild indexes, or cache returned knowledge as runtime truth.
+
+### 2. Signatures
+
+CLI command:
+
+```text
+suncode hub knowledge <query...> [--top-k <n>]
+```
+
+Knowledge API base path:
+
+```text
+{apiBaseUrl}/api/agent-hub
+```
+
+Hub API:
+
+```http
+POST /api/agent-hub/projects/{project_key}/knowledge/vector-search
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "query": "登录接口字段",
+  "top_k": 5
+}
+```
+
+### 3. Contracts
+
+Command defaults and validation:
+
+| Field | Contract |
+| --- | --- |
+| `project_key` | resolved project `hub.projectId` |
+| `query` | `<query...>` joined with spaces and trimmed; must be non-empty |
+| `top_k` | default `5`; valid integer range `1..20` |
+| auth source | existing `suncode hub login` session |
+| output | JSON by default for AI/script consumption |
+
+Command output shape:
+
+```json
+{
+  "projectKey": "proj_123",
+  "query": "登录接口字段",
+  "topK": 5,
+  "count": 1,
+  "artifacts": [
+    {
+      "artifact": {
+        "id": 12,
+        "title": "登录接口",
+        "side": "backend",
+        "module": "auth",
+        "endpoint_path": "POST /api/auth/login",
+        "tags": ["登录", "鉴权"]
+      },
+      "score": 0.9125,
+      "snippet": "请求体包含 email 和 password。"
+    }
+  ]
+}
+```
+
+`/api/agent-hub` callers must use the shared agent-hub helper, not
+`createHubApiClient()`, because the latter is scoped to `/api/v1` task/spec
+workflows.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Hub disabled | Return a disabled result and do not contact Hub |
+| Missing config, missing login, or expired login | Same user-facing error behavior as other authenticated Hub commands |
+| `<query...>` is empty after trimming | Throw `Knowledge query is required.` before network |
+| `--top-k` is missing | Use `5` |
+| `--top-k` is non-integer or outside `1..20` | Throw `Knowledge top_k must be an integer between 1 and 20.` before network |
+| Hub returns `{ "error": "..." }` | Surface that message through `HubHttpError` |
+| Hub returns structured `{ error: { code, message, details } }` | Surface message/code/details through `HubHttpError` |
+| Request times out | Throw an agent-hub timeout error for the `knowledge` service name |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `suncode hub knowledge 登录接口字段` sends a single vector-search request
+  with `{ query: "登录接口字段", top_k: 5 }` and prints JSON containing
+  `projectKey`, `query`, `topK`, `count`, and `artifacts`.
+- Good: `suncode hub knowledge 页面契约 --top-k 12` sends `top_k: 12`.
+- Base: Hub is disabled locally; command returns disabled and does not perform
+  network I/O.
+- Bad: The command silently calls `/knowledge/qa/index` to rebuild an index
+  before searching.
+- Bad: The command rewrites or stores returned snippets into local spec/task
+  files.
+- Bad: The command uses `SUNCODE_HUB_TOKEN` or logs the login token.
+
+### 6. Tests Required
+
+- Command registration test proving `hub knowledge` is registered.
+- Function-level command tests:
+  - default `top_k = 5` request URL, method, body, and Authorization header
+  - custom `topK` request body
+  - empty query rejects before `fetch`
+  - invalid `topK` rejects before `fetch`
+  - Hub disabled returns disabled before `fetch`
+- Existing skill package tests must still pass after extracting the shared
+  `/api/agent-hub` helper.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const client = createHubApiClient(config);
+await client.requestJson(
+  "POST",
+  `/projects/${projectId}/knowledge/vector-search`,
+  { query, top_k: topK },
+);
+```
+
+This sends a knowledge endpoint through the `/api/v1` client and risks changing
+task/spec Hub workflows to support an unrelated API family.
+
+#### Correct
+
+```ts
+await requestAgentHubJson(
+  config,
+  "POST",
+  `/projects/${projectKey}/knowledge/vector-search`,
+  { query, top_k: topK },
+  fetchImpl,
+  "knowledge",
+);
+```
+
+This keeps `/api/agent-hub` routing explicit and gives knowledge-specific
+timeout/error messages without duplicating the agent-hub protocol code.
+
 ## Scenario: Structured Subtask Sync
 
 ### 1. Scope / Trigger
