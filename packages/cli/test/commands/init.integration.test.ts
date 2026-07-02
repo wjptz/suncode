@@ -156,6 +156,46 @@ describe("init() integration", () => {
     expect(logOutput).not.toContain("Wrote CLAUDE.md, AI ignored it");
   });
 
+  it("#1c default spec templates use Chinese and include Git guidelines", async () => {
+    await init({ yes: true, user: "dev" });
+
+    const backendIndex = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "backend", "index.md"),
+      "utf-8",
+    );
+    const frontendIndex = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "frontend", "index.md"),
+      "utf-8",
+    );
+    expect(backendIndex).toContain("默认使用简体中文书写");
+    expect(frontendIndex).toContain("默认使用简体中文书写");
+    expect(backendIndex).not.toContain("written in **English**");
+    expect(frontendIndex).not.toContain("written in **English**");
+
+    const bootstrapPrd = fs.readFileSync(
+      path.join(tmpDir, PATHS.TASKS, "00-bootstrap-guidelines", "prd.md"),
+      "utf-8",
+    );
+    expect(bootstrapPrd).toContain("默认使用简体中文书写");
+
+    const guidesIndex = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "guides", "index.md"),
+      "utf-8",
+    );
+    expect(guidesIndex).toContain("[Git 规范](./git-guidelines.md)");
+
+    const gitGuidelines = fs.readFileSync(
+      path.join(tmpDir, PATHS.SPEC, "guides", "git-guidelines.md"),
+      "utf-8",
+    );
+    expect(gitGuidelines).toContain("# Git 规范");
+    expect(gitGuidelines).toContain("feat:");
+    expect(gitGuidelines).toContain("fix:");
+    expect(gitGuidelines).toContain(".suncode/.runtime/");
+    expect(gitGuidelines).toContain(".suncode/.template-hashes.json");
+    expect(gitGuidelines).toContain("git add -f .suncode/");
+  });
+
   it("#2 single platform creates only that platform directory", async () => {
     await init({ yes: true, claude: true });
 

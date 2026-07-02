@@ -23,6 +23,7 @@ These guides help you **ask the right questions before coding**.
 |-------|---------|-------------|
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+| [Git 规范](./git-guidelines.md) | 统一提交信息、提交范围和 Suncode 运行文件边界 | Before committing or staging Suncode files |
 
 ---
 
@@ -64,6 +65,15 @@ These guides help you **ask the right questions before coding**.
 3. **Variable misreading**: Not tracing a variable to its actual definition (e.g., Map keyed by path vs name)
 
 **Verification rule**: Every CRITICAL/WARNING finding must be verified against the actual code before prioritizing. Budget ~35% false-positive rate for AI reviews.
+
+### When Preparing Git Commits
+
+- [ ] You are choosing a commit message
+- [ ] You are deciding which files to stage
+- [ ] `.suncode/` files appear in `git status`
+- [ ] An automated Suncode script reports a git staging warning
+
+→ Read [Git 规范](./git-guidelines.md)
 
 ---
 

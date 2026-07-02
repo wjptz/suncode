@@ -409,6 +409,10 @@ coding conventions. Every future AI session — this project's
 listed in per-task jsonl manifests. Empty spec = sub-agents write generic
 code. Real spec = sub-agents match the team's actual patterns.
 
+**Spec writing language**: 默认使用简体中文书写 \`.suncode/spec/**\`。
+命令名、字段名、API 路径、错误原文和代码标识保留英文；只有既有
+项目规范明确要求英文时才改用英文。
+
 Don't dump instructions. Open with a short greeting, figure out if the repo
 has any existing convention docs (CLAUDE.md, .cursorrules, etc.), and drive
 the rest conversationally.

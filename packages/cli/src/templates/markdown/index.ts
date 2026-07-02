@@ -95,3 +95,6 @@ export const guidesCrossLayerThinkingGuideContent: string = readLocalTemplate(
 export const guidesCodeReuseThinkingGuideContent: string = readLocalTemplate(
   "spec/guides/code-reuse-thinking-guide.md.txt",
 );
+export const guidesGitGuidelinesContent: string = readLocalTemplate(
+  "spec/guides/git-guidelines.md.txt",
+);

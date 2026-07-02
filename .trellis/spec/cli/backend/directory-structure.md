@@ -209,6 +209,7 @@ If you open-and-edit the wrong one, nothing fails at build / test / lint time �
 1. Write spec content to `.trellis/spec/<pkg>/<layer>/<file>.md` — this is the dogfood location.
 2. Template stubs for users live in `packages/cli/src/templates/markdown/spec/<layer>/<file>.md.txt` — write the user-facing placeholder, NOT the real content.
 3. If the new file is not imported by `packages/cli/src/templates/markdown/index.ts`, it shouldn't exist in that directory. `ls packages/cli/src/templates/markdown/spec/**/*.md` must return empty.
+4. If the new template should appear after `suncode init`, also add it to the matching writer in `packages/cli/src/configurators/workflow.ts` (`guidesDocs`, `writeBackendDocs`, or `writeFrontendDocs`) and cover the generated path in an init integration test.
 
 **Audit command**:
 ```bash

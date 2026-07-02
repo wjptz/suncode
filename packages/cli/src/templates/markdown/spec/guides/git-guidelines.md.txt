@@ -1,0 +1,87 @@
+# Git 规范
+
+> 用于统一提交信息、提交范围和 Suncode 运行文件的 Git 边界。
+
+---
+
+## 提交前检查
+
+提交前先完成这些动作：
+
+1. 运行 `git status --short`，确认只提交当前任务相关文件。
+2. 查看 `git diff` / `git diff --staged`，确认没有混入无关改动、调试输出、临时文件或凭据。
+3. 只暂存明确需要的路径；不要用 `git add .` 替代理解变更范围。
+4. 运行本次改动对应的最小有效验证，例如 lint、typecheck、定向测试或构建。
+5. 在提交说明或交付说明中写清楚未执行的验证及原因。
+
+---
+
+## 提交信息
+
+推荐格式：
+
+```text
+<type>: <summary>
+```
+
+常用 `type`：
+
+| Type | 用途 |
+| --- | --- |
+| `feat:` | 新功能或新能力 |
+| `fix:` | Bug 修复 |
+| `docs:` | 文档或注释调整 |
+| `test:` | 测试新增或测试修复 |
+| `refactor:` | 不改变行为的结构调整 |
+| `chore:` | 构建、脚本、配置、依赖等维护 |
+| `ci:` | CI / 发布流水线调整 |
+
+规则：
+
+- 摘要用简短中文描述即可；命令名、包名、字段名保留英文。
+- 一次提交只表达一个主要意图，不把无关修复混在一起。
+- 修复类提交优先说明用户可感知的问题，而不是只描述改了哪个文件。
+- 如果仓库已有更具体的提交风格，优先跟随仓库历史。
+
+---
+
+## Suncode 文件提交边界
+
+可以按需提交的 Suncode 内容：
+
+- `.suncode/spec/**`：团队项目规范和设计约束。
+- `.suncode/tasks/**`：任务 PRD、设计、实现计划、研究材料和归档结果。
+- `.suncode/workflow.md`、`.suncode/config.yaml`、`.suncode/scripts/**`：只有在明确修改工作流或运行时行为时提交。
+- `.suncode/workspace/<developer>/{journal-*.md,index.md}`：会话记录，通常由 `add_session.py` 管理；手动提交时只提交当前开发者对应文件。
+
+不要提交或批量强制加入 Git 的 Suncode 内容：
+
+- `.suncode/.developer`：本机开发者身份。
+- `.suncode/.current-task`：旧式/本机会话指针。
+- `.suncode/.runtime/**`：每个会话的运行时状态、Hub/spec 同步缓存、临时上下文。
+- `.suncode/.backup-*`：更新或迁移备份。
+- `.suncode/worktrees/**`：Suncode 运行期间创建的临时工作树。
+- `.suncode/.cache/**`：本地缓存。
+- `.suncode/.template-hashes.json`：模板 hash 管理文件，默认不要手动暂存或手写规则。
+- `.suncode/.agent-log`、`.suncode/.session-id`：本地代理运行痕迹。
+
+关键禁令：
+
+```bash
+git add -f .suncode/
+```
+
+不要使用上面的命令。它会绕过 `.gitignore`，把备份、运行时状态、临时工作树和缓存一起带进提交。若 `git add` 提示 `.suncode/` 被忽略，改为只暂存明确需要的路径；如果团队决定整个 `.suncode/` 都本地化，则在 `.suncode/config.yaml` 中设置 `session_auto_commit: false`，让脚本跳过自动提交。
+
+---
+
+## 敏感信息
+
+以下内容不得进入提交：
+
+- token、API key、密码、私钥、cookie、Authorization header。
+- 本机绝对路径、内网地址、数据库连接串，除非项目明确允许且已脱敏。
+- 真实用户数据、医疗/财务/身份信息、生产日志原文。
+- 未清理的调试输出、临时 dump、截图或下载文件。
+
+发现敏感信息已经进入暂存区时，先 `git restore --staged <path>` 取消暂存，再清理文件内容；不要通过追加提交“遮住”敏感信息。

@@ -35,4 +35,4 @@ The goal is to help AI assistants and new team members understand how YOUR proje
 
 ---
 
-**Language**: All documentation should be written in **English**.
+**Language**: 默认使用简体中文书写；命令名、字段名、API 路径、错误原文和代码标识保留英文。
