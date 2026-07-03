@@ -451,3 +451,37 @@ Implemented the Hub knowledge search command, shared agent-hub client, tests, an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Hub workflow orchestration
+
+**Date**: 2026-07-03
+**Task**: Hub workflow orchestration
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Implemented simplified Hub workflow orchestration: intake, plan-ready, start preflight, finish, compact hub-state prompts, sync failure queue, JWT Hub artifact upload, docs/templates/tests, plus docs-site and marketplace submodule updates.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1e8b4a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
