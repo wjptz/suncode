@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -180,6 +181,31 @@ function makeTask(tmpDir: string, dirName = "06-30-payment-retry"): string {
   });
   fs.writeFileSync(path.join(taskDir, "prd.md"), "# PRD\n", "utf-8");
   return path.join(taskDir, "task.json");
+}
+
+function git(tmpDir: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: tmpDir,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function initGitRepo(tmpDir: string): void {
+  git(tmpDir, ["init"]);
+  git(tmpDir, ["config", "user.name", "Hub Tester"]);
+  git(tmpDir, ["config", "user.email", "hub-tester@example.test"]);
+  fs.writeFileSync(path.join(tmpDir, "README.md"), "# fixture\n", "utf-8");
+  git(tmpDir, ["add", "README.md"]);
+  git(tmpDir, ["commit", "-m", "chore: initial fixture"]);
+}
+
+function commitFile(tmpDir: string, filePath: string, message: string): string {
+  fs.mkdirSync(path.dirname(path.join(tmpDir, filePath)), { recursive: true });
+  fs.appendFileSync(path.join(tmpDir, filePath), `${message}\n`, "utf-8");
+  git(tmpDir, ["add", filePath]);
+  git(tmpDir, ["commit", "-m", message]);
+  return git(tmpDir, ["rev-parse", "HEAD"]);
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -1510,8 +1536,10 @@ describe("hub state prompt", () => {
     expect(prompt).toContain("hub:ok");
     expect(prompt).toContain("hub-task:hub-bound");
     expect(prompt).toContain("work:2 available");
-    expect(prompt).toContain("allowed:intake sync plan-ready pull-review finish");
-    expect(prompt).not.toContain(" submit-plan review ");
+    expect(prompt).toContain(
+      "allowed:intake sync plan-ready pull-review review finish",
+    );
+    expect(prompt).not.toContain(" submit-plan ");
     expect(prompt).toContain("blocked:none");
   });
 
@@ -2114,6 +2142,51 @@ describe("hub commands", () => {
     expect(
       fs.readFileSync(path.join(tasksDir, taskDirName ?? "", "prd.md"), "utf-8"),
     ).toContain("识别用户登录状态。");
+  });
+
+  it("hub intake activates the created task for the current session", async () => {
+    const { fetch } = createMockFetch();
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_CONTEXT_ID: "session-a" },
+      fetch,
+      auto: true,
+      now: new Date("2026-07-03T08:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("created");
+    const taskJsonPath = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "07-03-hub-req-1001",
+      "task.json",
+    );
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(
+            tmpDir,
+            ".suncode",
+            ".runtime",
+            "sessions",
+            "session-a.json",
+          ),
+          "utf-8",
+        ),
+      ),
+    ).toMatchObject({
+      current_task: ".suncode/tasks/07-03-hub-req-1001",
+    });
+    expect(
+      resolveTaskJsonPath({
+        cwd: tmpDir,
+        task: "current",
+        env: { SUNCODE_CONTEXT_ID: "session-a" },
+      }),
+    ).toBe(taskJsonPath);
   });
 
   it("reads the latest local review result without Hub config, auth, or network", async () => {
@@ -2741,6 +2814,120 @@ describe("hub commands", () => {
     ).toBe(true);
   });
 
+  it("submit-completion includes git commit records in the Hub summary", async () => {
+    initGitRepo(tmpDir);
+    const baseCommit = git(tmpDir, ["rev-parse", "HEAD"]);
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const firstCommit = commitFile(
+      tmpDir,
+      ".suncode/tasks/06-30-payment-retry/implementation-summary.md",
+      "feat: implement retry",
+    );
+    const secondCommit = commitFile(
+      tmpDir,
+      ".suncode/tasks/06-30-payment-retry/validation-summary.md",
+      "test: validate retry",
+    );
+
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await submitCompletion({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(result.status).toBe("submitted");
+    const submission = calls.find((call) =>
+      call.url.endsWith("/completion-submissions"),
+    );
+    expect(submission).toBeDefined();
+    const payload = JSON.parse(submission?.body ?? "{}") as {
+      summary?: {
+        commit?: string;
+        commits?: {
+          sha: string;
+          shortSha: string;
+          subject: string;
+          authorName: string;
+          authorEmail: string;
+          authoredAt: string;
+          committedAt: string;
+        }[];
+      };
+    };
+    expect(payload.summary?.commit).toBe(secondCommit);
+    expect(payload.summary?.commits).toEqual([
+      expect.objectContaining({
+        sha: firstCommit,
+        shortSha: expect.stringMatching(
+          new RegExp(`^${firstCommit.slice(0, 7)}`),
+        ),
+        subject: "feat: implement retry",
+        authorName: "Hub Tester",
+        authorEmail: "hub-tester@example.test",
+        authoredAt: expect.any(String),
+        committedAt: expect.any(String),
+      }),
+      expect.objectContaining({
+        sha: secondCommit,
+        shortSha: expect.stringMatching(
+          new RegExp(`^${secondCommit.slice(0, 7)}`),
+        ),
+        subject: "test: validate retry",
+        authorName: "Hub Tester",
+        authorEmail: "hub-tester@example.test",
+        authoredAt: expect.any(String),
+        committedAt: expect.any(String),
+      }),
+    ]);
+    expect(submission?.body).not.toContain("diff --git");
+    expect(submission?.headers["idempotency-key"]).toMatch(
+      /^hub:submit-completion:TASK-2001:/,
+    );
+    expect(loadHubManifest(taskDir)).toMatchObject({
+      gitBaseCommit: baseCommit,
+      lastSubmittedCommitsHash: expect.any(String),
+    });
+
+    calls.length = 0;
+    const thirdCommit = commitFile(
+      tmpDir,
+      "CHANGELOG.md",
+      "docs: record retry",
+    );
+    const secondResult = await submitCompletion({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(secondResult.status).toBe("submitted");
+    const secondSubmission = calls.find((call) =>
+      call.url.endsWith("/completion-submissions"),
+    );
+    const secondPayload = JSON.parse(secondSubmission?.body ?? "{}") as {
+      summary?: { commits?: { sha: string }[] };
+    };
+    expect(secondPayload.summary?.commits?.map((commit) => commit.sha)).toEqual(
+      [firstCommit, secondCommit, thirdCommit],
+    );
+  });
+
   it("hub review creates a review round, syncs statuses, and submits review artifacts", async () => {
     writeProjectConfig(
       tmpDir,
@@ -3171,6 +3358,78 @@ describe("hub commands", () => {
     expect(calls.some((call) => call.url.endsWith("/completion-submissions"))).toBe(
       true,
     );
+  });
+
+  it("submit-completion accepts a required review approved before committing the staged diff", async () => {
+    initGitRepo(tmpDir);
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    required: true",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const implementationSummary =
+      ".suncode/tasks/06-30-payment-retry/implementation-summary.md";
+    fs.writeFileSync(
+      path.join(tmpDir, implementationSummary),
+      "# Done\n",
+      "utf-8",
+    );
+    git(tmpDir, ["add", implementationSummary]);
+    const { calls, fetch } = createMockFetch();
+
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => true,
+        run: async () => ({
+          exitCode: 0,
+          output: [
+            "```json",
+            JSON.stringify({
+              status: "approved",
+              summary: "可以提交。",
+              mustFix: [],
+              advisory: [],
+            }),
+            "```",
+          ].join("\n"),
+        }),
+      },
+    });
+    git(tmpDir, ["commit", "-m", "feat: implement retry"]);
+
+    const result = await submitCompletion({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+    });
+
+    expect(result.status).toBe("submitted");
+    expect(
+      calls.some((call) => call.url.endsWith("/completion-submissions")),
+    ).toBe(true);
   });
 });
 

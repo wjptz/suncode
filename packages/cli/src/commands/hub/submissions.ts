@@ -11,6 +11,7 @@ import {
   filterChangedArtifacts,
 } from "./artifacts.js";
 import { hashArtifactBundle, hashText } from "./hash.js";
+import { collectGitCommitRecords } from "./git.js";
 import {
   loadHubManifest,
   loadProjectSpecManifest,
@@ -20,12 +21,16 @@ import {
   upsertManifestArtifact,
 } from "./manifest.js";
 import { uploadArtifactToMinio, type UploadTarget } from "./minio.js";
-import { collectReviewCodeSnapshot } from "./review-state.js";
+import {
+  collectCommittedReviewSnapshot,
+  collectReviewCodeSnapshot,
+} from "./review-state.js";
 import { readHubTask } from "./task.js";
 import type {
   FetchLike,
   HubArtifact,
   HubCommandResult,
+  HubGitCommitRecord,
   HubManifest,
   HubReviewStatus,
   UploadedArtifact,
@@ -68,6 +73,18 @@ export interface HubStructuredSubtask {
 
 type SubmissionKind = "plan" | "spec" | "completion" | "review";
 type ArtifactScope = "current_task" | "project_spec";
+
+interface CompletionCommitSummary {
+  commits: HubGitCommitRecord[];
+  hash?: string;
+}
+
+interface TaskSummary {
+  status?: string;
+  commit?: string;
+  prUrl?: string;
+  commits?: HubGitCommitRecord[];
+}
 
 interface UploadSessionResponse {
   uploadSession: {
@@ -268,14 +285,30 @@ async function submitArtifacts(
     return { status: "skipped", message: "No artifacts found." };
   }
 
-  const changed = options.force
+  const completionCommits =
+    options.submissionKind === "completion"
+      ? collectCompletionCommitSummary(cwd, taskManifest.gitBaseCommit)
+      : { commits: [] };
+  const commitsChanged =
+    options.submissionKind === "completion" &&
+    completionCommits.hash !== undefined &&
+    completionCommits.hash !== taskManifest.lastSubmittedCommitsHash;
+
+  let changed = options.force
     ? artifacts
     : filterChangedArtifacts(artifacts, currentHashes(artifactManifest));
+  if (changed.length === 0 && commitsChanged) {
+    changed = artifacts;
+  }
   if (changed.length === 0) {
     return { status: "skipped", message: "No changed artifacts." };
   }
 
-  const bundleHash = hashArtifactBundle(changed);
+  const bundleHash = submissionBundleHash(
+    options.submissionKind,
+    changed,
+    completionCommits.hash,
+  );
   const client = createHubApiClient(config, options.fetch);
   const uploadSession = await createUploadSession({
     client,
@@ -315,11 +348,7 @@ async function submitArtifacts(
     uploadSessionId: uploadSession.uploadSession.id,
     artifacts: uploaded,
     manifest: artifactManifest,
-    taskSummary: {
-      status: stringField(task.task.status),
-      commit: stringField(task.task.commit),
-      prUrl: stringField(task.task.pr_url),
-    },
+    taskSummary: buildTaskSummary(task.task, completionCommits.commits),
     reviewSummary: options.reviewSummary,
   });
 
@@ -344,6 +373,12 @@ async function submitArtifacts(
     submission,
     options.reviewSummary,
   );
+  if (
+    options.submissionKind === "completion" &&
+    completionCommits.hash !== undefined
+  ) {
+    taskManifest.lastSubmittedCommitsHash = completionCommits.hash;
+  }
   for (const artifact of uploaded) {
     const remote = submission.artifacts?.find(
       (item) => item.path === artifact.path,
@@ -457,7 +492,7 @@ async function submitUploadedArtifacts(options: {
   uploadSessionId: string;
   artifacts: readonly UploadedArtifact[];
   manifest: HubManifest;
-  taskSummary: { status?: string; commit?: string; prUrl?: string };
+  taskSummary: TaskSummary;
   reviewSummary?: HubReviewSubmissionSummary;
 }): Promise<SubmissionResponse> {
   const path = submissionApiPath(
@@ -492,7 +527,7 @@ function submissionPayload(options: {
   uploadSessionId: string;
   artifacts: readonly UploadedArtifact[];
   manifest: HubManifest;
-  taskSummary: { status?: string; commit?: string; prUrl?: string };
+  taskSummary: TaskSummary;
   reviewSummary?: HubReviewSubmissionSummary;
 }): Record<string, unknown> {
   const common = {
@@ -648,10 +683,37 @@ function assertCompletionReviewGate(cwd: string, manifest: HubManifest): void {
   }
 
   const current = collectReviewCodeSnapshot(cwd);
-  if (manifest.approvedReviewDiffHash !== current.diffHash) {
-    throw new Error(
-      "The latest approved Hub review no longer matches the current diff. Run `suncode hub review` again.",
+  if (reviewGateMatchesCurrentSnapshot(manifest, current)) {
+    return;
+  }
+
+  if (manifest.approvedReviewHeadCommit) {
+    const committed = collectCommittedReviewSnapshot(
+      cwd,
+      manifest.approvedReviewHeadCommit,
     );
+    if (manifest.approvedReviewDiffHash === committed.diffHash) {
+      return;
+    }
+  }
+
+  if (current.diff.length === 0 && manifest.approvedReviewHeadCommit) {
+    throw new Error(
+      "The latest approved Hub review does not match the committed changes. Run `suncode hub review` again before committing or resubmit a review for the current code.",
+    );
+  }
+
+  throw new Error(
+    "The latest approved Hub review no longer matches the current diff. Run `suncode hub review` again.",
+  );
+}
+
+function reviewGateMatchesCurrentSnapshot(
+  manifest: HubManifest,
+  current: ReturnType<typeof collectReviewCodeSnapshot>,
+): boolean {
+  if (manifest.approvedReviewDiffHash !== current.diffHash) {
+    return false;
   }
   if (
     manifest.approvedReviewHeadCommit &&
@@ -662,6 +724,7 @@ function assertCompletionReviewGate(cwd: string, manifest: HubManifest): void {
       "The latest approved Hub review no longer matches the current commit. Run `suncode hub review` again.",
     );
   }
+  return true;
 }
 
 function currentHashes(
@@ -677,6 +740,48 @@ function currentHashes(
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function collectCompletionCommitSummary(
+  cwd: string,
+  baseCommit: string | undefined,
+): CompletionCommitSummary {
+  const commits = collectGitCommitRecords(cwd, baseCommit);
+  return {
+    commits,
+    ...(commits.length > 0
+      ? { hash: hashText(JSON.stringify({ version: 1, commits })) }
+      : {}),
+  };
+}
+
+function submissionBundleHash(
+  kind: SubmissionKind,
+  artifacts: readonly HubArtifact[],
+  commitsHash: string | undefined,
+): string {
+  const artifactBundleHash = hashArtifactBundle(artifacts);
+  if (kind !== "completion" || !commitsHash) return artifactBundleHash;
+  return hashText(
+    JSON.stringify({
+      version: 1,
+      artifactBundleHash,
+      commitsHash,
+    }),
+  );
+}
+
+function buildTaskSummary(
+  task: Record<string, unknown>,
+  commits: readonly HubGitCommitRecord[],
+): TaskSummary {
+  const latestCommit = commits.at(-1)?.sha ?? stringField(task.commit);
+  return {
+    status: stringField(task.status),
+    ...(latestCommit ? { commit: latestCommit } : {}),
+    prUrl: stringField(task.pr_url),
+    ...(commits.length > 0 ? { commits: [...commits] } : {}),
+  };
 }
 
 function readStructuredSubtasks(taskDir: string): HubStructuredSubtask[] {

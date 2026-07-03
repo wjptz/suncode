@@ -6,6 +6,7 @@ import { toPosix } from "../../utils/posix.js";
 import { createHubApiClient } from "./client.js";
 import { resolveHubConfig } from "./config.js";
 import { hubCreateTask } from "./create-task.js";
+import { setCurrentSessionTask } from "./task.js";
 import type { FetchLike, HubCommandResult } from "./types.js";
 
 export interface HubIntakeOptions {
@@ -72,6 +73,11 @@ export async function hubIntake(
     requirement: selected.requirement,
     slug: options.slug,
     now: options.now ?? new Date(),
+  });
+  setCurrentSessionTask({
+    cwd,
+    taskDir: path.dirname(taskJsonPath),
+    env: options.env,
   });
   const bindResult = await hubCreateTask({
     cwd,

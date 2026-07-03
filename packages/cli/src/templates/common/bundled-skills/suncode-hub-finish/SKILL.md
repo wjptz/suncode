@@ -15,6 +15,7 @@ Use this skill only when the current task is bound to Suncode Hub. If the projec
 - Do not print or persist Hub tokens, passwords, or auth headers.
 - If `<hub-state>` says `hub-task:local-only`, stop this Hub-specific flow unless the user explicitly asks to bind a Hub requirement.
 - Long documents are uploaded through Hub-signed MinIO URLs by `suncode hub`; Hub API payloads must contain object references and hashes, not document bodies.
+- `hub finish` does not start code review. Hub code review belongs after final validation and before the work commit; finish only verifies any required approved review still matches.
 
 ## Required Local Artifacts
 
@@ -65,6 +66,6 @@ suncode hub download-document --document-id "<documentId>" --task "<task-dir>"
 suncode hub finish --task current
 ```
 
-`hub finish` checks required completion artifacts, enforces required review gate through the existing completion submission checks, submits project-level spec artifacts, and submits completion artifacts. If it reports missing files, create those files with evidence-based content and rerun the command.
+`hub finish` checks required completion artifacts, enforces required review gate through the existing completion submission checks, submits project-level spec artifacts, and submits completion artifacts plus commit metadata. If it reports missing files, create those files with evidence-based content and rerun the command.
 
 5. Only after Hub completion submission succeeds or is intentionally deferred, continue with the normal Suncode archive/finish workflow.

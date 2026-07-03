@@ -100,6 +100,16 @@ export interface UploadedArtifact extends HubArtifact {
   uploadSessionId: string;
 }
 
+export interface HubGitCommitRecord {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  authorName: string;
+  authorEmail: string;
+  authoredAt: string;
+  committedAt: string;
+}
+
 export interface HubManifestArtifact {
   path: string;
   type: HubArtifact["type"];
@@ -136,6 +146,8 @@ export interface HubManifest {
   approvedReviewHeadCommit?: string;
   reviewCursor?: string;
   requirementChangeCursor?: string;
+  gitBaseCommit?: string;
+  lastSubmittedCommitsHash?: string;
   artifacts: Record<string, HubManifestArtifact>;
 }
 

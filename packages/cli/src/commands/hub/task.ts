@@ -50,6 +50,24 @@ export interface ResolveTaskJsonPathOptions {
   env?: Record<string, string | undefined>;
 }
 
+export interface SetCurrentSessionTaskOptions {
+  cwd: string;
+  taskDir: string;
+  env?: Record<string, string | undefined>;
+}
+
+export type SetCurrentSessionTaskResult =
+  | {
+      status: "updated";
+      contextKey: string;
+      sessionPath: string;
+      taskPath: string;
+    }
+  | {
+      status: "skipped";
+      reason: "missing-context";
+    };
+
 export function resolveTaskJsonPath(
   options: ResolveTaskJsonPathOptions,
 ): string {
@@ -71,6 +89,38 @@ export function resolveTaskJsonPath(
 
   const taskDir = resolveTaskDir(options.cwd, options.task);
   return path.join(taskDir, FILE_NAMES.TASK_JSON);
+}
+
+export function setCurrentSessionTask(
+  options: SetCurrentSessionTaskOptions,
+): SetCurrentSessionTaskResult {
+  const env = options.env ?? process.env;
+  const contextKey = resolveContextKey(env);
+  if (!contextKey) {
+    return { status: "skipped", reason: "missing-context" };
+  }
+
+  const taskDir = resolveTaskDir(options.cwd, options.taskDir);
+  const taskPath = relativeToCwd(options.cwd, taskDir);
+  const sessionPath = path.join(
+    options.cwd,
+    DIR_NAMES.WORKFLOW,
+    ".runtime",
+    "sessions",
+    `${contextKey}.json`,
+  );
+  const session = readSessionObject(sessionPath);
+  session.current_task = taskPath;
+  if (!Object.hasOwn(session, "current_run")) {
+    session.current_run = null;
+  }
+  fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+  fs.writeFileSync(
+    sessionPath,
+    `${JSON.stringify(session, null, 2)}\n`,
+    "utf-8",
+  );
+  return { status: "updated", contextKey, sessionPath, taskPath };
 }
 
 function resolveCurrentTaskJsonPath(
@@ -124,6 +174,17 @@ function readSessionCurrentTask(sessionPath: string): string | undefined {
       : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function readSessionObject(sessionPath: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(sessionPath, "utf-8")) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
   }
 }
 

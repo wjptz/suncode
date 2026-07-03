@@ -340,7 +340,7 @@ function promptAllowedActions(
 ): string {
   if (hubCode !== "ok") return "none";
   if (currentTask === "hub-bound") {
-    return "intake sync plan-ready pull-review finish";
+    return "intake sync plan-ready pull-review review finish";
   }
   if (currentTask === "hub-pending") {
     return "sync";

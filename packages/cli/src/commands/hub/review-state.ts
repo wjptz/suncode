@@ -20,6 +20,19 @@ export function collectReviewCodeSnapshot(cwd: string): ReviewCodeSnapshot {
   };
 }
 
+export function collectCommittedReviewSnapshot(
+  cwd: string,
+  baseCommit: string,
+): ReviewCodeSnapshot {
+  const diff = gitText(cwd, ["diff", "--binary", `${baseCommit}..HEAD`]);
+  const headCommit = gitText(cwd, ["rev-parse", "HEAD"]).trim() || undefined;
+  return {
+    diff,
+    diffHash: hashText(diff),
+    ...(headCommit ? { headCommit } : {}),
+  };
+}
+
 export function snapshotsMatch(
   before: ReviewCodeSnapshot,
   after: ReviewCodeSnapshot,

@@ -5,6 +5,7 @@ import {
   saveHubManifest,
   syncManifestTaskBinding,
 } from "./manifest.js";
+import { collectGitHeadCommit } from "./git.js";
 import { readHubTask, updateHubTaskMeta } from "./task.js";
 import type { FetchLike, HubCommandResult } from "./types.js";
 
@@ -118,6 +119,7 @@ export async function hubCreateTask(
     taskRole,
     parentRemoteTaskId: task.meta.parentRemoteTaskId ?? null,
   });
+  manifest.gitBaseCommit ??= collectGitHeadCommit(cwd);
   saveHubManifest(task.taskDir, manifest);
   updateHubTaskMeta(task, {
     projectId: config.projectId,

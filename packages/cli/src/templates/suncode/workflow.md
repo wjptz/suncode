@@ -236,7 +236,7 @@ Sub-agent dispatch protocol applies to all platforms and all sub-agents, includi
 
 [workflow-state:in_progress]
 Tools: `suncode-implement` / `suncode-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `suncode-update-spec` is a skill. `suncode-check` exists as both; prefer the Agent form when verifying after code changes.
-Flow: `suncode-implement` -> `suncode-check` -> `suncode-update-spec` -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Flow: `suncode-implement` -> `suncode-check` -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `suncode-implement`, do NOT spawn another `suncode-implement` or `suncode-check`; if already running as `suncode-check`, do NOT spawn another `suncode-check` or `suncode-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 [/workflow-state:in_progress]
@@ -247,7 +247,7 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
      instead of dispatching sub-agents. -->
 
 [workflow-state:in_progress-inline]
-Flow: `suncode-before-dev` -> edit -> `suncode-check` -> validation -> `suncode-update-spec` -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Flow: `suncode-before-dev` -> edit -> `suncode-check` -> validation -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
 Do not dispatch implement/check sub-agents in inline mode.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
 [/workflow-state:in_progress-inline]
@@ -606,6 +606,8 @@ If issues are found → fix → re-check, until green.
 [/codex-inline, Kilo, Antigravity, Devin]
 
 **Final pass (before Phase 3.4 commit)**: the last 2.2 of a task must run full-scope, not just on the latest implement chunk. List all affected packages with `python3 ./.suncode/scripts/get_context.py --mode packages`, then load each package's spec index Quality Check section. This catches cross-layer / multi-package issues a mid-iteration local 2.2 cannot.
+
+For Hub-bound tasks with code review enabled or required, run `suncode hub review --task current` after the final pass and before the work commit. Stage intended new files first when needed so the reviewed diff matches the content that will be committed.
 
 #### 2.3 Rollback `[on demand]`
 
