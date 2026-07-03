@@ -1,0 +1,4 @@
+{"file":".trellis/spec/cli/backend/suncode-hub-collaboration.md","reason":"Check Hub state, lifecycle, prompt, spec, and sync behavior against the primary contract."}
+{"file":".trellis/spec/cli/backend/platform-integration.md","reason":"Check Python hook and OpenCode plugin changes against platform-specific contracts."}
+{"file":".trellis/spec/cli/backend/workflow-state-contract.md","reason":"Check workflow-state prompt and lifecycle behavior for drift."}
+{"file":".trellis/spec/cli/unit-test/conventions.md","reason":"Check that tests are placed and written according to project conventions."}

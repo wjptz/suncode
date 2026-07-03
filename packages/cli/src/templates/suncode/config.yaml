@@ -38,11 +38,15 @@ max_journal_lines: 2000
 
 # Shell commands to run after task lifecycle events.
 # Each hook receives TASK_JSON_PATH environment variable pointing to task.json.
-# Hook failures print a warning but do not block the main operation.
+# after_* hook failures print a warning but do not block the main operation.
+# before_start hooks run before task.py start mutates local task state. A failing
+# before_start hook blocks the start operation.
 #
 # hooks:
 #   after_create:
 #     - "echo 'Task created'"
+#   before_start:
+#     - "echo 'Task start preflight'"
 #   after_start:
 #     - "echo 'Task started'"
 #   after_finish:
@@ -97,6 +101,7 @@ max_journal_lines: 2000
 #       # Set false to avoid storing the provider's original stdout/stderr.
 #       saveRawOutput: true
 #   sync:
+#     beforeStart: true
 #     afterCreate: true
 #     afterStart: true
 #     afterFinish: false
@@ -106,6 +111,7 @@ max_journal_lines: 2000
 # sync hooks for create/start/archive according to hub.sync. You can still add
 # ordinary hooks: entries under hooks.after_* run together with the built-in Hub
 # hooks.
+# - before_start: suncode hub preflight-start (blocking, Hub-bound tasks only)
 # - after_create: suncode hub create-task
 # - after_start: suncode hub submit-subtasks, then suncode hub mark-started
 # - after_archive: suncode hub submit-completion

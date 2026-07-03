@@ -295,6 +295,7 @@ async function submitArtifacts(
     changed,
     uploadSession,
     options.fetch ?? fetch,
+    { apiBaseUrl: config.apiBaseUrl, token: config.token },
   );
 
   const submission = await submitUploadedArtifacts({
@@ -418,6 +419,7 @@ async function uploadAllArtifacts(
   artifacts: readonly HubArtifact[],
   uploadSession: UploadSessionResponse,
   fetchImpl: FetchLike,
+  hubAuth: { apiBaseUrl: string; token?: string },
 ): Promise<UploadedArtifact[]> {
   const uploaded: UploadedArtifact[] = [];
   for (const artifact of artifacts) {
@@ -433,6 +435,7 @@ async function uploadAllArtifacts(
         upload,
         uploadSession.uploadSession.id,
         fetchImpl,
+        hubAuth,
       ),
     );
   }
@@ -678,10 +681,68 @@ function stringField(value: unknown): string | undefined {
 
 function readStructuredSubtasks(taskDir: string): HubStructuredSubtask[] {
   const filePath = path.join(taskDir, "subtasks.json");
-  if (!fs.existsSync(filePath)) return [];
+  if (!fs.existsSync(filePath)) return readGeneratedSubtasks(taskDir);
   const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
   const subtasks = extractSubtasks(parsed);
   return subtasks.map(normalizeSubtask);
+}
+
+function readGeneratedSubtasks(taskDir: string): HubStructuredSubtask[] {
+  const filePath = path.join(taskDir, "implement.md");
+  if (!fs.existsSync(filePath)) return [];
+  const content = fs.readFileSync(filePath, "utf-8");
+  return content
+    .split(/\r?\n/)
+    .map(parseImplementChecklistLine)
+    .filter((item): item is HubStructuredSubtask => item !== undefined);
+}
+
+function parseImplementChecklistLine(
+  line: string,
+): HubStructuredSubtask | undefined {
+  const match = line.match(/^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s+(.+?)\s*$/);
+  if (!match) return undefined;
+
+  let text = stripInlineMarkdown(match[1].trim());
+  if (!text) return undefined;
+
+  let priority = "P2";
+  const priorityMatch = text.match(/^\[?(P[0-3])\]?(?:\s*[:：-])?\s+/i);
+  if (priorityMatch) {
+    priority = priorityMatch[1].toUpperCase();
+    text = text.slice(priorityMatch[0].length).trim();
+  }
+  if (!text) return undefined;
+
+  const separatorIndex = firstSeparatorIndex(text);
+  const name =
+    separatorIndex > 0 ? text.slice(0, separatorIndex).trim() : text.trim();
+  const description =
+    separatorIndex > 0 ? text.slice(separatorIndex + 1).trim() : text.trim();
+
+  if (!name) return undefined;
+  return {
+    priority,
+    name,
+    description: description || name,
+  };
+}
+
+function stripInlineMarkdown(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+}
+
+function firstSeparatorIndex(text: string): number {
+  const ascii = text.indexOf(":");
+  const chinese = text.indexOf("：");
+  if (ascii === -1) return chinese;
+  if (chinese === -1) return ascii;
+  return Math.min(ascii, chinese);
 }
 
 function extractSubtasks(value: unknown): unknown[] {

@@ -302,6 +302,7 @@ def _get_implicit_hub_hooks(config: dict, event: str) -> list[str]:
     sync = hub.get("sync")
     sync_config = sync if isinstance(sync, dict) else {}
     defaults = {
+        "before_start": True,
         "after_create": True,
         "after_start": True,
         "after_finish": False,
@@ -315,6 +316,9 @@ def _get_implicit_hub_hooks(config: dict, event: str) -> list[str]:
         return []
 
     commands = {
+        "before_start": [
+            'suncode hub preflight-start --task-json "$TASK_JSON_PATH"'
+        ],
         "after_create": [
             'suncode hub create-task --task-json "$TASK_JSON_PATH" --best-effort'
         ],
@@ -331,6 +335,7 @@ def _get_implicit_hub_hooks(config: dict, event: str) -> list[str]:
 
 def _hub_sync_key(event: str) -> str:
     return {
+        "before_start": "beforeStart",
         "after_create": "afterCreate",
         "after_start": "afterStart",
         "after_finish": "afterFinish",

@@ -47,6 +47,18 @@ function runTaskCreate(repo: string, args: string[]): string {
   return lines.at(-1) ?? "";
 }
 
+function runTaskStart(
+  repo: string,
+  taskPath: string,
+  env: NodeJS.ProcessEnv = {},
+): ReturnType<typeof spawnSync> {
+  return spawnSync("python3", [".suncode/scripts/task.py", "start", taskPath], {
+    cwd: repo,
+    encoding: "utf-8",
+    env: { ...process.env, ...env },
+  });
+}
+
 function readTask(repo: string, taskPath: string): Record<string, unknown> {
   return JSON.parse(
     fs.readFileSync(path.join(repo, taskPath, "task.json"), "utf-8"),
@@ -68,6 +80,106 @@ function readHooks(repo: string, event: string): string[] {
     throw new Error(result.stderr);
   }
   return JSON.parse(result.stdout) as string[];
+}
+
+function writeTeamHubConfig(repo: string): void {
+  fs.writeFileSync(
+    path.join(repo, ".suncode", "config.yaml"),
+    [
+      "hub:",
+      "  enabled: true",
+      "  mode: team",
+      "  projectId: proj_123",
+      "  apiBaseUrl: https://hub.example.test",
+      "",
+    ].join("\n"),
+  );
+}
+
+function markTaskHubBound(repo: string, taskPath: string): void {
+  const taskJsonPath = path.join(repo, taskPath, "task.json");
+  const task = JSON.parse(
+    fs.readFileSync(taskJsonPath, "utf-8"),
+  ) as Record<string, unknown>;
+  task.meta = {
+    ...(task.meta as Record<string, unknown> | undefined),
+    hub: {
+      projectId: "proj_123",
+      developerId: "dev_456",
+      requirementId: "REQ-1001",
+      requirementRevision: 1,
+      remoteTaskId: "TASK-2001",
+      bindingStatus: "bound",
+    },
+  };
+  fs.writeFileSync(taskJsonPath, `${JSON.stringify(task, null, 2)}\n`);
+}
+
+function installFakeSuncode(
+  repo: string,
+  exitCode: number,
+): { binDir: string; logPath: string } {
+  const binDir = path.join(repo, "bin");
+  const logPath = path.join(repo, "suncode-hook.log");
+  fs.mkdirSync(binDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(binDir, "suncode"),
+    [
+      "#!/bin/sh",
+      `printf "%s\\n" "$*" >> ${JSON.stringify(logPath)}`,
+      `exit ${exitCode}`,
+      "",
+    ].join("\n"),
+  );
+  fs.chmodSync(path.join(binDir, "suncode"), 0o755);
+
+  fs.writeFileSync(
+    path.join(binDir, "suncode.cmd"),
+    [`@echo off`, `echo %*>>"${logPath}"`, `exit /b ${exitCode}`, ""].join(
+      "\r\n",
+    ),
+  );
+
+  return { binDir, logPath };
+}
+
+function installPreflightOkSyncFailSuncode(
+  repo: string,
+): { binDir: string; logPath: string } {
+  const binDir = path.join(repo, "bin");
+  const logPath = path.join(repo, "suncode-hook.log");
+  fs.mkdirSync(binDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(binDir, "suncode"),
+    [
+      "#!/bin/sh",
+      `printf "%s\\n" "$*" >> ${JSON.stringify(logPath)}`,
+      'case "$*" in',
+      '  *"hub preflight-start"*) exit 0 ;;',
+      "esac",
+      'echo "sync failed" >&2',
+      "exit 7",
+      "",
+    ].join("\n"),
+  );
+  fs.chmodSync(path.join(binDir, "suncode"), 0o755);
+
+  fs.writeFileSync(
+    path.join(binDir, "suncode.cmd"),
+    [
+      "@echo off",
+      `echo %*>>"${logPath}"`,
+      'echo %* | findstr /C:"hub preflight-start" >nul',
+      "if %ERRORLEVEL%==0 exit /b 0",
+      "echo sync failed 1>&2",
+      "exit /b 7",
+      "",
+    ].join("\r\n"),
+  );
+
+  return { binDir, logPath };
 }
 
 describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
@@ -189,21 +301,14 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
   it("adds built-in Hub lifecycle hooks only when team Hub is enabled", () => {
     expect(readHooks(tmp, "after_create")).toEqual([]);
 
-    fs.writeFileSync(
-      path.join(tmp, ".suncode", "config.yaml"),
-      [
-        "hub:",
-        "  enabled: true",
-        "  mode: team",
-        "  projectId: proj_123",
-        "  apiBaseUrl: https://hub.example.test",
-        "",
-      ].join("\n"),
-    );
+    writeTeamHubConfig(tmp);
 
     expect(readHooks(tmp, "after_create")).toContain(
       'suncode hub create-task --task-json "$TASK_JSON_PATH" --best-effort',
     );
+    expect(readHooks(tmp, "before_start")).toEqual([
+      'suncode hub preflight-start --task-json "$TASK_JSON_PATH"',
+    ]);
     expect(readHooks(tmp, "after_start")).toEqual([
       'suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort',
       'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
@@ -212,5 +317,113 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
       'suncode hub submit-completion --task-json "$TASK_JSON_PATH" --best-effort',
     );
     expect(readHooks(tmp, "after_finish")).toEqual([]);
+  });
+
+  it("does not run Hub before_start preflight for a local-only task", () => {
+    writeTeamHubConfig(tmp);
+
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "Local task",
+      "--slug",
+      "local-task",
+    ]);
+
+    const result = runTaskStart(tmp, taskPath);
+
+    expect(result.status).toBe(0);
+    expect(readTask(tmp, taskPath).status).toBe("in_progress");
+  });
+
+  it("blocks task start when Hub before_start preflight fails", () => {
+    writeTeamHubConfig(tmp);
+    const { binDir, logPath } = installFakeSuncode(tmp, 7);
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "Hub task",
+      "--slug",
+      "hub-task",
+      "--hub-requirement-id",
+      "REQ-1001",
+    ]);
+    markTaskHubBound(tmp, taskPath);
+
+    const result = runTaskStart(tmp, taskPath, {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+    });
+
+    expect(result.status).toBe(1);
+    expect(fs.readFileSync(logPath, "utf-8")).toContain(
+      "hub preflight-start --task-json ",
+    );
+    expect(readTask(tmp, taskPath).status).toBe("planning");
+  });
+
+  it("starts a Hub-bound task only after before_start preflight passes", () => {
+    writeTeamHubConfig(tmp);
+    const { binDir, logPath } = installFakeSuncode(tmp, 0);
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "Hub task",
+      "--slug",
+      "hub-task",
+      "--hub-requirement-id",
+      "REQ-1001",
+    ]);
+    markTaskHubBound(tmp, taskPath);
+
+    const result = runTaskStart(tmp, taskPath, {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+    });
+
+    expect(result.status).toBe(0);
+    expect(fs.readFileSync(logPath, "utf-8")).toContain(
+      "hub preflight-start --task-json ",
+    );
+    expect(readTask(tmp, taskPath).status).toBe("in_progress");
+  });
+
+  it("queues best-effort Hub sync failures after start", () => {
+    writeTeamHubConfig(tmp);
+    const { binDir } = installPreflightOkSyncFailSuncode(tmp);
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "Hub task",
+      "--slug",
+      "hub-task",
+      "--hub-requirement-id",
+      "REQ-1001",
+    ]);
+    markTaskHubBound(tmp, taskPath);
+
+    const result = runTaskStart(tmp, taskPath, {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+    });
+
+    expect(result.status).toBe(0);
+    expect(readTask(tmp, taskPath).status).toBe("in_progress");
+    const queuePath = path.join(
+      tmp,
+      ".suncode",
+      ".runtime",
+      "hub-sync-queue.jsonl",
+    );
+    const entries = fs
+      .readFileSync(queuePath, "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const afterStartEntries = entries.filter(
+      (entry) => entry.event === "after_start",
+    );
+    expect(afterStartEntries).toHaveLength(2);
+    expect(afterStartEntries[0]).toMatchObject({
+      event: "after_start",
+      attempt: 1,
+    });
+    expect(afterStartEntries.map((entry) => String(entry.command))).toEqual([
+      'suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort',
+      'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
+    ]);
   });
 });

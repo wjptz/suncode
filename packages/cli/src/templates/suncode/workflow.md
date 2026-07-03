@@ -168,7 +168,7 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 - `prd.md` — requirements, constraints, and acceptance criteria. Do not put technical design or execution checklists here.
 - `design.md` — technical design for complex tasks: boundaries, contracts, data flow, tradeoffs, compatibility, rollout / rollback shape.
 - `implement.md` — execution plan for complex tasks: ordered checklist, validation commands, review gates, and rollback points.
-- `subtasks.json` — optional structured execution map for local display; required for Hub team projects before start so Hub can show main task -> subtask structure.
+- `subtasks.json` — optional structured execution map for local display and Hub override. For Hub team projects, `suncode hub submit-subtasks` can derive a default structure from `implement.md` when this file is absent.
 - `implement.jsonl` / `check.jsonl` — spec and research manifests for sub-agent context. They do not replace `implement.md`.
 - Lightweight tasks may be PRD-only. Complex tasks must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
 
@@ -193,16 +193,16 @@ Complex task: ask the user if you can create a Suncode task and enter the planni
 - 1.1 Requirement exploration `[required · repeatable]` (`prd.md`; complex tasks also need `design.md` + `implement.md`)
 - 1.2 Research `[optional · repeatable]`
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix (sub-agent-dispatch platforms only; inline platforms skip)
-- 1.4 Structure subtasks `[required for Hub team projects · once]` (`subtasks.json`)
-- 1.5 Activate task `[required · once]` (review gate, then `task.py start`; status → in_progress)
+- 1.4 Structure subtasks `[optional override for Hub team projects · once]` (`subtasks.json`; otherwise derived from `implement.md`)
+- 1.5 Activate task `[required · once]` (`suncode hub plan-ready` for Hub-bound tasks, then `task.py start`; status → in_progress)
 - 1.6 Completion criteria
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
 Load `suncode-brainstorm`; stay in planning.
-Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
-Hub team project: convert the reviewed `implement.md` steps into `subtasks.json` before `task.py start`.
+Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask the user to review planning artifacts before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
+Hub team project: run `suncode hub plan-ready --task current` after planning; write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
@@ -215,8 +215,8 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
 
 [workflow-state:planning-inline]
 Load `suncode-brainstorm`; stay in planning.
-Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
-Hub team project: convert the reviewed `implement.md` steps into `subtasks.json` before `task.py start`.
+Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask the user to review planning artifacts before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
+Hub team project: run `suncode hub plan-ready --task current` after planning; write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `suncode-before-dev`.
 [/workflow-state:planning-inline]
@@ -447,9 +447,9 @@ Skip this step. Context is loaded directly by the `suncode-before-dev` skill in 
 
 #### 1.4 Structure subtasks `[required for Hub team projects · once]`
 
-For Hub team projects, convert the reviewed `implement.md` execution steps into `{TASK_DIR}/subtasks.json` before starting implementation. This file is for structured Hub display and must describe the current task only.
+For Hub team projects, `suncode hub submit-subtasks` derives structured Hub display data from the reviewed `implement.md` checklist when `{TASK_DIR}/subtasks.json` is absent. Write `subtasks.json` only when the derived structure needs an explicit override. The override must describe the current task only.
 
-Required format:
+Override format:
 
 ```json
 {
@@ -469,8 +469,9 @@ Rules:
 - Use `priority`, `name`, and `description` only for each item.
 - Derive the list from the current task's `implement.md`; do not include sibling task work.
 - Local-only projects may skip this file.
+- Hub team projects may skip this file when `implement.md` has clear checklist items.
 
-When `task.py start` runs in a Hub team project, the built-in `after_start` hook uploads this file with:
+When `task.py start` runs in a Hub team project, the built-in `after_start` hook uploads the override file or derived checklist with:
 
 ```bash
 suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort
@@ -480,11 +481,16 @@ Then it marks the Hub task as started.
 
 #### 1.5 Activate task `[required · once]`
 
-After artifact review, flip the task status to `in_progress`:
+After planning artifact review, prepare Hub-bound tasks and then flip the task status to `in_progress`:
 
 ```bash
+suncode hub plan-ready --task current   # Hub-bound tasks only
 python3 ./.suncode/scripts/task.py start <task-dir>
 ```
+
+`suncode hub plan-ready` submits planning artifacts, submits structured subtasks from `subtasks.json` or `implement.md`, and runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
+
+If Hub returns plan review comments or start-review status after `plan-ready`, inspect them with `suncode hub pull-review --task current`. Do not run `suncode hub review` during planning; that command is for post-implementation code review rounds.
 
 For lightweight tasks, `prd.md` can be enough. For complex tasks, `prd.md`, `design.md`, and `implement.md` must exist and be reviewed before start. On sub-agent-dispatch platforms, `implement.jsonl` and `check.jsonl` must both have real curated entries before start. Runtime consumers tolerate missing or seed-only manifests for compatibility, but that tolerance is not a planning-ready state.
 

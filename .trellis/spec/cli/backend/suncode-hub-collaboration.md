@@ -302,6 +302,12 @@ Authorization: Bearer <token>
 }
 ```
 
+`download.url` can be either an external object-storage URL or a Hub system API
+URL under the resolved `hub.apiBaseUrl`. When it is under the Hub API base URL,
+the CLI must send the login session JWT as `Authorization: Bearer <token>`.
+When it is an external object-storage URL, the CLI must not attach the Hub JWT
+unless Hub explicitly includes an authorization header in `download.headers`.
+
 ### 3. 契约
 
 Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`：
@@ -357,7 +363,9 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
 | 配置缺失、登录缺失或登录过期 | 与其他 Hub 命令一样抛出配置/鉴权错误 |
 | 服务请求失败或超时 | fail closed，不更新 manifest |
 | bundle path 是绝对路径、空路径或包含 `..` | 拒绝 bundle，不写文件 |
-| 文件缺少 MinIO download URL，或下载文本 hash/size 不匹配 | 拒绝 bundle，不写文件 |
+| 文件缺少 download URL，或下载文本 hash/size 不匹配 | 拒绝 bundle，不写文件 |
+| `download.url` 属于 Hub 系统接口 | 使用 `suncode hub login` session JWT 发送 `Authorization: Bearer <token>` |
+| `download.url` 属于外部对象存储域名 | 不自动发送 Hub JWT，避免把登录 token 泄露给对象存储 |
 | Hub 更新或删除了本地改过的 Hub-managed spec | 执行 Hub 结果；删除前保存旧内容 |
 | 存在 local-only spec | 报告它，不阻塞、不删除 |
 | `spec-deletions keep` 目标不在 `.suncode/spec/local/**` | 抛出面向用户的错误 |
@@ -366,6 +374,8 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
 
 - 正例：`pull-spec` 收到全量 bundle 后，覆盖过期的 Hub-managed 文件、删除远端已删除文件、写入删除候选，并更新 `.suncode/.runtime/hub-specs.json`。
 - 正例：本地 `.suncode/spec/local/debugging.md` 被报告为 local-only，但不阻塞 Hub 任务继续。
+- 正例：Hub 返回 `/api/v1/.../specs/files/...` 这类系统接口下载地址时，CLI 下载 spec 文件会带 `Authorization: Bearer <login-token>`。
+- 正例：Hub 返回 MinIO/S3 预签名地址时，CLI 不会把 Hub login token 加到对象存储请求上。
 - 正例：`pull-spec --json` 展示 revision、local-only 和 deletion candidates；
   `<hub-state>` 不展示 spec 摘要，只提示 Hub 是否可用于当前 workflow。
 - 基线：没有历史 spec manifest 时，第一次 bundle 写入所有远端文件，同时保留无关 local-only 文件。
@@ -380,6 +390,8 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
   - 使用远端内容覆盖已变化的 Hub-managed spec。
   - 删除本地权威路径前，把被 Hub 删除的 Hub-managed spec 保存成 deletion candidate。
   - 报告 local-only spec，且不阻塞、不删除。
+  - Hub 系统接口下载地址会带 login JWT。
+  - 外部对象存储下载地址不会带 Hub JWT。
   - 配置/登录缺失、服务失败、非法路径、hash/size 不匹配时，不写成功 manifest。
 - `spec-deletions` 命令测试：
   - `list` 返回 pending/kept/discarded 候选。
@@ -734,6 +746,105 @@ await requestAgentHubJson(
 This keeps `/api/agent-hub` routing explicit and gives knowledge-specific
 timeout/error messages without duplicating the agent-hub protocol code.
 
+## Scenario: Hub Plan-Ready Orchestration And Debug Logging
+
+### 1. Scope / Trigger
+
+- Trigger: CLI code that prepares a Hub-bound planning task for start by running
+  plan submission, structured subtask submission, and start preflight.
+- Applies to `packages/cli/src/commands/hub/workflow.ts`,
+  `index.ts`, `submissions.ts`, `lifecycle.ts`, `client.ts`, upload helpers,
+  and Hub command tests.
+
+### 2. Signatures
+
+CLI command:
+
+```text
+suncode hub plan-ready [--task <task>] [--task-json <path>] [--force] [--confirm-unapproved-review] [--debug]
+```
+
+Debug environment:
+
+```text
+SUNCODE_HUB_DEBUG_PLAN_READY=1
+SUNCODE_HUB_DEBUG_PLAN_READY=true
+```
+
+### 3. Contracts
+
+- `plan-ready` owns the high-level sequence:
+  `submit-plan -> submit-subtasks -> preflight-start`.
+- Debug logging is opt-in only. It is enabled by `--debug` or
+  `SUNCODE_HUB_DEBUG_PLAN_READY=1|true`.
+- Debug logs must include the current plan-ready step, HTTP method, sanitized
+  request URL, response status, and the step that failed.
+- Debug logs must not include authorization headers, login tokens, raw request
+  bodies, artifact contents, passwords, or signed URL query strings. URLs with
+  query strings must redact the query as `?[redacted]`.
+- When a network request throws before a response exists, debug mode should
+  rethrow a user-facing error that includes the method and sanitized URL, e.g.:
+
+```text
+plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-start: fetch failed
+```
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| `--debug` or `SUNCODE_HUB_DEBUG_PLAN_READY=1|true` | Print plan-ready step and request diagnostics |
+| Debug disabled | Preserve normal concise command output; do not print request diagnostics |
+| Request returns an HTTP response | Log `request <METHOD> <URL> -> HTTP <status>` |
+| Request throws before response | Log the failing request and rethrow with method + sanitized URL |
+| URL has query parameters | Log path plus `?[redacted]`, not the raw query string |
+| Headers or body contain secrets | Do not log headers or bodies |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `suncode hub plan-ready --task current --debug` shows that
+  `preflight-start` failed while calling
+  `/api/v1/projects/{projectId}/tasks/{remoteTaskId}/preflight-start`.
+- Good: a signed upload URL is logged without its query string.
+- Base: without `--debug`, `plan-ready` behaves exactly like the normal
+  high-level command and only prints the final command result or top-level
+  error.
+- Bad: a generic `Error: fetch failed` gives no failing step or URL.
+- Bad: debug logs print `Authorization`, JWTs, artifact contents, or signed URL
+  query parameters.
+
+### 6. Tests Required
+
+- Function-level command test for `hubPlanReady` with debug enabled:
+  - logs step start/success/failure lines
+  - logs method and sanitized URL for preflight
+  - rethrows a network failure with method and sanitized URL
+- Existing plan-ready success and stop-before-preflight tests must continue to
+  pass without debug logging requirements.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+console.error("fetch failed");
+console.error(headers.authorization);
+console.error(uploadUrl);
+```
+
+This hides the failing request context and leaks secrets or signed URL query
+parameters.
+
+#### Correct
+
+```ts
+logger(`[hub plan-ready] request POST ${sanitizeDebugUrl(url)}`);
+throw new Error(`plan-ready request failed: POST ${sanitizeDebugUrl(url)}: ${message}`);
+```
+
+This gives enough context to debug routing and connectivity while keeping
+credentials out of logs.
+
 ## Scenario: Structured Subtask Sync
 
 ### 1. Scope / Trigger
@@ -895,6 +1006,7 @@ CLI command:
 
 ```text
 suncode hub review [--task <task>] [--task-json <path>] [--provider engineer]
+suncode hub pull-review [--task <task>] [--task-json <path>] [--cursor <cursor>]
 ```
 
 Hub writes:
@@ -920,11 +1032,19 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `hub:review-status:{remoteTaskId}:{status}:{payloadHash}`.
 - `payloadHash` must be derived from the exact status body passed to
   `requestJson`; otherwise the same key can be reused with a different body.
+- `suncode hub review` is the post-implementation code review workflow. It
+  must not be described in workflow prompts or bundled skill descriptions as
+  the command for checking plan approval, plan comments, or start-review state.
+- Plan-stage Hub comments/status after `suncode hub plan-ready` are read with
+  `suncode hub pull-review --task current`. Hub-bound prompt allowed-actions
+  should expose `plan-ready pull-review finish`, not a bare `review` action that
+  can be confused with the code-review provider flow.
 
 ### 4. Validation & Error Matrix
 
 | Condition | Behavior |
 | --- | --- |
+| AI needs plan approval/comments after `plan-ready` | Use `pull-review`; do not trigger the code review provider |
 | Previous review artifacts were deleted but `hub-manifest.json` has `lastReviewRound = 1` | Next review is round 2 |
 | Same task enters `in_review` again in a later review run | Status patch uses a different idempotency key because `updatedAt` changed |
 | Review summary missing when submitting review artifacts | Throw `Review submission requires a review summary.` |
@@ -938,8 +1058,13 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `hub:submit-review:*:2:*` key.
 - Good: Two separate review runs patch `in_review`; both use distinct
   idempotency keys because their payloads have distinct `updatedAt` values.
+- Good: After `plan-ready`, workflow text tells the AI to inspect Hub plan
+  comments/status with `suncode hub pull-review --task current`.
 - Base: Fresh Hub-bound task with no manifest and no review artifacts starts at
   round 1.
+- Bad: `<hub-state>` or a bundled skill exposes a bare `review` action during
+  planning, causing the AI to call `suncode hub review` instead of
+  `pull-review`.
 - Bad: Round calculation scans only `reviews/` and ignores
   `manifest.lastReviewRound`.
 - Bad: Status patch key is only `hub:review-status:{remoteTaskId}:{status}`
@@ -956,6 +1081,9 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   uploaded.
 - Existing completion-gate tests must still prove approved reviews bind to the
   current diff/head.
+- Hub state prompt tests must prove Hub-bound allowed actions mention
+  `pull-review` for Hub comments/status and do not expose the old
+  `submit-plan review` sequence.
 
 ### 7. Wrong vs Correct
 

@@ -6,6 +6,7 @@ import { createHubApiClient } from "./client.js";
 import { HubConfigError, resolveHubConfig } from "./config.js";
 import { isHubSessionExpired, getHubSession } from "./auth.js";
 import { resolveTaskJsonPath, readHubTask } from "./task.js";
+import { pendingSyncCount } from "./sync-queue.js";
 import type { FetchLike, HubTaskContext } from "./types.js";
 
 export type HubOnOff = "on" | "off";
@@ -54,6 +55,9 @@ export interface HubStateResult {
     taskId?: string;
     reason?: string;
   };
+  sync?: {
+    pendingSyncCount: number;
+  };
 }
 
 export interface HubStateOptions {
@@ -80,7 +84,7 @@ export async function hubState(
       requireAuth: false,
     });
   } catch (error) {
-    const result = stateResult({
+    const result = stateResult(cwd, {
       summary: {
         hub: "on",
         config: "invalid",
@@ -99,7 +103,7 @@ export async function hubState(
   }
 
   if (!config.enabled) {
-    const result = stateResult({
+    const result = stateResult(cwd, {
       summary: {
         hub: "off",
         config: "off",
@@ -118,7 +122,7 @@ export async function hubState(
 
   const session = getHubSession(config.apiBaseUrl, { homeDir: options.homeDir });
   if (!session) {
-    const result = stateResult({
+    const result = stateResult(cwd, {
       project: {
         projectId: config.projectId,
         apiBaseUrl: config.apiBaseUrl,
@@ -141,7 +145,7 @@ export async function hubState(
   }
 
   if (isHubSessionExpired(session, now)) {
-    const result = stateResult({
+    const result = stateResult(cwd, {
       project: {
         projectId: config.projectId,
         apiBaseUrl: config.apiBaseUrl,
@@ -189,7 +193,7 @@ export async function hubState(
       ),
     );
     const hasWork = work.availableCount > 0;
-    const result = stateResult({
+    const result = stateResult(cwd, {
       project: {
         projectId: authedConfig.projectId,
         apiBaseUrl: authedConfig.apiBaseUrl,
@@ -214,7 +218,7 @@ export async function hubState(
     writeHubStateCache(cwd, result);
     return result;
   } catch (error) {
-    const result = stateResult({
+    const result = stateResult(cwd, {
       project: {
         projectId: config.projectId,
         apiBaseUrl: config.apiBaseUrl,
@@ -247,7 +251,32 @@ export function printHubState(result: HubStateResult): void {
   console.log(`service: ${result.summary.service}`);
   console.log(`work: ${result.summary.work}`);
   console.log(`current task: ${result.summary.currentTask}`);
+  if ((result.sync?.pendingSyncCount ?? 0) > 0) {
+    console.log(`pending sync: ${result.sync?.pendingSyncCount}`);
+  }
   console.log(`next: ${result.nextAction}`);
+}
+
+export function formatHubStatePrompt(result: HubStateResult): string {
+  if (result.summary.hub === "off") {
+    return "<hub-state>hub:off; use local workflow unless user asks for Hub</hub-state>";
+  }
+
+  const hubCode = promptHubCode(result);
+  const currentTask = result.currentTask?.state ?? result.summary.currentTask;
+  const lines = [
+    "<hub-state>",
+    `hub:${hubCode}`,
+    "workflow:primary",
+    `hub-task:${currentTask}`,
+    `work:${promptWorkSummary(result)}`,
+    ...promptPendingSyncLines(result),
+    `allowed:${promptAllowedActions(hubCode, currentTask)}`,
+    `blocked:${promptBlockedReason(hubCode, result)}`,
+    ...promptDoNotLines(hubCode, currentTask),
+    "</hub-state>",
+  ];
+  return lines.join("\n");
 }
 
 export function classifyHubTaskState(task: HubTaskContext): {
@@ -275,6 +304,70 @@ export function classifyHubTaskState(task: HubTaskContext): {
     state: "local-only",
     reason: "task.json has no meta.hub.requirementId or remoteTaskId",
   };
+}
+
+function promptHubCode(result: HubStateResult): string {
+  if (result.summary.config !== "ok") {
+    return result.summary.config === "invalid" ? "config-error" : "off";
+  }
+  if (result.summary.login !== "ok") {
+    return result.summary.login === "missing" || result.summary.login === "expired"
+      ? "not-login"
+      : "unknown";
+  }
+  if (result.summary.service !== "ok") {
+    return "server-error";
+  }
+  return result.summary.hub === "on" ? "ok" : "unknown";
+}
+
+function promptWorkSummary(result: HubStateResult): string {
+  const count = result.work?.availableCount;
+  if (typeof count === "number") {
+    return count > 0 ? `${count} available` : "none";
+  }
+  return result.summary.work;
+}
+
+function promptPendingSyncLines(result: HubStateResult): string[] {
+  const count = result.sync?.pendingSyncCount ?? 0;
+  return count > 0 ? [`pending-sync:${count}`] : [];
+}
+
+function promptAllowedActions(
+  hubCode: string,
+  currentTask: HubCurrentTaskState,
+): string {
+  if (hubCode !== "ok") return "none";
+  if (currentTask === "hub-bound") {
+    return "intake sync plan-ready pull-review finish";
+  }
+  if (currentTask === "hub-pending") {
+    return "sync";
+  }
+  return "intake";
+}
+
+function promptBlockedReason(hubCode: string, result: HubStateResult): string {
+  if (hubCode === "ok") return "none";
+  if (hubCode === "config-error") return "config-invalid";
+  if (hubCode === "not-login") return `login-${result.summary.login}`;
+  if (hubCode === "server-error") return "service-unavailable";
+  if (hubCode === "off") return "hub-off";
+  return "unknown";
+}
+
+function promptDoNotLines(
+  hubCode: string,
+  currentTask: HubCurrentTaskState,
+): string[] {
+  if (hubCode !== "ok") {
+    return ["do-not:hub-workflow"];
+  }
+  if (currentTask === "local-only") {
+    return ["do-not:submit-plan submit-completion mark-started"];
+  }
+  return [];
 }
 
 function readCurrentTaskState(
@@ -339,11 +432,15 @@ function extractWorkItems(value: unknown): Record<string, unknown>[] {
 }
 
 function stateResult(
+  cwd: string,
   input: Omit<HubStateResult, "version" | "refreshedAt">,
 ): HubStateResult {
   return {
     version: 1,
     refreshedAt: new Date().toISOString(),
+    sync: {
+      pendingSyncCount: pendingSyncCount(cwd),
+    },
     ...input,
   };
 }

@@ -1,0 +1,5 @@
+{"file":".trellis/spec/cli/backend/suncode-hub-collaboration.md","reason":"Primary Hub command, lifecycle, prompt, spec sync, and collaboration contract for this task."}
+{"file":".trellis/spec/cli/backend/platform-integration.md","reason":"Required for Python hook / OpenCode plugin platform boundary and hook injection behavior."}
+{"file":".trellis/spec/cli/backend/workflow-state-contract.md","reason":"Required when changing workflow-state and per-turn breadcrumb / lifecycle status behavior."}
+{"file":".trellis/spec/cli/backend/configurator-shared.md","reason":"Relevant if template/configurator shared helpers or generated platform files need updates."}
+{"file":".trellis/spec/cli/unit-test/conventions.md","reason":"Testing rules for new Hub command, hook, and parser coverage."}

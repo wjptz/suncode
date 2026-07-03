@@ -59,16 +59,12 @@ If the response contains a document payload, download that exact document into t
 suncode hub download-document --document-id "<documentId>" --task "<task-dir>"
 ```
 
-4. Submit project-level spec changes. Spec files live under `.suncode/spec/**` and are project assets, not task-owned documents:
+4. Submit Hub finish:
 
 ```bash
-suncode hub submit-spec --task <task-dir>
+suncode hub finish --task current
 ```
 
-5. Submit completion artifacts:
+`hub finish` checks required completion artifacts, enforces required review gate through the existing completion submission checks, submits project-level spec artifacts, and submits completion artifacts. If it reports missing files, create those files with evidence-based content and rerun the command.
 
-```bash
-suncode hub submit-completion --task <task-dir>
-```
-
-6. Only after Hub completion submission succeeds or is intentionally deferred, continue with the normal Suncode archive/finish workflow.
+5. Only after Hub completion submission succeeds or is intentionally deferred, continue with the normal Suncode archive/finish workflow.

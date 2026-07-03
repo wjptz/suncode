@@ -4,6 +4,7 @@ import type { Command } from "commander";
 import { hubCreateTask } from "./create-task.js";
 import { downloadHubDocument } from "./documents.js";
 import { hubInit } from "./init.js";
+import { hubIntake } from "./intake.js";
 import { hubKnowledgeSearch } from "./knowledge.js";
 import { preflightStart, markStarted } from "./lifecycle.js";
 import { hubLogin, hubLogout } from "./login.js";
@@ -21,7 +22,11 @@ import {
   listSpecDeletions,
   pullHubSpecs,
 } from "./specs.js";
-import { hubState, printHubState } from "./state.js";
+import {
+  formatHubStatePrompt,
+  hubState,
+  printHubState,
+} from "./state.js";
 import { hubStatus } from "./status.js";
 import {
   submitCompletion,
@@ -29,13 +34,33 @@ import {
   submitSpec,
   submitSubtasks,
 } from "./submissions.js";
+import { syncPending } from "./sync-queue.js";
 import { resolveTaskJsonPath } from "./task.js";
 import type { HubCommandResult } from "./types.js";
+import { hubFinish, hubPlanReady } from "./workflow.js";
 
 interface TaskOptions {
   taskJson?: string;
   task?: string;
   bestEffort?: boolean;
+}
+
+interface IntakeCliOptions {
+  list?: boolean;
+  auto?: boolean;
+  requirement?: string;
+  slug?: string;
+}
+
+interface PlanReadyCliOptions extends TaskOptions {
+  force?: boolean;
+  confirmUnapprovedReview?: boolean;
+  debug?: boolean;
+}
+
+interface FinishCliOptions extends TaskOptions {
+  force?: boolean;
+  file?: string[];
 }
 
 interface ReviewCliOptions extends TaskOptions {
@@ -65,6 +90,8 @@ interface HubLogoutCliOptions {
 
 interface HubStateCliOptions {
   json?: boolean;
+  prompt?: boolean;
+  hook?: boolean;
 }
 
 interface DownloadDocumentOptions extends TaskOptions {
@@ -164,6 +191,8 @@ export function registerHubCommand(program: Command): void {
     .command("state")
     .description("Show Hub config, login, service, work, and current task state")
     .option("--json", "print raw JSON")
+    .option("--prompt", "print compact AI prompt block")
+    .option("--hook", "format for workflow-state hooks")
     .action(async (opts: HubStateCliOptions) => {
       await runState(opts);
     });
@@ -180,6 +209,25 @@ export function registerHubCommand(program: Command): void {
     .description("Pull requirements assigned to the current developer")
     .action(async () => {
       await runJson(async () => pullRequirements());
+    });
+
+  hub
+    .command("intake")
+    .description("List or claim a Hub requirement into a local Suncode task")
+    .option("--list", "list available assigned requirements without creating a task")
+    .option("--auto", "claim only when exactly one requirement is available")
+    .option("--requirement <id>", "specific Hub requirement ID to claim")
+    .option("--slug <slug>", "optional ASCII slug suffix; HUB-REQ prefix is preserved")
+    .action(async (opts: IntakeCliOptions) => {
+      await run(async () =>
+        hubIntake({
+          cwd: process.cwd(),
+          list: opts.list,
+          auto: opts.auto,
+          requirementId: opts.requirement,
+          slug: opts.slug,
+        }),
+      );
     });
 
   hub
@@ -299,7 +347,7 @@ export function registerHubCommand(program: Command): void {
 
   hub
     .command("review")
-    .description("Run a Suncode Hub review round for the current task")
+    .description("Run a post-implementation Suncode Hub code review round for the current task")
     .option("--task-json <path>", "path to task.json")
     .option("--task <task>", "task directory/name fallback")
     .option(
@@ -349,6 +397,35 @@ export function registerHubCommand(program: Command): void {
               task: opts.task,
             }),
             force: opts.force,
+          }),
+        opts.bestEffort,
+      );
+    });
+
+  hub
+    .command("plan-ready")
+    .description("Submit plan, submit structured subtasks, and run Hub start preflight")
+    .option("--task-json <path>", "path to task.json")
+    .option("--task <task>", "task directory/name fallback", "current")
+    .option("--force", "submit even when local hashes match the manifest")
+    .option(
+      "--confirm-unapproved-review",
+      "record user confirmation to start before review approval",
+    )
+    .option("--debug", "print plan-ready step and request diagnostics")
+    .option("--best-effort", "warn and exit 0 on failure")
+    .action(async (opts: PlanReadyCliOptions) => {
+      await run(
+        async () =>
+          hubPlanReady({
+            taskJsonPath: resolveTaskJsonPath({
+              cwd: process.cwd(),
+              taskJsonPath: opts.taskJson,
+              task: opts.task ?? "current",
+            }),
+            force: opts.force,
+            confirmUnapprovedReview: opts.confirmUnapprovedReview,
+            debug: opts.debug,
           }),
         opts.bestEffort,
       );
@@ -428,6 +505,38 @@ export function registerHubCommand(program: Command): void {
               taskJsonPath: opts.taskJson,
               task: opts.task,
             }),
+            force: opts.force,
+          }),
+        opts.bestEffort,
+      );
+    });
+
+  hub
+    .command("finish")
+    .description("Submit final Hub spec and completion artifacts for the current task")
+    .option("--task-json <path>", "path to task.json")
+    .option("--task <task>", "task directory/name fallback", "current")
+    .option(
+      "--file <path>",
+      "explicit spec file to submit (repeatable)",
+      (value: string, previous: string[] | undefined) => [
+        ...(previous ?? []),
+        value,
+      ],
+      [] as string[],
+    )
+    .option("--force", "submit even when local hashes match the manifest")
+    .option("--best-effort", "warn and exit 0 on failure")
+    .action(async (opts: FinishCliOptions) => {
+      await run(
+        async () =>
+          hubFinish({
+            taskJsonPath: resolveTaskJsonPath({
+              cwd: process.cwd(),
+              taskJsonPath: opts.taskJson,
+              task: opts.task ?? "current",
+            }),
+            files: opts.file ?? [],
             force: opts.force,
           }),
         opts.bestEffort,
@@ -528,6 +637,13 @@ export function registerHubCommand(program: Command): void {
           cursor: opts.cursor,
         }),
       );
+    });
+
+  hub
+    .command("sync-pending")
+    .description("Retry queued best-effort Hub lifecycle sync failures")
+    .action(() => {
+      runSync(() => syncPending({ cwd: process.cwd() }));
     });
 
   hub
@@ -665,7 +781,9 @@ function runStructuredSync(action: () => unknown, asJson = false): void {
 async function runState(options: HubStateCliOptions): Promise<void> {
   try {
     const result = await hubState({ cwd: process.cwd() });
-    if (options.json) {
+    if (options.prompt || options.hook) {
+      console.log(formatHubStatePrompt(result));
+    } else if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
       printHubState(result);

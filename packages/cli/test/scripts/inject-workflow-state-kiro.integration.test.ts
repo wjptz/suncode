@@ -204,13 +204,9 @@ describeFn("Kiro hook output branch", () => {
     const fakeSuncode = writeFakeSuncode(
       tmp,
       [
-        "import json",
-        "print(json.dumps({",
-        '  "summary": {"hub": "on", "config": "ok", "login": "ok", "service": "ok", "work": "none", "currentTask": "none"},',
-        '  "project": {"projectId": "proj_123"},',
-        '  "work": {"availableCount": 0, "items": []},',
-        '  "nextAction": "继续当前本地工作流；没有待选 Hub 需求。"',
-        "}, ensure_ascii=False))",
+        "import sys",
+        'assert sys.argv[1:] == ["hub", "state", "--prompt", "--hook"], sys.argv',
+        'print("<hub-state>\\nhub:ok\\nworkflow:primary\\nhub-task:none\\nwork:none\\nallowed:intake\\nblocked:none\\n</hub-state>")',
         "",
       ].join("\n"),
     );
@@ -242,14 +238,8 @@ describeFn("Kiro hook output branch", () => {
       tmp,
       [
         "import json, sys",
-        'assert sys.argv[1:] == ["hub", "state", "--json"], sys.argv',
-        "print(json.dumps({",
-        '  "summary": {"hub": "on", "config": "ok", "login": "ok", "service": "ok", "work": "available", "currentTask": "none"},',
-        '  "project": {"projectId": "proj_123"},',
-        '  "work": {"availableCount": 2, "items": []},',
-        '  "spec": {"status": "synced-with-local-only", "policy": "remote_wins", "localRevision": "spec-rev-42", "localOnlyCount": 1, "deletionCandidateCount": 1},',
-        '  "nextAction": "实时状态显示有可接需求。"',
-        "}, ensure_ascii=False))",
+        'assert sys.argv[1:] == ["hub", "state", "--prompt", "--hook"], sys.argv',
+        'print("<hub-state>\\nhub:ok\\nworkflow:primary\\nhub-task:none\\nwork:2 available\\nallowed:intake\\nblocked:none\\n</hub-state>")',
         "",
       ].join("\n"),
     );
@@ -274,9 +264,8 @@ describeFn("Kiro hook output branch", () => {
     expect(context).toContain("workflow:primary");
     expect(context).toContain("hub-task:none");
     expect(context).toContain("work:2 available");
-    expect(context).toContain(
-      "Flow add-on: follow workflow-state; ask before pulling Hub work.",
-    );
+    expect(context).toContain("allowed:intake");
+    expect(context).toContain("blocked:none");
     expect(context).not.toContain("spec:");
     expect(context).not.toContain("local-only=1");
     expect(context).not.toContain("deleted=1");
@@ -293,13 +282,8 @@ describeFn("Kiro hook output branch", () => {
       tmp,
       [
         "import json, sys",
-        'assert sys.argv[1:] == ["hub", "state", "--json"], sys.argv',
-        "print(json.dumps({",
-        '  "summary": {"hub": "on", "config": "ok", "login": "ok", "service": "ok", "work": "available", "currentTask": "local-only"},',
-        '  "project": {"projectId": "proj_123"},',
-        '  "work": {"availableCount": 3, "items": []},',
-        '  "spec": {"status": "synced", "localRevision": "spec-rev-42"}',
-        "}, ensure_ascii=False))",
+        'assert sys.argv[1:] == ["hub", "state", "--prompt", "--hook"], sys.argv',
+        'print("<hub-state>\\nhub:ok\\nworkflow:primary\\nhub-task:local-only\\nwork:3 available\\nallowed:intake\\nblocked:none\\ndo-not:submit-plan submit-completion mark-started\\n</hub-state>")',
         "",
       ].join("\n"),
     );
@@ -323,13 +307,10 @@ describeFn("Kiro hook output branch", () => {
     expect(context).toContain("workflow:primary");
     expect(context).toContain("hub-task:local-only");
     expect(context).toContain(
-      "Flow add-on: follow workflow-state; keep this workflow task local unless the user asks to bind Hub work.",
-    );
-    expect(context).toContain(
-      "Do not: run submit-plan, submit-completion, or mark-started for this local task.",
+      "do-not:submit-plan submit-completion mark-started",
     );
     expect(context).not.toContain("spec:");
-    expect(context).not.toContain("Flow add-on: follow workflow-state; ask before pulling Hub work.");
+    expect(context).not.toContain("Flow add-on");
   });
 
   it("inject-workflow-state.py treats Hub state refresh failure as unavailable", () => {
@@ -339,7 +320,7 @@ describeFn("Kiro hook output branch", () => {
       tmp,
       [
         "import sys",
-        'assert sys.argv[1:] == ["hub", "state", "--json"], sys.argv',
+        'assert sys.argv[1:] == ["hub", "state", "--prompt", "--hook"], sys.argv',
         "sys.exit(7)",
         "",
       ].join("\n"),
@@ -407,7 +388,7 @@ describeFn("Kiro hook output branch", () => {
       tmp,
       [
         "import sys, time",
-        'assert sys.argv[1:] == ["hub", "state", "--json"], sys.argv',
+        'assert sys.argv[1:] == ["hub", "state", "--prompt", "--hook"], sys.argv',
         "time.sleep(1)",
         "",
       ].join("\n"),

@@ -92,6 +92,10 @@ def cmd_start(args: argparse.Namespace) -> int:
 
     task_json_path = full_path / FILE_TASK_JSON
 
+    if task_json_path.is_file():
+        if not run_task_hooks("before_start", task_json_path, repo_root, stop_on_failure=True):
+            return 1
+
     if not resolve_context_key():
         # Degraded mode: no session identity available.
         # Hook didn't inject SUNCODE_CONTEXT_ID (common on Windows + Claude Code,

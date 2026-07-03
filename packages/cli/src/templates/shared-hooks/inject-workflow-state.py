@@ -322,14 +322,7 @@ def build_hub_state(root: Path, config: dict, input_data: dict) -> str:
     current_task = _current_hub_task_state(root, input_data)
     hub = config.get("hub") if isinstance(config, dict) else None
     if not isinstance(hub, dict) or not _yaml_bool_true(hub.get("enabled")):
-        return _hub_state_block([
-            "hub:off",
-            "workflow:primary",
-            f"hub-task:{current_task}",
-            "reason:hub.enabled is not true or .suncode/config.yaml is missing",
-            "Flow add-on: follow workflow-state; Hub is disabled for this project.",
-            "Do not: run Hub-specific commands.",
-        ])
+        return "<hub-state>hub:off; use local workflow unless user asks for Hub</hub-state>"
 
     project_id = _string_value(hub.get("projectId"))
     if not project_id:
@@ -375,14 +368,14 @@ def build_hub_state(root: Path, config: dict, input_data: dict) -> str:
             "Do not: enter Hub workflow until login is ok.",
         ])
 
-    live_state, refresh_error = _refresh_hub_state_via_cli(root, input_data)
-    if live_state is None:
+    live_prompt, refresh_error = _refresh_hub_state_via_cli(root, input_data)
+    if live_prompt is None:
         return _hub_unavailable_block(
             current_task,
             refresh_error or "Hub state refresh failed",
         )
 
-    return _format_live_hub_state(live_state, current_task)
+    return live_prompt
 
 
 def _format_live_hub_state(state: dict, fallback_current_task: str) -> str:
@@ -426,13 +419,13 @@ def _hub_unavailable_block(current_task: str, reason: str) -> str:
 
 def _refresh_hub_state_via_cli(
     root: Path, input_data: dict
-) -> tuple[dict | None, str | None]:
+) -> tuple[str | None, str | None]:
     command = _suncode_cli_command()
     if command is None:
         return None, "Hub state refresh failed: suncode command not found"
     try:
         completed = subprocess.run(
-            [*command, "hub", "state", "--json"],
+            [*command, "hub", "state", "--prompt", "--hook"],
             cwd=str(root),
             capture_output=True,
             text=True,
@@ -447,13 +440,10 @@ def _refresh_hub_state_via_cli(
         return None, "Hub state refresh failed"
     if completed.returncode != 0:
         return None, "Hub state refresh failed"
-    try:
-        parsed = json.loads(completed.stdout)
-    except (json.JSONDecodeError, ValueError):
+    prompt = completed.stdout.strip()
+    if not prompt.startswith("<hub-state>") or "</hub-state>" not in prompt:
         return None, "Hub state refresh failed"
-    if not isinstance(parsed, dict):
-        return None, "Hub state refresh failed"
-    return parsed, None
+    return prompt, None
 
 
 def _hub_state_hook_timeout_seconds() -> float:

@@ -105,16 +105,7 @@ function buildHubState(ctx, input = null) {
   const currentTask = getCurrentHubTaskState(ctx, input)
   const hub = config && typeof config === "object" ? config.hub : null
   if (!hub || typeof hub !== "object" || hub.enabled !== true) {
-    return [
-      "<hub-state>",
-      "hub:off",
-      "workflow:primary",
-      `hub-task:${currentTask}`,
-      "reason:hub.enabled is not true or .suncode/config.yaml is missing",
-      "Flow add-on: follow workflow-state; Hub is disabled for this project.",
-      "Do not: run Hub-specific commands.",
-      "</hub-state>",
-    ].join("\n")
+    return "<hub-state>hub:off; use local workflow unless user asks for Hub</hub-state>"
   }
 
   const projectId = stringValue(hub.projectId)
@@ -171,36 +162,7 @@ function buildHubState(ctx, input = null) {
       refreshed.error || "Hub state refresh failed",
     )
   }
-  return formatLiveHubState(refreshed.state, currentTask)
-}
-
-function formatLiveHubState(state, fallbackCurrentTask) {
-  const summary = state && typeof state === "object" && state.summary && typeof state.summary === "object"
-    ? state.summary
-    : {}
-  const current = state && typeof state === "object" && state.currentTask && typeof state.currentTask === "object"
-    ? state.currentTask
-    : {}
-  const hub = stringValue(summary.hub) || "unknown"
-  const config = stringValue(summary.config) || "unknown"
-  const login = stringValue(summary.login) || "unknown"
-  const service = stringValue(summary.service) || "unknown"
-  const work = stringValue(summary.work) || "unknown"
-  const currentTask =
-    stringValue(current.state) ||
-    stringValue(summary.currentTask) ||
-    fallbackCurrentTask
-  const hubCode = hubStatusCode(hub, config, login, service)
-  const workCount = workAvailableCount(state)
-  const lines = [
-    `hub:${hubCode}`,
-    "workflow:primary",
-    `hub-task:${currentTask}`,
-    `work:${workSummary(state, work)}`,
-    hubFlowLine(hubCode, currentTask, workCount),
-  ]
-  lines.push(...hubDoNotLines(hubCode, currentTask))
-  return hubStateBlock(lines)
+  return refreshed.state
 }
 
 function hubUnavailableBlock(currentTask, reason) {
@@ -220,7 +182,7 @@ function refreshHubStateViaCli(ctx, input = null) {
   const env = { ...process.env, SUNCODE_HOOKS: "0" }
   const contextKey = ctx.getContextKey(input)
   if (contextKey) env.SUNCODE_CONTEXT_ID = contextKey
-  const result = spawnSync(cli, ["hub", "state", "--json"], {
+  const result = spawnSync(cli, ["hub", "state", "--prompt", "--hook"], {
     cwd: ctx.directory,
     env,
     encoding: "utf-8",
@@ -236,13 +198,9 @@ function refreshHubStateViaCli(ctx, input = null) {
   if (result.status !== 0) {
     return { state: null, error: "Hub state refresh failed" }
   }
-  try {
-    const parsed = JSON.parse(result.stdout || "")
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return { state: parsed, error: null }
-    }
-  } catch {
-    // Invalid CLI JSON means the hook cannot trust the state.
+  const prompt = String(result.stdout || "").trim()
+  if (prompt.startsWith("<hub-state>") && prompt.includes("</hub-state>")) {
+    return { state: prompt, error: null }
   }
   return { state: null, error: "Hub state refresh failed" }
 }
@@ -336,61 +294,6 @@ function readJson(filePath) {
   } catch {
     return null
   }
-}
-
-function hubStatusCode(hub, config, login, service) {
-  if (hub === "off") return "off"
-  if (config !== "ok") return config === "unknown" ? "unknown" : "config-error"
-  if (login !== "ok") return login === "unknown" ? "unknown" : "not-login"
-  if (service !== "ok") return service === "unknown" ? "unknown" : "server-error"
-  return hub === "on" ? "ok" : "unknown"
-}
-
-function workAvailableCount(state) {
-  const work = state && typeof state === "object" ? state.work : null
-  const count = work && typeof work === "object" ? work.availableCount : null
-  return Number.isInteger(count) ? count : null
-}
-
-function workSummary(state, fallback) {
-  const count = workAvailableCount(state)
-  if (count !== null) return count > 0 ? `${count} available` : "none"
-  return fallback
-}
-
-function hubFlowLine(code, currentTask, workCount) {
-  if (code === "off") return "Flow add-on: follow workflow-state; Hub is disabled for this project."
-  if (code === "config-error") {
-    return "Flow add-on: follow workflow-state; ask user to run `suncode hub init` only if Hub work is needed."
-  }
-  if (code === "not-login") {
-    return "Flow add-on: follow workflow-state; ask user to run `suncode hub login` only if Hub work is needed."
-  }
-  if (code === "server-error") {
-    return "Flow add-on: follow workflow-state; treat Hub as unavailable until `suncode hub state` is ok."
-  }
-  if (currentTask === "local-only") {
-    return "Flow add-on: follow workflow-state; keep this workflow task local unless the user asks to bind Hub work."
-  }
-  if (["hub-bound", "hub-pending"].includes(currentTask)) {
-    return "Flow add-on: follow workflow-state; Hub lifecycle commands are allowed for this Hub task."
-  }
-  if (workCount !== null && workCount > 0) {
-    return "Flow add-on: follow workflow-state; ask before pulling Hub work."
-  }
-  return "Flow add-on: follow workflow-state; keep using the active local flow unless user asks for Hub work."
-}
-
-function hubDoNotLines(code, currentTask) {
-  if (["off", "config-error", "not-login", "server-error"].includes(code)) {
-    return ["Do not: use Hub-specific workflows."]
-  }
-  if (currentTask === "local-only") {
-    return [
-      "Do not: run submit-plan, submit-completion, or mark-started for this local task.",
-    ]
-  }
-  return []
 }
 
 function normalizeApiBaseUrl(value) {

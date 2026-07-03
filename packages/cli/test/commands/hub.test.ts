@@ -12,11 +12,16 @@ import {
   resolveHubConfig,
 } from "../../src/commands/hub/config.js";
 import { hubInit } from "../../src/commands/hub/init.js";
+import { hubIntake } from "../../src/commands/hub/intake.js";
 import { hubKnowledgeSearch } from "../../src/commands/hub/knowledge.js";
 import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
 import { pullLatestReview } from "../../src/commands/hub/pull.js";
 import { hubSkillPull, hubSkillPush } from "../../src/commands/hub/skills.js";
-import { hubState } from "../../src/commands/hub/state.js";
+import {
+  formatHubStatePrompt,
+  hubState,
+  type HubStateResult,
+} from "../../src/commands/hub/state.js";
 import {
   discardSpecDeletion,
   keepSpecDeletion,
@@ -46,6 +51,8 @@ import {
   submitSpec,
   submitSubtasks,
 } from "../../src/commands/hub/submissions.js";
+import { syncPending } from "../../src/commands/hub/sync-queue.js";
+import { hubFinish, hubPlanReady } from "../../src/commands/hub/workflow.js";
 import { hubReview } from "../../src/commands/hub/review.js";
 import {
   HubTaskError,
@@ -221,7 +228,7 @@ function createMockFetch(): {
         },
         uploads: (payload.artifacts ?? []).map((artifact) => ({
           path: artifact.path,
-          uploadUrl: `https://minio.example.test/upload/${artifact.path}`,
+          uploadUrl: `https://hub.example.test/api/v1/projects/proj_123/artifact-upload-sessions/UPLOAD-9001/uploads/${artifact.path}`,
           method: "PUT",
           headers: { "Content-Type": artifact.contentType },
           objectRef: {
@@ -272,6 +279,15 @@ function createMockFetch(): {
       });
     }
 
+    if (method === "POST" && String(url).endsWith("/preflight-start")) {
+      return jsonResponse({
+        preflight: {
+          status: "ok",
+          policy: "confirm",
+        },
+      });
+    }
+
     if (String(url).endsWith("/subtasks")) {
       return jsonResponse({
         submission: {
@@ -300,6 +316,20 @@ function createMockFetch(): {
           status: "planning",
           createdAt: "2026-06-30T12:00:00Z",
         },
+      });
+    }
+
+    if (method === "GET" && String(url).includes("/requirements?")) {
+      return jsonResponse({
+        requirements: [
+          {
+            id: "REQ-1001",
+            title: "登录状态识别",
+            description: "识别用户登录状态。",
+            revision: 7,
+            status: "ready",
+          },
+        ],
       });
     }
 
@@ -576,6 +606,43 @@ describe("hub init login logout state", () => {
       "utf-8",
     );
     expect(cache).toContain('"hub": "off"');
+  });
+
+  it("state includes the pending Hub sync queue count", async () => {
+    writeProjectConfig(tmpDir, "hub:\n  enabled: false\n");
+    const runtimeDir = path.join(tmpDir, ".suncode", ".runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runtimeDir, "hub-sync-queue.jsonl"),
+      [
+        JSON.stringify({
+          taskJsonPath: "/tmp/task-1.json",
+          event: "after_start",
+          command: "suncode hub mark-started",
+          error: "failed",
+          attempt: 1,
+          firstFailedAt: "2026-07-03T00:00:00.000Z",
+          lastFailedAt: "2026-07-03T00:00:00.000Z",
+          nextRetryAt: "2026-07-03T00:00:00.000Z",
+        }),
+        JSON.stringify({
+          taskJsonPath: "/tmp/task-2.json",
+          event: "after_archive",
+          command: "suncode hub submit-completion",
+          error: "failed",
+          attempt: 1,
+          firstFailedAt: "2026-07-03T00:00:00.000Z",
+          lastFailedAt: "2026-07-03T00:00:00.000Z",
+          nextRetryAt: "2026-07-03T00:00:00.000Z",
+        }),
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await hubState({ cwd: tmpDir, homeDir });
+
+    expect(result.sync?.pendingSyncCount).toBe(2);
   });
 
   it("state reports missing login before service probing", async () => {
@@ -1039,14 +1106,73 @@ describe("hub spec sync", () => {
     expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
       authorization: "Bearer login-token",
     });
-    expect(fetch).toHaveBeenCalledWith(
-      "https://minio.example.test/download/index",
-      expect.objectContaining({ method: "GET" }),
+    const minioIndexCall = fetch.mock.calls.find(
+      ([url]) => String(url) === "https://minio.example.test/download/index",
     );
-    expect(fetch).toHaveBeenCalledWith(
-      "https://minio.example.test/download/new",
-      expect.objectContaining({ method: "GET" }),
+    const minioNewCall = fetch.mock.calls.find(
+      ([url]) => String(url) === "https://minio.example.test/download/new",
     );
+    expect(minioIndexCall?.[1]?.method).toBe("GET");
+    expect(minioNewCall?.[1]?.method).toBe("GET");
+    expect(minioIndexCall?.[1]?.headers ?? {}).not.toMatchObject({
+      authorization: "Bearer login-token",
+    });
+    expect(minioNewCall?.[1]?.headers ?? {}).not.toMatchObject({
+      authorization: "Bearer login-token",
+    });
+  });
+
+  it("pull-spec adds the Hub JWT when the spec download URL is a Hub system API", async () => {
+    const remoteText = "# Quality\n";
+    const downloadUrl =
+      "https://hub.example.test/api/v1/projects/proj_123/specs/files/quality-guidelines";
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) === downloadUrl) {
+        expect(init?.headers).toMatchObject({
+          authorization: "Bearer login-token",
+        });
+        return textResponse(remoteText);
+      }
+      return jsonResponse({
+        revision: "spec-rev-system-download",
+        files: [
+          {
+            path: "mchs-op/backend/quality-guidelines.md",
+            sha256: hashText(remoteText),
+            download: {
+              url: downloadUrl,
+              method: "GET",
+            },
+          },
+        ],
+      });
+    });
+
+    const result = await pullHubSpecs({ cwd: tmpDir, homeDir, fetch });
+
+    expect(result.status).toBe("updated");
+    expect(fetch).toHaveBeenCalledWith(
+      downloadUrl,
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer login-token",
+        }),
+      }),
+    );
+    expect(
+      fs.readFileSync(
+        path.join(
+          tmpDir,
+          ".suncode",
+          "spec",
+          "mchs-op",
+          "backend",
+          "quality-guidelines.md",
+        ),
+        "utf-8",
+      ),
+    ).toBe(remoteText);
   });
 
   it("pull-spec fails closed without writing success manifest when bundle hashes are invalid", async () => {
@@ -1083,6 +1209,44 @@ describe("hub spec sync", () => {
         path.join(tmpDir, ".suncode", "spec", "cli", "backend", "index.md"),
       ),
     ).toBe(false);
+  });
+
+  it("pull-spec includes the download URL in failures when debug logging is enabled", async () => {
+    const downloadUrl =
+      "https://minio.example.test/download/private?X-Amz-Signature=debug";
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url) === downloadUrl) {
+        return textResponse("unauthorized", 401);
+      }
+      return jsonResponse({
+        revision: "spec-rev-401",
+        files: [
+          {
+            path: "mchs-op/backend/quality-guidelines.md",
+            download: {
+              url: downloadUrl,
+              method: "GET",
+            },
+          },
+        ],
+      });
+    });
+    const previousDebug = process.env.SUNCODE_HUB_DEBUG_DOWNLOAD_URL;
+    process.env.SUNCODE_HUB_DEBUG_DOWNLOAD_URL = "1";
+
+    try {
+      await expect(
+        pullHubSpecs({ cwd: tmpDir, homeDir, fetch }),
+      ).rejects.toThrow(
+        `Hub spec download failed for .suncode/spec/mchs-op/backend/quality-guidelines.md: HTTP 401; download URL: ${downloadUrl}`,
+      );
+    } finally {
+      if (previousDebug === undefined) {
+        delete process.env.SUNCODE_HUB_DEBUG_DOWNLOAD_URL;
+      } else {
+        process.env.SUNCODE_HUB_DEBUG_DOWNLOAD_URL = previousDebug;
+      }
+    }
   });
 
   it("pull-spec fails closed when login is missing, service fails, or bundle paths are invalid", async () => {
@@ -1262,6 +1426,116 @@ describe("hub task resolution", () => {
   });
 });
 
+describe("hub state prompt", () => {
+  function state(partial: Partial<HubStateResult>): HubStateResult {
+    return {
+      version: 1,
+      refreshedAt: "2026-07-03T00:00:00.000Z",
+      summary: {
+        hub: "on",
+        config: "ok",
+        login: "ok",
+        service: "ok",
+        work: "none",
+        currentTask: "none",
+      },
+      message: "ok",
+      nextAction: "next",
+      ...partial,
+    };
+  }
+
+  it("formats Hub off as a one-line guardrail", () => {
+    const prompt = formatHubStatePrompt(
+      state({
+        summary: {
+          hub: "off",
+          config: "off",
+          login: "skipped",
+          service: "skipped",
+          work: "skipped",
+          currentTask: "none",
+        },
+      }),
+    );
+
+    expect(prompt).toBe(
+      "<hub-state>hub:off; use local workflow unless user asks for Hub</hub-state>",
+    );
+  });
+
+  it("formats local-only state with a compact do-not guardrail", () => {
+    const prompt = formatHubStatePrompt(
+      state({
+        summary: {
+          hub: "on",
+          config: "ok",
+          login: "ok",
+          service: "ok",
+          work: "available",
+          currentTask: "local-only",
+        },
+        work: { availableCount: 3, items: [] },
+        currentTask: { state: "local-only", taskId: "local", reason: "test" },
+      }),
+    );
+
+    expect(prompt).toContain("hub:ok");
+    expect(prompt).toContain("workflow:primary");
+    expect(prompt).toContain("hub-task:local-only");
+    expect(prompt).toContain("work:3 available");
+    expect(prompt).toContain("allowed:intake");
+    expect(prompt).toContain(
+      "do-not:submit-plan submit-completion mark-started",
+    );
+    expect(prompt).not.toContain("Flow add-on");
+  });
+
+  it("formats Hub-bound state with allowed high-level actions", () => {
+    const prompt = formatHubStatePrompt(
+      state({
+        summary: {
+          hub: "on",
+          config: "ok",
+          login: "ok",
+          service: "ok",
+          work: "available",
+          currentTask: "hub-bound",
+        },
+        work: { availableCount: 2, items: [] },
+        currentTask: { state: "hub-bound", taskId: "hub", reason: "test" },
+      }),
+    );
+
+    expect(prompt).toContain("hub:ok");
+    expect(prompt).toContain("hub-task:hub-bound");
+    expect(prompt).toContain("work:2 available");
+    expect(prompt).toContain("allowed:intake sync plan-ready pull-review finish");
+    expect(prompt).not.toContain(" submit-plan review ");
+    expect(prompt).toContain("blocked:none");
+  });
+
+  it("formats service failures as fail-closed", () => {
+    const prompt = formatHubStatePrompt(
+      state({
+        summary: {
+          hub: "on",
+          config: "ok",
+          login: "ok",
+          service: "unavailable",
+          work: "skipped",
+          currentTask: "hub-bound",
+        },
+        message: "Hub service unavailable: timeout",
+      }),
+    );
+
+    expect(prompt).toContain("hub:server-error");
+    expect(prompt).toContain("blocked:service-unavailable");
+    expect(prompt).toContain("do-not:hub-workflow");
+  });
+});
+
 describe("hub commands", () => {
   let tmpDir: string;
   let homeDir: string;
@@ -1297,12 +1571,77 @@ describe("hub commands", () => {
     const hub = program.commands.find((command) => command.name() === "hub");
     expect(hub?.commands.map((command) => command.name())).toEqual(
       expect.arrayContaining([
+        "finish",
+        "intake",
         "knowledge",
         "latest-review",
+        "plan-ready",
         "skill-pull",
         "skill-push",
+        "sync-pending",
       ]),
     );
+  });
+
+  it("sync-pending retries queued Hub sync failures and keeps remaining failures", () => {
+    const runtimeDir = path.join(tmpDir, ".suncode", ".runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    const queuePath = path.join(runtimeDir, "hub-sync-queue.jsonl");
+    fs.writeFileSync(
+      queuePath,
+      [
+        JSON.stringify({
+          taskJsonPath: "/tmp/task-ok.json",
+          event: "after_start",
+          command: "ok-command",
+          error: "failed",
+          attempt: 1,
+          firstFailedAt: "2026-07-03T00:00:00.000Z",
+          lastFailedAt: "2026-07-03T00:00:00.000Z",
+          nextRetryAt: "2026-07-03T00:00:00.000Z",
+        }),
+        JSON.stringify({
+          taskJsonPath: "/tmp/task-fail.json",
+          event: "after_archive",
+          command: "fail-command",
+          error: "failed",
+          attempt: 1,
+          firstFailedAt: "2026-07-03T00:00:00.000Z",
+          lastFailedAt: "2026-07-03T00:00:00.000Z",
+          nextRetryAt: "2026-07-03T00:00:00.000Z",
+        }),
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    const seen: string[] = [];
+
+    const result = syncPending({
+      cwd: tmpDir,
+      now: "2026-07-03T01:00:00.000Z",
+      runner: (entry) => {
+        seen.push(entry.command);
+        return entry.command === "ok-command"
+          ? { status: 0 }
+          : { status: 7, error: "still failing" };
+      },
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.message).toContain("retried 2");
+    expect(seen).toEqual(["ok-command", "fail-command"]);
+    const remaining = fs
+      .readFileSync(queuePath, "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject({
+      command: "fail-command",
+      attempt: 2,
+      error: "still failing",
+      lastFailedAt: "2026-07-03T01:00:00.000Z",
+    });
   });
 
   it("skill-push uploads every local .agents skill file through presign, PUT, and finalize", async () => {
@@ -1712,6 +2051,71 @@ describe("hub commands", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("hub intake does not auto-select when multiple requirements are available", async () => {
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "GET" && String(url).includes("/requirements?")) {
+        return jsonResponse({
+          requirements: [
+            { id: "REQ-1001", title: "登录状态识别", revision: 7 },
+            { id: "REQ-1002", title: "订单同步", revision: 3 },
+          ],
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${String(url)}`);
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(result.message).toContain("ambiguous");
+    expect(fs.existsSync(path.join(tmpDir, ".suncode", "tasks"))).toBe(false);
+  });
+
+  it("hub intake creates a HUB-REQ-prefixed local task for a single Chinese requirement", async () => {
+    const { fetch } = createMockFetch();
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+    });
+
+    expect(result.status).toBe("created");
+    const tasksDir = path.join(tmpDir, ".suncode", "tasks");
+    const taskDirName = fs
+      .readdirSync(tasksDir)
+      .find((name) => name.endsWith("hub-req-1001"));
+    expect(taskDirName).toBeDefined();
+    const taskJsonPath = path.join(tasksDir, taskDirName ?? "", "task.json");
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      id: string;
+      name: string;
+      title: string;
+      meta: { hub: Record<string, unknown> };
+    };
+    expect(taskJson.id).toBe("hub-req-1001");
+    expect(taskJson.name).toBe("HUB-REQ-1001 登录状态识别");
+    expect(taskJson.title).toBe("HUB-REQ-1001 登录状态识别");
+    expect(taskJson.meta.hub).toMatchObject({
+      requirementId: "REQ-1001",
+      requirementRevision: 7,
+      remoteTaskId: "TASK-2001",
+      bindingStatus: "bound",
+    });
+    expect(
+      fs.readFileSync(path.join(tasksDir, taskDirName ?? "", "prd.md"), "utf-8"),
+    ).toContain("识别用户登录状态。");
+  });
+
   it("reads the latest local review result without Hub config, auth, or network", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);
@@ -1823,7 +2227,7 @@ describe("hub commands", () => {
     expect(payload.title).toBe("登录状态识别");
   });
 
-  it("submit-plan uploads file bodies to MinIO and sends only object refs to Hub", async () => {
+  it("submit-plan uploads file bodies to Hub upload targets with login auth and sends only object refs to Hub", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);
     fs.writeFileSync(path.join(taskDir, "design.md"), "# Design\n", "utf-8");
@@ -1855,7 +2259,13 @@ describe("hub commands", () => {
     });
 
     expect(result.status).toBe("submitted");
-    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(3);
+    const uploadCalls = calls.filter((call) => call.method === "PUT");
+    expect(uploadCalls).toHaveLength(3);
+    expect(uploadCalls.map((call) => call.headers.authorization)).toEqual([
+      "Bearer login-token",
+      "Bearer login-token",
+      "Bearer login-token",
+    ]);
 
     const submission = calls.find((call) =>
       call.url.endsWith("/plan-submissions"),
@@ -1878,7 +2288,7 @@ describe("hub commands", () => {
       "utf-8",
     );
     expect(manifestText).not.toContain("uploadUrl");
-    expect(manifestText).not.toContain("minio.example.test/upload");
+    expect(manifestText).not.toContain("artifact-upload-sessions/UPLOAD-9001/uploads");
   });
 
   it("submit-spec treats .suncode/spec as project-level artifacts", async () => {
@@ -2059,6 +2469,276 @@ describe("hub commands", () => {
     });
     expect(second.status).toBe("skipped");
     expect(calls).toHaveLength(0);
+  });
+
+  it("submit-subtasks generates structured subtasks from implement.md when no override exists", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(
+      path.join(taskDir, "implement.md"),
+      [
+        "# Implementation",
+        "",
+        "- [ ] [P1] Persist retry policy: Add storage and validation for retry settings.",
+        "- [ ] [P2] Expose retry status: Show retry state in task status responses.",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await submitSubtasks({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(result.status).toBe("submitted");
+    const submission = calls.find((call) => call.url.endsWith("/subtasks"));
+    expect(JSON.parse(submission?.body ?? "{}")).toMatchObject({
+      subtasks: [
+        {
+          priority: "P1",
+          name: "Persist retry policy",
+          description: "Add storage and validation for retry settings.",
+        },
+        {
+          priority: "P2",
+          name: "Expose retry status",
+          description: "Show retry state in task status responses.",
+        },
+      ],
+    });
+  });
+
+  it("hub plan-ready submits plan, generated subtasks, and preflight start", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(path.join(taskDir, "design.md"), "# Design\n", "utf-8");
+    fs.writeFileSync(
+      path.join(taskDir, "implement.md"),
+      "- [ ] [P1] Persist retry policy: Add storage and validation.\n",
+      "utf-8",
+    );
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await hubPlanReady({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(calls.some((call) => call.url.endsWith("/plan-submissions"))).toBe(
+      true,
+    );
+    expect(calls.some((call) => call.url.endsWith("/subtasks"))).toBe(true);
+    expect(calls.some((call) => call.url.endsWith("/preflight-start"))).toBe(
+      true,
+    );
+  });
+
+  it("hub plan-ready debug logs the failing step and request URL", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(path.join(taskDir, "design.md"), "# Design\n", "utf-8");
+    fs.writeFileSync(
+      path.join(taskDir, "implement.md"),
+      "- [ ] [P1] Persist retry policy: Add storage and validation.\n",
+      "utf-8",
+    );
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const { fetch: baseFetch } = createMockFetch();
+    const trackedFetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/preflight-start")) {
+        throw new TypeError("fetch failed");
+      }
+      const response = await baseFetch(url, init);
+      if (String(url).endsWith("/artifact-upload-sessions")) {
+        const data = (await response.json()) as {
+          uploads: { uploadUrl: string }[];
+        };
+        data.uploads = data.uploads.map((upload) => ({
+          ...upload,
+          uploadUrl: `${upload.uploadUrl}?X-Amz-Signature=secret-query&token=jwt-token`,
+        }));
+        return jsonResponse(data);
+      }
+      return response;
+    });
+    const logs: string[] = [];
+
+    await expect(
+      hubPlanReady({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+        fetch: trackedFetch,
+        debug: true,
+        logger: (message) => logs.push(message),
+      }),
+    ).rejects.toThrow(
+      "plan-ready request failed: POST https://hub.example.test/api/v1/projects/proj_123/tasks/TASK-2001/preflight-start: fetch failed",
+    );
+
+    expect(logs).toContain("[hub plan-ready] start");
+    expect(logs).toContain("[hub plan-ready] step submit-plan start");
+    expect(logs).toContain("[hub plan-ready] step submit-subtasks ok: submitted");
+    expect(logs).toContain("[hub plan-ready] step preflight-start start");
+    expect(logs).toContain(
+      "[hub plan-ready] request POST https://hub.example.test/api/v1/projects/proj_123/tasks/TASK-2001/preflight-start",
+    );
+    expect(logs).toContain(
+      "[hub plan-ready] request POST https://hub.example.test/api/v1/projects/proj_123/tasks/TASK-2001/preflight-start failed: fetch failed",
+    );
+    expect(logs).toContain(
+      "[hub plan-ready] step preflight-start failed: plan-ready request failed: POST https://hub.example.test/api/v1/projects/proj_123/tasks/TASK-2001/preflight-start: fetch failed",
+    );
+    expect(logs).toContain(
+      "[hub plan-ready] request PUT https://hub.example.test/api/v1/projects/proj_123/artifact-upload-sessions/UPLOAD-9001/uploads/prd.md?[redacted]",
+    );
+    expect(logs.join("\n")).not.toContain("X-Amz-Signature");
+    expect(logs.join("\n")).not.toContain("secret-query");
+    expect(logs.join("\n")).not.toContain("jwt-token");
+  });
+
+  it("hub plan-ready stops before preflight when structured subtasks are missing", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(path.join(taskDir, "design.md"), "# Design\n", "utf-8");
+    fs.writeFileSync(path.join(taskDir, "implement.md"), "# Plan\n", "utf-8");
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await hubPlanReady({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(result.message).toContain(
+      "submit-subtasks skipped (No structured subtasks found.)",
+    );
+    expect(calls.some((call) => call.url.endsWith("/plan-submissions"))).toBe(
+      true,
+    );
+    expect(calls.some((call) => call.url.endsWith("/subtasks"))).toBe(false);
+    expect(calls.some((call) => call.url.endsWith("/preflight-start"))).toBe(
+      false,
+    );
+  });
+
+  it("hub finish reports missing completion artifacts before uploading", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    await expect(
+      hubFinish({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+        fetch,
+      }),
+    ).rejects.toThrow(
+      "Missing completion artifacts: implementation-summary.md, validation-summary.md, retrospective.md, reuse-assessment.md",
+    );
+  });
+
+  it("hub finish submits spec and completion artifacts", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.mkdirSync(path.join(tmpDir, ".suncode", "spec", "cli"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, ".suncode", "spec", "cli", "contract.md"),
+      "# Contract\n",
+      "utf-8",
+    );
+    for (const file of [
+      "implementation-summary.md",
+      "validation-summary.md",
+      "retrospective.md",
+      "reuse-assessment.md",
+    ]) {
+      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
+    }
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await hubFinish({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch: trackedFetch,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(calls.some((call) => call.url.endsWith("/spec-submissions"))).toBe(
+      true,
+    );
+    expect(
+      calls.some((call) => call.url.endsWith("/completion-submissions")),
+    ).toBe(true);
   });
 
   it("hub review creates a review round, syncs statuses, and submits review artifacts", async () => {

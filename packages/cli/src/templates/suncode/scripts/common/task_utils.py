@@ -12,9 +12,10 @@ Provides:
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import get_repo_root, get_tasks_dir
@@ -215,13 +216,86 @@ def resolve_task_dir(target_dir: str, repo_root: Path) -> Path:
 # Lifecycle Hooks
 # =============================================================================
 
-def run_task_hooks(event: str, task_json_path: Path, repo_root: Path) -> None:
+def _is_hub_preflight_command(command: str) -> bool:
+    return command.strip().startswith("suncode hub preflight-start ")
+
+
+def _is_hub_bound_task(task_json_path: Path) -> bool:
+    try:
+        task = json.loads(task_json_path.read_text(encoding="utf-8"))
+    except (OSError, IOError, json.JSONDecodeError):
+        return False
+
+    meta = task.get("meta")
+    if not isinstance(meta, dict):
+        return False
+    hub = meta.get("hub")
+    if not isinstance(hub, dict):
+        return False
+
+    remote_task_id = str(hub.get("remoteTaskId") or "").strip()
+    if not remote_task_id:
+        return False
+
+    binding_status = str(hub.get("bindingStatus") or "bound").strip().lower()
+    return binding_status not in ("pending", "failed", "unbound", "local-only", "local_only")
+
+
+def _should_skip_hook_command(event: str, command: str, task_json_path: Path) -> bool:
+    if event == "before_start" and _is_hub_preflight_command(command):
+        return not _is_hub_bound_task(task_json_path)
+    return False
+
+
+def _is_hub_sync_command(command: str) -> bool:
+    return command.strip().startswith("suncode hub ")
+
+
+def _record_hub_sync_failure(
+    repo_root: Path,
+    event: str,
+    task_json_path: Path,
+    command: str,
+    error: str,
+) -> None:
+    try:
+        runtime_dir = repo_root / ".suncode" / ".runtime"
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        entry = {
+            "taskJsonPath": str(task_json_path),
+            "event": event,
+            "command": command,
+            "error": error.strip() or "hook failed",
+            "attempt": 1,
+            "firstFailedAt": now,
+            "lastFailedAt": now,
+            "nextRetryAt": now,
+        }
+        queue_path = runtime_dir / "hub-sync-queue.jsonl"
+        with queue_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def run_task_hooks(
+    event: str,
+    task_json_path: Path,
+    repo_root: Path,
+    *,
+    stop_on_failure: bool = False,
+) -> bool:
     """Run lifecycle hooks for a task event.
 
     Args:
         event: Event name (e.g. "after_create").
         task_json_path: Absolute path to the task's task.json.
         repo_root: Repository root for cwd and config lookup.
+        stop_on_failure: Return False on the first hook failure.
+
+    Returns:
+        True if all non-skipped hooks succeeded, False if a blocking hook failed.
     """
     import os
     import subprocess
@@ -231,11 +305,13 @@ def run_task_hooks(event: str, task_json_path: Path, repo_root: Path) -> None:
 
     commands = get_hooks(event, repo_root)
     if not commands:
-        return
+        return True
 
     env = {**os.environ, "TASK_JSON_PATH": str(task_json_path)}
 
     for cmd in commands:
+        if _should_skip_hook_command(event, cmd, task_json_path):
+            continue
         try:
             result = subprocess.run(
                 cmd,
@@ -248,17 +324,41 @@ def run_task_hooks(event: str, task_json_path: Path, repo_root: Path) -> None:
                 errors="replace",
             )
             if result.returncode != 0:
+                level = "[ERROR]" if stop_on_failure else "[WARN]"
                 print(
-                    colored(f"[WARN] Hook failed ({event}): {cmd}", Colors.YELLOW),
+                    colored(f"{level} Hook failed ({event}): {cmd}", Colors.YELLOW),
                     file=sys.stderr,
                 )
                 if result.stderr.strip():
                     print(f"  {result.stderr.strip()}", file=sys.stderr)
+                if stop_on_failure:
+                    return False
+                if _is_hub_sync_command(cmd):
+                    _record_hub_sync_failure(
+                        repo_root,
+                        event,
+                        task_json_path,
+                        cmd,
+                        result.stderr.strip() or result.stdout.strip(),
+                    )
         except Exception as e:
+            level = "[ERROR]" if stop_on_failure else "[WARN]"
             print(
-                colored(f"[WARN] Hook error ({event}): {cmd} — {e}", Colors.YELLOW),
+                colored(f"{level} Hook error ({event}): {cmd} — {e}", Colors.YELLOW),
                 file=sys.stderr,
             )
+            if stop_on_failure:
+                return False
+            if _is_hub_sync_command(cmd):
+                _record_hub_sync_failure(
+                    repo_root,
+                    event,
+                    task_json_path,
+                    cmd,
+                    str(e),
+                )
+
+    return True
 
 
 # =============================================================================

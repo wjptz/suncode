@@ -810,14 +810,8 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     const fakeSuncode = writeFakeSuncodeExecutable(
       dir,
       [
-        'if (process.argv.slice(2).join(" ") !== "hub state --json") process.exit(9)',
-        "console.log(JSON.stringify({",
-        '  summary: { hub: "on", config: "ok", login: "ok", service: "ok", work: "available", currentTask: "none" },',
-        '  project: { projectId: "proj_123" },',
-        "  work: { availableCount: 2, items: [] },",
-        '  spec: { status: "synced-with-local-only", policy: "remote_wins", localRevision: "spec-rev-42", localOnlyCount: 1, deletionCandidateCount: 1 },',
-        '  nextAction: "实时状态显示有可接需求。",',
-        "}))",
+        'if (process.argv.slice(2).join(" ") !== "hub state --prompt --hook") process.exit(9)',
+        'console.log("<hub-state>\\nhub:ok\\nworkflow:primary\\nhub-task:none\\nwork:2 available\\nallowed:intake\\nblocked:none\\n</hub-state>")',
       ].join("\n"),
     );
 
@@ -837,9 +831,8 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
       expect(parts[0].text).toContain("workflow:primary");
       expect(parts[0].text).toContain("hub-task:none");
       expect(parts[0].text).toContain("work:2 available");
-      expect(parts[0].text).toContain(
-        "Flow add-on: follow workflow-state; ask before pulling Hub work.",
-      );
+      expect(parts[0].text).toContain("allowed:intake");
+      expect(parts[0].text).toContain("blocked:none");
       expect(parts[0].text).not.toContain("spec:");
       expect(parts[0].text).not.toContain("local-only=1");
       expect(parts[0].text).not.toContain("deleted=1");
@@ -856,13 +849,8 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     const fakeSuncode = writeFakeSuncodeExecutable(
       dir,
       [
-        'if (process.argv.slice(2).join(" ") !== "hub state --json") process.exit(9)',
-        "console.log(JSON.stringify({",
-        '  summary: { hub: "on", config: "ok", login: "ok", service: "ok", work: "available", currentTask: "local-only" },',
-        '  project: { projectId: "proj_123" },',
-        "  work: { availableCount: 3, items: [] },",
-        '  spec: { status: "synced", localRevision: "spec-rev-42" },',
-        "}))",
+        'if (process.argv.slice(2).join(" ") !== "hub state --prompt --hook") process.exit(9)',
+        'console.log("<hub-state>\\nhub:ok\\nworkflow:primary\\nhub-task:local-only\\nwork:3 available\\nallowed:intake\\nblocked:none\\ndo-not:submit-plan submit-completion mark-started\\n</hub-state>")',
       ].join("\n"),
     );
 
@@ -881,13 +869,10 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
       expect(parts[0].text).toContain("workflow:primary");
       expect(parts[0].text).toContain("hub-task:local-only");
       expect(parts[0].text).toContain(
-        "Flow add-on: follow workflow-state; keep this workflow task local unless the user asks to bind Hub work.",
-      );
-      expect(parts[0].text).toContain(
-        "Do not: run submit-plan, submit-completion, or mark-started for this local task.",
+        "do-not:submit-plan submit-completion mark-started",
       );
       expect(parts[0].text).not.toContain("spec:");
-      expect(parts[0].text).not.toContain("Flow add-on: follow workflow-state; ask before pulling Hub work.");
+      expect(parts[0].text).not.toContain("Flow add-on");
     });
   });
 
@@ -897,7 +882,7 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     const fakeSuncode = writeFakeSuncodeExecutable(
       dir,
       [
-        'if (process.argv.slice(2).join(" ") !== "hub state --json") process.exit(9)',
+        'if (process.argv.slice(2).join(" ") !== "hub state --prompt --hook") process.exit(9)',
         "process.exit(7)",
       ].join("\n"),
     );

@@ -42,6 +42,11 @@ interface RemoteSpecFile {
   content: string;
 }
 
+interface HubSpecDownloadAuth {
+  apiBaseUrl: string;
+  token?: string;
+}
+
 export interface HubSpecSyncManifest {
   version: 1;
   projectId?: string;
@@ -177,6 +182,10 @@ export async function pullHubSpecs(
       `/projects/${encodeURIComponent(config.projectId)}/specs/bundle`,
     ),
     options.fetch ?? fetch,
+    {
+      apiBaseUrl: config.apiBaseUrl,
+      ...(config.token ? { token: config.token } : {}),
+    },
   );
   const previousManifest = loadHubSpecSyncManifest(cwd);
   const remote = new Map<string, RemoteSpecFile>();
@@ -353,6 +362,7 @@ export async function discardSpecDeletion(
 async function normalizeBundle(
   value: unknown,
   fetchImpl: FetchLike,
+  auth: HubSpecDownloadAuth,
 ): Promise<{
   revision?: string;
   etag?: string;
@@ -374,7 +384,7 @@ async function normalizeBundle(
       : {}),
     files: await Promise.all(
       bundle.files.map((file) =>
-        normalizeBundleFile(file, bundle.basePath, fetchImpl),
+        normalizeBundleFile(file, bundle.basePath, fetchImpl, auth),
       ),
     ),
   };
@@ -384,6 +394,7 @@ async function normalizeBundleFile(
   value: unknown,
   basePath: string | undefined,
   fetchImpl: FetchLike,
+  auth: HubSpecDownloadAuth,
 ): Promise<RemoteSpecFile> {
   if (!value || typeof value !== "object") {
     throw new Error("Hub spec bundle file must be an object.");
@@ -394,6 +405,7 @@ async function normalizeBundleFile(
     logicalPath,
     normalizeSpecDownload(file.download, logicalPath),
     fetchImpl,
+    auth,
   );
   const sha256 = normalizeSha256(file.sha256);
   const actualSha256 = hashText(content);
@@ -438,17 +450,55 @@ async function downloadSpecFileContent(
   logicalPath: string,
   download: HubSpecBundleFileDownload,
   fetchImpl: FetchLike,
+  auth: HubSpecDownloadAuth,
 ): Promise<string> {
+  const headers = specDownloadHeaders(download, auth);
   const response = await fetchImpl(download.url, {
     method: download.method ?? "GET",
-    ...(download.headers ? { headers: download.headers } : {}),
+    ...(headers ? { headers } : {}),
   });
   if (!response.ok) {
+    const debugDownloadUrl =
+      process.env.SUNCODE_HUB_DEBUG_DOWNLOAD_URL ??
+      process.env.SUNCODE_HUB_DEBUG_MINIO_URL;
+    const downloadUrlDetail =
+      debugDownloadUrl === "1" || debugDownloadUrl?.toLowerCase() === "true"
+        ? `; download URL: ${download.url}`
+        : "";
     throw new Error(
-      `MinIO download failed for Hub spec ${logicalPath}: HTTP ${response.status}`,
+      `Hub spec download failed for ${logicalPath}: HTTP ${response.status}${downloadUrlDetail}`,
     );
   }
   return response.text();
+}
+
+function specDownloadHeaders(
+  download: HubSpecBundleFileDownload,
+  auth: HubSpecDownloadAuth,
+): Record<string, string> | undefined {
+  const headers = { ...(download.headers ?? {}) };
+  if (
+    auth.token &&
+    isHubSystemDownloadUrl(download.url, auth.apiBaseUrl) &&
+    !hasHeader(headers, "authorization")
+  ) {
+    headers.authorization = `Bearer ${auth.token}`;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+function isHubSystemDownloadUrl(downloadUrl: string, apiBaseUrl: string): boolean {
+  const normalizedDownloadUrl = downloadUrl.trim();
+  const normalizedApiBaseUrl = apiBaseUrl.replace(/\/+$/, "");
+  return (
+    normalizedDownloadUrl === normalizedApiBaseUrl ||
+    normalizedDownloadUrl.startsWith(`${normalizedApiBaseUrl}/`)
+  );
+}
+
+function hasHeader(headers: Record<string, string>, name: string): boolean {
+  const normalized = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === normalized);
 }
 
 function normalizeSpecLogicalPath(rawPath: unknown, basePath?: string): string {

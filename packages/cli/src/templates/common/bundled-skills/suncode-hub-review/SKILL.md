@@ -1,11 +1,17 @@
 ---
 name: suncode-hub-review
-description: "Run the Suncode Hub task review workflow when Hub review is enabled or required. Use when a Hub-bound task needs review, when review feedback has been fixed, or before finishing work in projects that require Hub review."
+description: "Run the post-implementation Suncode Hub code review workflow when Hub code review is enabled or required. Use after implementation, after code review feedback has been fixed, or before finishing work in projects that require code review."
 ---
 
 # Suncode Hub Review
 
-Use this skill when the current task is bound to Suncode Hub and review is enabled or required.
+Use this skill when the current task is bound to Suncode Hub, implementation has started, and code review is enabled or required.
+
+Do not use this skill to check plan approval, plan comments, or start-review status after `suncode hub plan-ready`. For plan-stage Hub comments/status, run:
+
+```bash
+suncode hub pull-review --task current
+```
 
 ## Rule
 
