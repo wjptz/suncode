@@ -541,15 +541,16 @@ if (result.status !== "updated") {
 
 这让同步保持确定、可审计，并由 CLI 负责。AI 只调度命令并遵循结构化结果。
 
-## Scenario: Hub Skill Package Pull/Push
+## Scenario: Hub Skill And Agent Package Pull/Push
 
 ### 1. Scope / Trigger
 
 - Trigger: CLI commands that upload local Suncode skill packages to Hub or
-  download Hub skill packages into the project.
+  download Hub skill packages into the project; same behavior for agent
+  packages.
 - Applies to `packages/cli/src/commands/hub/**` and Hub command tests.
-- Skill package sync is deterministic CLI behavior. It must not invoke AI, read
-  task review state, or modify Trellis/Suncode workflow artifacts.
+- Skill/agent package sync is deterministic CLI behavior. It must not invoke
+  AI, read task review state, or modify Trellis/Suncode workflow artifacts.
 
 ### 2. Signatures
 
@@ -558,25 +559,37 @@ CLI commands:
 ```text
 suncode hub skill-push <skill-name>
 suncode hub skill-pull <skill-name>
+suncode hub agent-push <agent-name>
+suncode hub agent-pull <agent-name>
 ```
 
-Skill package API base path:
+Package API base path:
 
 ```text
 {apiBaseUrl}/api/agent-hub
 ```
 
-Hub JSON APIs:
+Skill package Hub APIs:
 
 ```http
 POST /api/agent-hub/skill-packages/presign-upload
 POST /api/agent-hub/skill-packages/finalize-upload
 GET /api/agent-hub/projects/{project_key}/skill-packages
 GET /api/agent-hub/skill-packages/{id}
-GET /api/agent-hub/skill-package-files/{fileId}/content
+GET /api/agent-hub/files/skill-package-files/{fileId}/download
 ```
 
-Object storage upload:
+Agent package Hub APIs:
+
+```http
+POST /api/agent-hub/agent-packs/presign-upload
+POST /api/agent-hub/agent-packs/finalize-upload
+GET /api/agent-hub/projects/{project_key}/agent-packs
+GET /api/agent-hub/agent-packs/{id}
+GET /api/agent-hub/files/agent-pack-files/{fileId}/download
+```
+
+Hub-managed upload target:
 
 ```http
 PUT <presign.upload_url>
@@ -588,13 +601,20 @@ Local package path:
 
 ```text
 <cwd>/.agents/skills/<skill-name>/
+<cwd>/.suncode/agents/<agent-name>.md
 ```
 
 Required root file:
 
 ```text
 <cwd>/.agents/skills/<skill-name>/SKILL.md
+<cwd>/.suncode/agents/<agent-name>.md
 ```
+
+Agent pack upload maps the local single markdown file to Hub package
+`file_path: "AGENT.md"`, matching the current console/API main flow. The CLI
+may read `.suncode/agents/<agent-name>/AGENT.md` as a compatibility fallback,
+but the default generated Suncode agent layout is `.suncode/agents/<name>.md`.
 
 Command defaults:
 
@@ -605,75 +625,102 @@ Command defaults:
 | auth source | existing `suncode hub login` session |
 | content transfer | raw bytes / `Buffer` |
 
-`skill-push` request flow per file:
+`skill-push` / `agent-push` request flow per file:
 
-1. `POST /skill-packages/presign-upload` with `skill_name`,
-   `project_key`, `scope`, `file_path`, `file_size`, and `content_type`.
-2. `PUT presign.upload_url` with raw file bytes and presign response headers.
-3. `POST /skill-packages/finalize-upload` with `skill_name`,
-   `project_key`, `scope`, `file_path`, `file_size`, `content_type`,
-   `object_key`, and optional checksum metadata.
+1. `POST /skill-packages/presign-upload` or
+   `POST /agent-packs/presign-upload` with `skill_name` or `agent_name`,
+   `project_key`, `scope`, `file_path`, `size`, and `content_type`.
+2. `PUT presign.upload_url` with raw file bytes, presign response headers, and
+   the Hub login `Authorization` header when `upload_url` is under the
+   resolved Hub `/api/agent-hub/` base path.
+3. `POST /skill-packages/finalize-upload` or
+   `POST /agent-packs/finalize-upload` with `skill_name` or `agent_name`,
+   `project_key`, `scope`, `file_path`, `upload_session_id`, `upload_id`, and
+   `file_ref`.
 
-`skill-pull` flow:
+`presign.object_key` is only a backward-compatible response field. New CLI
+code must not require it, construct it, persist it, or send it back in finalize
+requests. Hub resolves the trusted uploaded object from
+`upload_session_id + upload_id + file_ref`.
+
+`skill-pull` / `agent-pull` flow:
 
 1. List packages for the resolved `project_key`.
-2. Select the package with `name === <skill-name>`, preferring
+2. Select the package with the requested name, preferring
    `scope === "project"` and matching `project_key` when the list has multiple
    same-name rows.
 3. Fetch package detail and file metadata.
-4. Download every file content endpoint as bytes.
-5. Write each file under `.agents/skills/<skill-name>/`, overwriting same-name
-   files without deleting unrelated local files.
+4. Download every file through the `/files/.../download` endpoint as bytes.
+5. Write skill files under `.agents/skills/<skill-name>/`, overwriting
+   same-name files without deleting unrelated local files.
+6. Write agent packages as the current single-file markdown layout at
+   `.suncode/agents/<agent-name>.md`.
 
 Relative paths stored in Hub must use POSIX `/`. Pull must reject empty paths,
-absolute paths, and any path that escapes the local skill directory after
-normalization.
+absolute paths, backslashes, `.` / `..` segments, and any path that escapes the
+local package directory after normalization.
+
+For the default single-file agent layout, pull must additionally reject
+directory paths, multi-file packages, and non-markdown file names before writing
+`.suncode/agents/<agent-name>.md`.
 
 ### 4. Validation & Error Matrix
 
 | Condition | Behavior |
 | --- | --- |
 | Hub disabled, missing config, missing login, or expired login | Same user-facing error behavior as other authenticated Hub commands |
-| `<skill-name>` is empty, `.`, `..`, or contains `/` or `\` | Reject before touching filesystem or Hub |
-| Local skill directory does not exist | `skill-push` throws a clear local package error |
-| Local root `SKILL.md` missing or not a file | `skill-push` throws a clear root manifest error |
+| `<skill-name>` / `<agent-name>` is empty, `.`, `..`, or contains `/` or `\` | Reject before touching filesystem or Hub |
+| Local skill package directory does not exist | `skill-push` throws a clear local package error |
+| Local skill root `SKILL.md` missing or not a file | `skill-push` throws a clear root manifest error |
+| Local agent markdown `.suncode/agents/<agent-name>.md` missing or not a file | `agent-push` throws a clear local agent markdown error |
 | Local collected file is empty or exceeds the per-file limit | Reject that package before upload |
+| Presign response misses `upload_url`, `upload_session_id`, `upload_id`, or `file_ref` | Throw before PUT/finalize so the CLI does not create an untrusted finalize payload |
 | Presign or finalize returns non-2xx | Throw `HubHttpError`; do not hide the Hub status |
-| Object storage `PUT` returns non-2xx | Throw an upload error without logging signed URL secrets |
-| Hub list has no matching package | `skill-pull` reports the package is missing |
-| Hub list has multiple indistinguishable same-name packages | `skill-pull` reports ambiguity instead of guessing |
-| Hub file path is empty, absolute, contains `..`, or resolves outside package dir | Reject before writing any pulled file |
+| Hub-managed `PUT` returns non-2xx | Throw an upload error without logging upload URLs or auth headers |
+| Hub list has no matching package | pull command reports the package is missing |
+| Hub list has multiple indistinguishable same-name packages | pull command reports ambiguity instead of guessing |
+| Hub file path is empty, absolute, contains `..`, backslashes, or resolves outside package dir | Reject before writing any pulled file |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: `skill-push code-review` uploads `SKILL.md` and
-  `references/rules.md` in deterministic order, using Hub auth only for
-  `/api/agent-hub` requests and not for object storage `PUT`.
+  `references/rules.md` in deterministic order, finalizing with
+  `upload_session_id`, `upload_id`, and `file_ref`.
+- Good: `agent-push reviewer-agent` reads
+  `.suncode/agents/reviewer-agent.md` and uploads it as Hub `AGENT.md` with
+  `agent_name` payload fields while reusing the same package sync machinery.
 - Good: `skill-pull code-review` overwrites existing
   `.agents/skills/code-review/SKILL.md` and writes nested reference files while
   preserving unrelated local files.
+- Good: `agent-pull reviewer-agent` overwrites existing
+  `.suncode/agents/reviewer-agent.md` and rejects traversal paths before
+  writing anything outside the Suncode agent root.
 - Base: A project with Hub enabled and a valid login can sync a project-scoped
-  skill package without any active task.
+  package without any active task.
 - Bad: The implementation reuses the existing `/api/v1` Hub client for
   `/api/agent-hub` endpoints.
 - Bad: Pull accepts `../escape.md` from Hub and writes outside
-  `.agents/skills/<skill-name>/`.
-- Bad: The CLI prints or persists `Authorization` headers or presigned upload
-  URLs.
+  `.agents/skills/<skill-name>/` or `.suncode/agents/`.
+- Bad: Finalize sends only `object_key`, or the CLI prints/persists
+  `Authorization` headers or Hub-managed upload URLs.
 
 ### 6. Tests Required
 
-- Command registration test proving `hub skill-push` and `hub skill-pull` are
-  registered under `suncode hub`.
+- Command registration test proving `hub skill-push`, `hub skill-pull`,
+  `hub agent-push`, and `hub agent-pull` are registered under `suncode hub`.
 - Push tests:
-  - local `.agents/skills/<skill-name>/SKILL.md` is required
-  - request order is presign, object storage `PUT`, finalize per file
-  - presign/finalize payloads include `skill_name`, `project_key`, `scope`,
-    `file_path`, `file_size`, and `content_type`
-  - Hub requests include login auth; object storage `PUT` does not include Hub
-    Authorization unless the presign response explicitly asks for headers
+  - local `.agents/skills/<skill-name>/SKILL.md` and
+    `.suncode/agents/<agent-name>.md` are required
+  - request order is presign, Hub-managed `PUT`, finalize per file
+  - presign payloads include `skill_name` or `agent_name`, `project_key`,
+    `scope`, `file_path`, `size`, and `content_type`
+  - finalize payloads include `upload_session_id`, `upload_id`, and `file_ref`
+    from the presign response, and do not require `object_key`
+  - Hub `/api/agent-hub` requests include login auth; upload `PUT` includes
+    login auth only when the upload URL is under the Hub `/api/agent-hub/`
+    base path
 - Pull tests:
-  - list, detail, and content endpoints are called in order
+  - list, detail, and `/files/.../download` endpoints are called in order
   - same-name local files are overwritten
   - nested relative paths are written under the package directory
   - path traversal from Hub metadata is rejected before any outside write
@@ -707,6 +754,34 @@ await requestAgentHubJson(
 
 This keeps `/api/agent-hub` isolated from the task/spec Hub client and avoids
 changing existing Hub workflow behavior.
+
+#### Wrong
+
+```ts
+await requestAgentHubJson(config, "POST", "/skill-packages/finalize-upload", {
+  skill_name: skillName,
+  file_path: file.relativePath,
+  object_key: presign.presign.object_key,
+});
+```
+
+This relies on a naked storage key that the v2 protocol treats as a
+compatibility-only field.
+
+#### Correct
+
+```ts
+await requestAgentHubJson(config, "POST", "/skill-packages/finalize-upload", {
+  skill_name: skillName,
+  file_path: file.relativePath,
+  upload_session_id: presign.presign.upload_session_id,
+  upload_id: presign.presign.upload_id,
+  file_ref: presign.presign.file_ref,
+});
+```
+
+This lets Hub resolve the trusted uploaded object from the upload session
+instead of accepting a client-supplied storage key.
 
 ## Scenario: Hub Knowledge Search
 

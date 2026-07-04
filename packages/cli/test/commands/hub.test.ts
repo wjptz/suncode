@@ -17,7 +17,12 @@ import { hubIntake } from "../../src/commands/hub/intake.js";
 import { hubKnowledgeSearch } from "../../src/commands/hub/knowledge.js";
 import { hubLogin, hubLogout } from "../../src/commands/hub/login.js";
 import { pullLatestReview } from "../../src/commands/hub/pull.js";
-import { hubSkillPull, hubSkillPush } from "../../src/commands/hub/skills.js";
+import {
+  hubAgentPull,
+  hubAgentPush,
+  hubSkillPull,
+  hubSkillPush,
+} from "../../src/commands/hub/skills.js";
 import {
   formatHubStatePrompt,
   hubState,
@@ -1606,6 +1611,8 @@ describe("hub commands", () => {
     const hub = program.commands.find((command) => command.name() === "hub");
     expect(hub?.commands.map((command) => command.name())).toEqual(
       expect.arrayContaining([
+        "agent-pull",
+        "agent-push",
         "finish",
         "intake",
         "knowledge",
@@ -1710,10 +1717,12 @@ describe("hub commands", () => {
         };
         return jsonResponse({
           presign: {
-            upload_url: `https://minio.example.test/upload/${payload.file_path}`,
+            upload_url: `https://hub.example.test/api/agent-hub/uploads/UPLOAD-${payload.file_path}/files/UPFILE-${payload.file_path}`,
             method: "PUT",
-            object_key: `skills/project/proj_123/code-review/${payload.file_path}`,
             headers: { "Content-Type": payload.content_type },
+            upload_session_id: `UPLOAD-${payload.file_path}`,
+            upload_id: `UPFILE-${payload.file_path}`,
+            file_ref: `MFILE-${payload.file_path}`,
           },
         });
       }
@@ -1748,7 +1757,10 @@ describe("hub commands", () => {
         "POST",
         "https://hub.example.test/api/agent-hub/skill-packages/presign-upload",
       ],
-      ["PUT", "https://minio.example.test/upload/SKILL.md"],
+      [
+        "PUT",
+        "https://hub.example.test/api/agent-hub/uploads/UPLOAD-SKILL.md/files/UPFILE-SKILL.md",
+      ],
       [
         "POST",
         "https://hub.example.test/api/agent-hub/skill-packages/finalize-upload",
@@ -1757,7 +1769,10 @@ describe("hub commands", () => {
         "POST",
         "https://hub.example.test/api/agent-hub/skill-packages/presign-upload",
       ],
-      ["PUT", "https://minio.example.test/upload/references/rules.md"],
+      [
+        "PUT",
+        "https://hub.example.test/api/agent-hub/uploads/UPLOAD-references/rules.md/files/UPFILE-references/rules.md",
+      ],
       [
         "POST",
         "https://hub.example.test/api/agent-hub/skill-packages/finalize-upload",
@@ -1773,14 +1788,132 @@ describe("hub commands", () => {
       content_type: "text/markdown",
     });
     expect(calls[1]?.headers["content-type"]).toBe("text/markdown");
+    expect(calls[1]?.headers.authorization).toBe("Bearer login-token");
     expect(calls[1]?.body).toBe("# Code Review\n");
     expect(JSON.parse(calls[2]?.body ?? "{}")).toEqual({
       scope: "project",
       project_key: "proj_123",
       skill_name: "code-review",
       file_path: "SKILL.md",
-      object_key: "skills/project/proj_123/code-review/SKILL.md",
+      upload_session_id: "UPLOAD-SKILL.md",
+      upload_id: "UPFILE-SKILL.md",
+      file_ref: "MFILE-SKILL.md",
     });
+  });
+
+  it("agent-push uploads the default .suncode agent markdown through presign, PUT, and finalize", async () => {
+    const agentsDir = path.join(tmpDir, ".suncode", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentsDir, "reviewer-agent.md"),
+      "# Reviewer\n",
+      "utf-8",
+    );
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      const body =
+        typeof init?.body === "string"
+          ? init.body
+          : init?.body === undefined
+            ? undefined
+            : Buffer.from(init.body as ArrayBuffer).toString("utf-8");
+      calls.push({ url: String(url), method, headers, body });
+
+      if (method === "PUT") {
+        return new Response(null, { status: 200 });
+      }
+      if (String(url).endsWith("/agent-packs/presign-upload")) {
+        const payload = JSON.parse(body ?? "{}") as {
+          file_path: string;
+          content_type: string;
+        };
+        return jsonResponse({
+          presign: {
+            upload_url: `https://hub.example.test/api/agent-hub/uploads/UPLOAD-${payload.file_path}/files/UPFILE-${payload.file_path}`,
+            method: "PUT",
+            headers: { "Content-Type": payload.content_type },
+            upload_session_id: `UPLOAD-${payload.file_path}`,
+            upload_id: `UPFILE-${payload.file_path}`,
+            file_ref: `MFILE-${payload.file_path}`,
+          },
+        });
+      }
+      if (String(url).endsWith("/agent-packs/finalize-upload")) {
+        return jsonResponse({
+          agent_package: {
+            id: 7,
+            scope: "project",
+            project_key: "proj_123",
+            name: "reviewer-agent",
+            file_count: 1,
+            files: [],
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${String(url)}`);
+    });
+
+    const result = await hubAgentPush({
+      cwd: tmpDir,
+      homeDir,
+      agentName: "reviewer-agent",
+      fetch,
+    });
+
+    expect(result).toEqual({
+      status: "submitted",
+      message: "agent package reviewer-agent uploaded (1 file(s)).",
+    });
+    expect(calls.map((call) => [call.method, call.url])).toEqual([
+      [
+        "POST",
+        "https://hub.example.test/api/agent-hub/agent-packs/presign-upload",
+      ],
+      [
+        "PUT",
+        "https://hub.example.test/api/agent-hub/uploads/UPLOAD-AGENT.md/files/UPFILE-AGENT.md",
+      ],
+      [
+        "POST",
+        "https://hub.example.test/api/agent-hub/agent-packs/finalize-upload",
+      ],
+    ]);
+    expect(calls[0]?.headers.authorization).toBe("Bearer login-token");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      scope: "project",
+      project_key: "proj_123",
+      agent_name: "reviewer-agent",
+      file_path: "AGENT.md",
+      size: Buffer.byteLength("# Reviewer\n"),
+      content_type: "text/markdown",
+    });
+    expect(calls[1]?.headers["content-type"]).toBe("text/markdown");
+    expect(calls[1]?.headers.authorization).toBe("Bearer login-token");
+    expect(calls[1]?.body).toBe("# Reviewer\n");
+    expect(JSON.parse(calls[2]?.body ?? "{}")).toEqual({
+      scope: "project",
+      project_key: "proj_123",
+      agent_name: "reviewer-agent",
+      file_path: "AGENT.md",
+      upload_session_id: "UPLOAD-AGENT.md",
+      upload_id: "UPFILE-AGENT.md",
+      file_ref: "MFILE-AGENT.md",
+    });
+  });
+
+  it("agent-push requires the default .suncode agent markdown file", async () => {
+    fs.mkdirSync(path.join(tmpDir, ".suncode", "agents"), { recursive: true });
+
+    await expect(
+      hubAgentPush({
+        cwd: tmpDir,
+        homeDir,
+        agentName: "broken-agent",
+        fetch: vi.fn(),
+      }),
+    ).rejects.toThrow(".suncode");
   });
 
   it("skill-push requires a local SKILL.md at the skill package root", async () => {
@@ -1848,13 +1981,13 @@ describe("hub commands", () => {
       }
       if (
         String(url) ===
-        "https://hub.example.test/api/agent-hub/skill-package-files/71/content"
+        "https://hub.example.test/api/agent-hub/files/skill-package-files/71/download"
       ) {
         return textResponse("# New\n");
       }
       if (
         String(url) ===
-        "https://hub.example.test/api/agent-hub/skill-package-files/72/content"
+        "https://hub.example.test/api/agent-hub/files/skill-package-files/72/download"
       ) {
         return textResponse("# Rules\n");
       }
@@ -1921,6 +2054,127 @@ describe("hub commands", () => {
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills", "escape.md"))).toBe(
       false,
     );
+  });
+
+  it("agent-pull downloads a Hub agent package into .suncode/agents and overwrites the default markdown file", async () => {
+    const agentsDir = path.join(tmpDir, ".suncode", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentsDir, "reviewer-agent.md"),
+      "# Old\n",
+      "utf-8",
+    );
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      calls.push({ url: String(url), method, headers });
+
+      if (
+        String(url) ===
+        "https://hub.example.test/api/agent-hub/projects/proj_123/agent-packs"
+      ) {
+        return jsonResponse({
+          agent_packages: [
+            {
+              id: 7,
+              scope: "project",
+              project_key: "proj_123",
+              name: "reviewer-agent",
+              file_count: 1,
+            },
+          ],
+        });
+      }
+      if (
+        String(url) === "https://hub.example.test/api/agent-hub/agent-packs/7"
+      ) {
+        return jsonResponse({
+          agent_package: {
+            id: 7,
+            scope: "project",
+            project_key: "proj_123",
+            name: "reviewer-agent",
+            file_count: 1,
+            files: [
+              { id: 71, relative_path: "AGENT.md", file_name: "AGENT.md" },
+            ],
+          },
+        });
+      }
+      if (
+        String(url) ===
+        "https://hub.example.test/api/agent-hub/files/agent-pack-files/71/download"
+      ) {
+        return textResponse("# New\n");
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${String(url)}`);
+    });
+
+    const result = await hubAgentPull({
+      cwd: tmpDir,
+      homeDir,
+      agentName: "reviewer-agent",
+      fetch,
+    });
+
+    expect(result).toEqual({
+      status: "downloaded",
+      message: "agent package reviewer-agent downloaded (1 file(s)).",
+    });
+    expect(
+      fs.readFileSync(path.join(agentsDir, "reviewer-agent.md"), "utf-8"),
+    ).toBe("# New\n");
+    expect(
+      calls.every(
+        (call) => call.headers.authorization === "Bearer login-token",
+      ),
+    ).toBe(true);
+  });
+
+  it("agent-pull rejects Hub file paths that would escape the local agent directory", async () => {
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/projects/proj_123/agent-packs")) {
+        return jsonResponse({
+          agent_packages: [
+            {
+              id: 7,
+              scope: "project",
+              project_key: "proj_123",
+              name: "bad",
+            },
+          ],
+        });
+      }
+      if (String(url).endsWith("/agent-packs/7")) {
+        return jsonResponse({
+          agent_package: {
+            id: 7,
+            name: "bad",
+            files: [
+              {
+                id: 71,
+                relative_path: "../escape.md",
+                file_name: "escape.md",
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${String(url)}`);
+    });
+
+    await expect(
+      hubAgentPull({
+        cwd: tmpDir,
+        homeDir,
+        agentName: "bad",
+        fetch,
+      }),
+    ).rejects.toThrow("Invalid agent package file path");
+    expect(
+      fs.existsSync(path.join(tmpDir, ".suncode", "agents", "escape.md")),
+    ).toBe(false);
   });
 
   it("knowledge searches the current Hub project knowledge base with compact AI-facing output and default top_k 3", async () => {

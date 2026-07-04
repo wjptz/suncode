@@ -15,7 +15,12 @@ import {
   syncRequirement,
 } from "./pull.js";
 import { hubReview } from "./review.js";
-import { hubSkillPull, hubSkillPush } from "./skills.js";
+import {
+  hubAgentPull,
+  hubAgentPush,
+  hubSkillPull,
+  hubSkillPush,
+} from "./skills.js";
 import {
   discardSpecDeletion,
   keepSpecDeletion,
@@ -616,6 +621,32 @@ export function registerHubCommand(program: Command): void {
         hubSkillPull({
           cwd: process.cwd(),
           skillName,
+        }),
+      );
+    });
+
+  hub
+    .command("agent-push")
+    .description("Upload a local .suncode agent markdown file to Suncode Hub")
+    .argument("<agent-name>", "agent name under .suncode/agents/<name>.md")
+    .action(async (agentName: string) => {
+      await run(async () =>
+        hubAgentPush({
+          cwd: process.cwd(),
+          agentName,
+        }),
+      );
+    });
+
+  hub
+    .command("agent-pull")
+    .description("Download a Suncode Hub agent package into .suncode/agents/")
+    .argument("<agent-name>", "agent name under .suncode/agents/<name>.md")
+    .action(async (agentName: string) => {
+      await run(async () =>
+        hubAgentPull({
+          cwd: process.cwd(),
+          agentName,
         }),
       );
     });
