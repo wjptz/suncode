@@ -20,7 +20,9 @@ Rebranded public repository, docs-site, and marketplace surfaces for Suncode; cr
 
 ### Main Changes
 
-(Add details)
+- `hub intake` now keeps Hub-authored specs synchronized as part of the intake flow instead of requiring a separate manual refresh in the normal path.
+- `hub finish` now treats Hub-backed tasks as bound-or-pending: already-bound tasks use the recorded remote task id, while requirement-backed pending tasks create/bind the Hub task before submitting completion.
+- Updated bundled Hub skills, CLI collaboration spec, Suncode workflow template, marketplace workflow text, and CLI tests so the documented workflow matches runtime behavior.
 
 ### Git Commits
 
@@ -32,7 +34,13 @@ Rebranded public repository, docs-site, and marketplace surfaces for Suncode; cr
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `pnpm exec vitest run test/commands/hub.test.ts` - 73 tests
+- [OK] `pnpm exec vitest run test/configurators/shared.test.ts` - 50 tests
+- [OK] `pnpm run typecheck`
+- [OK] `pnpm run lint`
+- [OK] `pnpm test` - 54 files / 1377 tests
+- [OK] `python3 .trellis/scripts/task.py validate .trellis/tasks/07-04-hub-slim-round2`
+- [OK] `node .gitnexus/run.cjs detect_changes --scope staged`
 
 ### Status
 
@@ -473,6 +481,40 @@ Implemented simplified Hub workflow orchestration: intake, plan-ready, start pre
 | Hash | Message |
 |------|---------|
 | `b1e8b4a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 15: Hub workflow 减负第二轮收口
+
+**Date**: 2026-07-04
+**Task**: Hub workflow 减负第二轮收口
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+完成 Hub intake spec 自动同步、finish 远端绑定语义、模板与 marketplace workflow 同步，并已通过 CLI 定向测试、全量测试、typecheck、lint 与 Trellis 校验。marketplace 子模块工作提交为 b794c99，主仓工作提交为 7bbe112。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7bbe112` | (see git log) |
 
 ### Testing
 
