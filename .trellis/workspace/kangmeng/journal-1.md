@@ -527,3 +527,37 @@ Implemented simplified Hub workflow orchestration: intake, plan-ready, start pre
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Hub skill 与 agent pack 上传下载接口
+
+**Date**: 2026-07-04
+**Task**: Hub skill 与 agent pack 上传下载接口
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+更新 Hub skill package v2 上传下载协议，新增 agent-push/agent-pull，并按默认 .suncode/agents/<name>.md 布局同步 agent pack。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cea5314` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
