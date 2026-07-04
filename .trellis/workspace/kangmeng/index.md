@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-07-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~563 | Active |
+| `journal-1.md` | ~597 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-07-04 | Hub task type routing | `83a7b8e` | `main` |
 | 16 | 2026-07-04 | Hub skill 与 agent pack 上传下载接口 | `cea5314` | `main` |
 | 15 | 2026-07-04 | Hub workflow 减负第二轮收口 | `7bbe112` | `main` |
 | 14 | 2026-07-03 | Hub workflow orchestration | `b1e8b4a` | `main` |

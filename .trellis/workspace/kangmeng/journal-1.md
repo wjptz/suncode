@@ -561,3 +561,37 @@ Implemented simplified Hub workflow orchestration: intake, plan-ready, start pre
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: Hub task type routing
+
+**Date**: 2026-07-04
+**Task**: Hub task type routing
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+Implemented Hub quick/standard/change task routing, quick upload-only plan flow, quick review skip, safer sourceTask handling, scoped Hub review prompt/output parsing, validation gates, templates, docs, tests, and marketplace workflow sync.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `83a7b8e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
