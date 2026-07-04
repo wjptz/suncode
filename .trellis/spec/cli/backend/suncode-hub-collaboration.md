@@ -82,6 +82,17 @@ hub:
   apiBaseUrl: null
   developerId: null
   startReviewPolicy: confirm
+  review:
+    enabled: false
+    provider: engineer
+    required: false
+    trigger: manual
+    unavailablePolicy: bypass
+    engineer:
+      command: engineer
+      args: ["run"]
+      timeoutSeconds: 900
+      saveRawOutput: true
 ```
 
 Resolution order:
@@ -186,6 +197,7 @@ Task display and language contract:
   - writes/replaces only the project `hub:` block
   - preserves unrelated project config
   - supports optional project `apiBaseUrl` override
+  - writes explicit review defaults without enabling or requiring review
 - Command tests for `hub login` / `hub logout`:
   - posts email/password to `/api/auth/login`
   - maps response `user.id` and `user.display_name` into the local auth session
@@ -1214,6 +1226,10 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
 - Review submission idempotency keys must use the review summary round that is
   sent in the payload:
   `hub:submit-review:{remoteTaskId}:{review.round}:{reviewBundleHash}`.
+- Review artifact upload must include only `reviews/round-NNN/prompt.md` and
+  `reviews/round-NNN/result.md`. Local `review.json`, `diff.patch`, and
+  `raw-output.md` remain local diagnostics/state files and must not be uploaded
+  to Hub as artifacts.
 - Status patch payloads include `updatedAt`, so the status idempotency key must
   include a payload discriminator:
   `hub:review-status:{remoteTaskId}:{status}:{payloadHash}`.
@@ -1265,7 +1281,8 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   - submission idempotency keys contain matching round numbers
   - all status patch idempotency keys are unique across the two runs
 - Existing review artifact tests must still prove only the target round is
-  uploaded.
+  uploaded, and only `prompt.md` / `result.md` are included in the upload
+  session.
 - Existing completion-gate tests must still prove approved reviews bind to the
   current diff/head.
 - Hub state prompt tests must prove Hub-bound allowed actions mention

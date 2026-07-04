@@ -579,6 +579,21 @@ describe("hub init login logout state", () => {
     );
     expect(projectConfig).toContain("session_commit_message: keep me");
     expect(projectConfig).toContain("projectId: proj_123");
+    expect(parseHubSection(projectConfig)).toMatchObject({
+      review: {
+        enabled: false,
+        provider: "engineer",
+        required: false,
+        trigger: "manual",
+        unavailablePolicy: "bypass",
+        engineer: {
+          command: "engineer",
+          args: ["run"],
+          timeoutSeconds: 900,
+          saveRawOutput: true,
+        },
+      },
+    });
     expect(projectConfig).not.toContain("token");
   });
 
@@ -888,7 +903,7 @@ describe("hub artifacts and hashing", () => {
     ]);
   });
 
-  it("collects review round artifacts as current-task review artifacts", () => {
+  it("collects only prompt and result as uploadable review artifacts", () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);
     const roundDir = path.join(taskDir, "reviews", "round-001");
@@ -918,11 +933,8 @@ describe("hub artifacts and hashing", () => {
     });
 
     expect(artifacts.map((artifact) => [artifact.path, artifact.type])).toEqual([
-      ["reviews/round-001/diff.patch", "review"],
       ["reviews/round-001/prompt.md", "review"],
-      ["reviews/round-001/raw-output.md", "review"],
       ["reviews/round-001/result.md", "review"],
-      ["reviews/round-001/review.json", "review"],
     ]);
   });
 
@@ -3525,10 +3537,16 @@ describe("hub commands", () => {
     const uploadSession = calls.find((call) =>
       call.url.endsWith("/artifact-upload-sessions"),
     );
-    expect(JSON.parse(uploadSession?.body ?? "{}")).toMatchObject({
+    const uploadSessionPayload = JSON.parse(uploadSession?.body ?? "{}") as {
+      artifacts?: { path: string }[];
+    };
+    expect(uploadSessionPayload).toMatchObject({
       submissionKind: "review",
       artifactScope: "current_task",
     });
+    expect(uploadSessionPayload.artifacts?.map((artifact) => artifact.path)).toEqual(
+      ["reviews/round-001/prompt.md", "reviews/round-001/result.md"],
+    );
     const reviewSubmission = calls.find((call) =>
       call.url.endsWith("/review-submissions"),
     );

@@ -9,7 +9,12 @@ import {
   saveGlobalHubConfig,
   type HubHomeOptions,
 } from "./auth.js";
-import type { HubCommandResult, StartReviewPolicy } from "./types.js";
+import { DEFAULT_HUB_REVIEW_CONFIG } from "./config.js";
+import type {
+  HubCommandResult,
+  HubReviewConfig,
+  StartReviewPolicy,
+} from "./types.js";
 
 export interface HubInitOptions extends HubHomeOptions {
   cwd?: string;
@@ -153,7 +158,9 @@ function renderHubBlock(options: {
   developerId?: string;
   apiBaseUrl?: string;
   startReviewPolicy: StartReviewPolicy;
+  review?: HubReviewConfig;
 }): string {
+  const review = options.review ?? DEFAULT_HUB_REVIEW_CONFIG;
   return [
     "hub:",
     "  enabled: true",
@@ -162,6 +169,17 @@ function renderHubBlock(options: {
     `  developerId: ${options.developerId ? yamlString(options.developerId) : "null"}`,
     ...(options.apiBaseUrl ? [`  apiBaseUrl: ${yamlString(options.apiBaseUrl)}`] : []),
     `  startReviewPolicy: ${options.startReviewPolicy}`,
+    "  review:",
+    `    enabled: ${review.enabled}`,
+    `    provider: ${review.provider}`,
+    `    required: ${review.required}`,
+    `    trigger: ${review.trigger}`,
+    `    unavailablePolicy: ${review.unavailablePolicy}`,
+    "    engineer:",
+    `      command: ${yamlString(review.engineer.command)}`,
+    `      args: ${JSON.stringify(review.engineer.args)}`,
+    `      timeoutSeconds: ${review.engineer.timeoutSeconds}`,
+    `      saveRawOutput: ${review.engineer.saveRawOutput}`,
     "  sync:",
     "    afterCreate: true",
     "    afterStart: true",

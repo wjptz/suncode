@@ -51,6 +51,20 @@ export interface ResolveHubConfigOptions {
   homeDir?: string;
 }
 
+export const DEFAULT_HUB_REVIEW_CONFIG: HubReviewConfig = {
+  enabled: false,
+  provider: "engineer",
+  required: false,
+  trigger: "manual",
+  unavailablePolicy: "bypass",
+  engineer: {
+    command: "engineer",
+    args: ["run"],
+    timeoutSeconds: 900,
+    saveRawOutput: true,
+  },
+};
+
 export function parseHubSection(content: string): HubSection {
   const lines = content.split("\n");
   const parsed: HubSection = {};
@@ -320,16 +334,23 @@ function parseStartReviewPolicy(value: string | undefined): StartReviewPolicy {
 
 function parseHubReviewConfig(value: HubReviewSection | undefined): HubReviewConfig {
   return {
-    enabled: value?.enabled ?? false,
+    enabled: value?.enabled ?? DEFAULT_HUB_REVIEW_CONFIG.enabled,
     provider: parseReviewProvider(value?.provider),
-    required: value?.required ?? false,
+    required: value?.required ?? DEFAULT_HUB_REVIEW_CONFIG.required,
     trigger: parseReviewTrigger(value?.trigger),
     unavailablePolicy: parseReviewUnavailablePolicy(value?.unavailablePolicy),
     engineer: {
-      command: value?.engineer?.command ?? "engineer",
-      args: value?.engineer?.args ?? ["run"],
-      timeoutSeconds: value?.engineer?.timeoutSeconds ?? 900,
-      saveRawOutput: value?.engineer?.saveRawOutput ?? true,
+      command:
+        value?.engineer?.command ??
+        DEFAULT_HUB_REVIEW_CONFIG.engineer.command,
+      args:
+        value?.engineer?.args ?? [...DEFAULT_HUB_REVIEW_CONFIG.engineer.args],
+      timeoutSeconds:
+        value?.engineer?.timeoutSeconds ??
+        DEFAULT_HUB_REVIEW_CONFIG.engineer.timeoutSeconds,
+      saveRawOutput:
+        value?.engineer?.saveRawOutput ??
+        DEFAULT_HUB_REVIEW_CONFIG.engineer.saveRawOutput,
     },
   };
 }

@@ -35,6 +35,8 @@ const COMPLETION_FILES: readonly {
   { file: "reuse-assessment.md", type: "reuse_assessment" },
 ];
 
+const REVIEW_UPLOAD_FILES = ["prompt.md", "result.md"] as const;
+
 export function collectPlanArtifacts(
   options: CollectArtifactsOptions,
 ): HubArtifact[] {
@@ -76,9 +78,17 @@ export function collectReviewArtifacts(
   const reviewDir = path.join(task.taskDir, "reviews", reviewRoundName(options.round));
   if (!fs.existsSync(reviewDir)) return [];
   return sortArtifacts(
-    listFiles(reviewDir).map((file) =>
-      artifactFromFile(toPosix(path.relative(task.taskDir, file)), "review", file),
-    ),
+    REVIEW_UPLOAD_FILES.flatMap((file) => {
+      const absolutePath = path.join(reviewDir, file);
+      if (!fs.existsSync(absolutePath)) return [];
+      return [
+        artifactFromFile(
+          toPosix(path.relative(task.taskDir, absolutePath)),
+          "review",
+          absolutePath,
+        ),
+      ];
+    }),
   );
 }
 
