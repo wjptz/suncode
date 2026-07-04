@@ -403,6 +403,7 @@ hub:
   developerId: 'dev_456'
   apiBaseUrl: "https://hub.example.test"
   startReviewPolicy: confirm
+  autoPullSpec: false
 `);
 
     expect(config).toEqual({
@@ -412,6 +413,7 @@ hub:
       developerId: "dev_456",
       apiBaseUrl: "https://hub.example.test",
       startReviewPolicy: "confirm",
+      autoPullSpec: false,
     });
   });
 
@@ -477,6 +479,7 @@ hub:
     expect(config.apiBaseUrl).toBe("https://hub.example.test");
     expect(config.apiBaseUrlSource).toBe("global");
     expect(config.token).toBe("login-token");
+    expect(config.autoPullSpec).toBe(true);
   });
 
   it("resolves hub review defaults without making review required by default", () => {
@@ -583,6 +586,7 @@ describe("hub init login logout state", () => {
     expect(projectConfig).toContain("session_commit_message: keep me");
     expect(projectConfig).toContain("projectId: proj_123");
     expect(parseHubSection(projectConfig)).toMatchObject({
+      autoPullSpec: true,
       review: {
         enabled: false,
         provider: "engineer",
@@ -598,6 +602,34 @@ describe("hub init login logout state", () => {
       },
     });
     expect(projectConfig).not.toContain("token");
+  });
+
+  it("init can disable automatic spec pull after intake", async () => {
+    const result = await hubInit({
+      cwd: tmpDir,
+      homeDir,
+      apiBaseUrl: "https://hub.example.test/",
+      projectId: "proj_123",
+      autoPullSpec: false,
+      yes: true,
+    });
+
+    expect(result.status).toBe("updated");
+    const projectConfig = fs.readFileSync(
+      path.join(tmpDir, ".suncode", "config.yaml"),
+      "utf-8",
+    );
+    expect(projectConfig).toContain("autoPullSpec: false");
+    expect(parseHubSection(projectConfig).autoPullSpec).toBe(false);
+    const resolved = resolveHubConfig({
+      cwd: tmpDir,
+      homeDir,
+      requireAuth: false,
+    });
+    expect(resolved).toMatchObject({
+      enabled: true,
+      autoPullSpec: false,
+    });
   });
 
   it("login stores a session by apiBaseUrl and logout removes only that session", async () => {
@@ -2776,6 +2808,37 @@ describe("hub commands", () => {
     ).toBe(true);
   });
 
+  it("hub intake skips automatic spec pull when disabled in config", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  autoPullSpec: false",
+        "",
+      ].join("\n"),
+    );
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.message).toContain("spec: auto-pull disabled");
+    expect(calls.some((call) => call.url.includes("/specs/bundle"))).toBe(
+      false,
+    );
+  });
+
   it("hub intake keeps the claimed task when spec sync fails", async () => {
     const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
       const method = init?.method ?? "GET";
@@ -3211,8 +3274,10 @@ describe("hub commands", () => {
       [
         "# Implementation",
         "",
-        "- [ ] [P1] Persist retry policy: Add storage and validation for retry settings.",
-        "- [ ] [P2] Expose retry status: Show retry state in task status responses.",
+        "## 实施清单",
+        "",
+        "     - [ ] [P1] Persist retry policy: Add storage and validation for retry settings.",
+        "     - [ ] [P2] Expose retry status: Show retry state in task status responses.",
         "",
       ].join("\n"),
       "utf-8",
@@ -3469,9 +3534,15 @@ describe("hub commands", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("hub finish reports missing completion artifacts before uploading", async () => {
+  it("hub finish uploads only the completion artifacts that are needed", async () => {
     const taskJsonPath = makeTask(tmpDir);
-    const { fetch } = createMockFetch();
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(
+      path.join(taskDir, "implementation-summary.md"),
+      "# 实施总结\n",
+      "utf-8",
+    );
+    const { calls, fetch } = createMockFetch();
     await hubCreateTask({
       cwd: tmpDir,
       homeDir,
@@ -3480,17 +3551,26 @@ describe("hub commands", () => {
       fetch,
     });
 
-    await expect(
-      hubFinish({
-        cwd: tmpDir,
-        homeDir,
-        taskJsonPath,
-        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
-        fetch,
-      }),
-    ).rejects.toThrow(
-      "Missing completion artifacts: implementation-summary.md, validation-summary.md, retrospective.md, reuse-assessment.md",
+    const result = await hubFinish({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    expect(result.status).toBe("updated");
+    const uploadSession = calls.find(
+      (call) =>
+        call.url.endsWith("/artifact-upload-sessions") &&
+        call.body?.includes('"submissionKind":"completion"'),
     );
+    const uploadPayload = JSON.parse(uploadSession?.body ?? "{}") as {
+      artifacts?: { path: string }[];
+    };
+    expect(uploadPayload.artifacts?.map((artifact) => artifact.path)).toEqual([
+      "implementation-summary.md",
+    ]);
   });
 
   it("hub finish submits spec and completion artifacts", async () => {
@@ -3572,13 +3652,6 @@ describe("hub commands", () => {
     taskJson.meta.hub.bindingStatus = "bound";
     taskJson.meta.hub.taskType = "quick";
     writeJson(taskJsonPath, taskJson);
-    for (const file of [
-      "implementation-summary.md",
-      "retrospective.md",
-      "reuse-assessment.md",
-    ]) {
-      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
-    }
     fs.writeFileSync(
       path.join(taskDir, "validation-summary.md"),
       "## 已执行验证\n- pnpm test test/commands/hub.test.ts：通过。\n",
@@ -3610,14 +3683,9 @@ describe("hub commands", () => {
     const uploadPayload = JSON.parse(uploadSession?.body ?? "{}") as {
       artifacts?: { path: string }[];
     };
-    expect(uploadPayload.artifacts?.map((artifact) => artifact.path).sort()).toEqual(
-      [
-        "implementation-summary.md",
-        "retrospective.md",
-        "reuse-assessment.md",
-        "validation-summary.md",
-      ],
-    );
+    expect(uploadPayload.artifacts?.map((artifact) => artifact.path)).toEqual([
+      "validation-summary.md",
+    ]);
   });
 
   it("quick hub finish rejects placeholder validation summaries before uploading", async () => {
@@ -3630,14 +3698,11 @@ describe("hub commands", () => {
     taskJson.meta.hub.bindingStatus = "bound";
     taskJson.meta.hub.taskType = "quick";
     writeJson(taskJsonPath, taskJson);
-    for (const file of [
-      "implementation-summary.md",
-      "validation-summary.md",
-      "retrospective.md",
-      "reuse-assessment.md",
-    ]) {
-      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
-    }
+    fs.writeFileSync(
+      path.join(taskDir, "validation-summary.md"),
+      "# validation-summary.md\n",
+      "utf-8",
+    );
 
     const { calls, fetch } = createMockFetch();
     await expect(
@@ -3650,6 +3715,31 @@ describe("hub commands", () => {
       }),
     ).rejects.toThrow(
       "Quick task validation-summary.md must record executed validation evidence or `未执行` with a reason.",
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("quick hub finish requires a validation summary before uploading", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    taskJson.meta.hub.taskType = "quick";
+    writeJson(taskJsonPath, taskJson);
+
+    const { calls, fetch } = createMockFetch();
+    await expect(
+      hubFinish({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+        fetch,
+      }),
+    ).rejects.toThrow(
+      "Quick task requires validation-summary.md with executed validation evidence or `未执行` with a reason.",
     );
     expect(calls).toHaveLength(0);
   });
@@ -4056,7 +4146,7 @@ describe("hub commands", () => {
       calls
         .filter((call) => call.method === "PATCH" && call.url.endsWith("/status"))
         .map((call) => (JSON.parse(call.body ?? "{}") as { status: string }).status),
-    ).toEqual(["in_review", "changes_requested"]);
+    ).toEqual(["in_review", "in_progress"]);
     const uploadSession = calls.find((call) =>
       call.url.endsWith("/artifact-upload-sessions"),
     );
@@ -4324,7 +4414,7 @@ describe("hub commands", () => {
     taskJson.meta.hub.remoteTaskId = "TASK-2001";
     taskJson.meta.hub.bindingStatus = "bound";
     writeJson(taskJsonPath, taskJson);
-    const { fetch } = createMockFetch();
+    const { calls, fetch } = createMockFetch();
 
     await hubReview({
       cwd: tmpDir,
@@ -4376,6 +4466,11 @@ describe("hub commands", () => {
     });
     expect(resultMd).toContain("最终审查通过。");
     expect(resultMd).not.toContain("示例结果，不应被采用。");
+    expect(
+      calls
+        .filter((call) => call.method === "PATCH" && call.url.endsWith("/status"))
+        .map((call) => (JSON.parse(call.body ?? "{}") as { status: string }).status),
+    ).toEqual(["in_review", "in_review"]);
   });
 
   it("hub review preserves large provider output beyond the default spawn buffer", async () => {

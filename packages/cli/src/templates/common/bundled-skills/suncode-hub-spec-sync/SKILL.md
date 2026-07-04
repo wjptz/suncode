@@ -1,6 +1,6 @@
 ---
 name: suncode-hub-spec-sync
-description: "在恢复 Suncode Hub 任务会话、用户要求手动刷新项目 spec、或 `hub intake` / `hub plan-ready` 输出显示 spec 同步失败需要重试时使用。日常 intake 流程已自动同步 spec，无需默认调用本 skill。"
+description: "在恢复 Suncode Hub 任务会话、用户要求手动刷新项目 spec、或 `hub intake` / `hub plan-ready` 输出显示 spec 同步失败需要重试时使用。日常 intake 流程默认已自动同步 spec；若项目配置 `hub.autoPullSpec: false`，可按需手动调用本 skill。"
 ---
 
 # Suncode Hub Spec 同步

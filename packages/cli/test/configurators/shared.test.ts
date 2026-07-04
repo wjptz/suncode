@@ -556,6 +556,21 @@ describe("resolveSkillsNeutral / resolveAllAsSkillsNeutral", () => {
     }
   });
 
+  it("shared brainstorm and update-spec skills require Simplified Chinese output", () => {
+    const neutral = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
+    const brainstorm = neutral.find((skill) => skill.name === "suncode-brainstorm");
+    const updateSpec = neutral.find((skill) => skill.name === "suncode-update-spec");
+
+    expect(brainstorm?.content).toContain("Language Requirement (Hard Requirement)");
+    expect(brainstorm?.content).toContain("Chinese is the first-priority language");
+    expect(brainstorm?.content).toContain("Simplified Chinese");
+    expect(brainstorm?.content).toContain("## 实施清单");
+    expect(brainstorm?.content).toContain("- [ ] [P1] 子任务名称: 子任务说明");
+    expect(updateSpec?.content).toContain("Language Requirement (Hard Requirement)");
+    expect(updateSpec?.content).toContain("Chinese is the first-priority language");
+    expect(updateSpec?.content).toContain("Simplified Chinese");
+  });
+
   it("resolveAllAsSkillsNeutral keeps shared common skills byte-identical to resolveSkillsNeutral", () => {
     const all = resolveAllAsSkillsNeutral(AI_TOOLS.codex.templateContext);
     const commonSkills = resolveSkillsNeutral(AI_TOOLS.codex.templateContext);
@@ -577,6 +592,7 @@ describe("resolveBundledSkills", () => {
     expect(files).toContain("suncode-hub-requirements/SKILL.md");
     expect(files).toContain("suncode-hub-finish/SKILL.md");
     expect(files).toContain("suncode-hub-spec-sync/SKILL.md");
+    expect(files).toContain("suncode-hub-review/SKILL.md");
 
     const requirements = bundled.find(
       (file) => file.relativePath === "suncode-hub-requirements/SKILL.md",
@@ -593,6 +609,13 @@ describe("resolveBundledSkills", () => {
       (file) => file.relativePath === "suncode-hub-finish/SKILL.md",
     );
     expect(finish?.content).toContain("quick");
-    expect(finish?.content).toContain("completion artifacts");
+    expect(finish?.content).toContain("完成产物按需生成");
+
+    const review = bundled.find(
+      (file) => file.relativePath === "suncode-hub-review/SKILL.md",
+    );
+    expect(review?.content).toContain("Hard red line");
+    expect(review?.content).toContain("do not interrupt");
+    expect(review?.content).toContain("provider timeout");
   });
 });

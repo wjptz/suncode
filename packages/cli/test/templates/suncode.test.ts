@@ -133,6 +133,8 @@ describe("suncode template constants", () => {
 
   it("workflow asks complex tasks to create structured subtasks before start", () => {
     expect(workflowMdTemplate).toContain("subtasks.json");
+    expect(workflowMdTemplate).toContain("## 实施清单");
+    expect(workflowMdTemplate).toContain("- [ ] [P1] 子任务名称: 子任务说明");
     expect(workflowMdTemplate).toContain('"priority"');
     expect(workflowMdTemplate).toContain('"name"');
     expect(workflowMdTemplate).toContain('"description"');

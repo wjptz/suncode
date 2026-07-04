@@ -23,6 +23,7 @@ export interface HubInitOptions extends HubHomeOptions {
   projectId?: string;
   developerId?: string;
   startReviewPolicy?: StartReviewPolicy;
+  autoPullSpec?: boolean;
   yes?: boolean;
 }
 
@@ -33,6 +34,7 @@ interface HubInitAnswers {
   projectId: string;
   developerId?: string;
   startReviewPolicy: StartReviewPolicy;
+  autoPullSpec: boolean;
 }
 
 export async function hubInit(
@@ -54,6 +56,7 @@ export async function hubInit(
     developerId: answers.developerId,
     apiBaseUrl: projectApiBaseUrl,
     startReviewPolicy: answers.startReviewPolicy,
+    autoPullSpec: answers.autoPullSpec,
   });
 
   return {
@@ -79,6 +82,7 @@ async function resolveInitAnswers(
       projectId: options.projectId,
       developerId: options.developerId,
       startReviewPolicy: options.startReviewPolicy ?? "confirm",
+      autoPullSpec: options.autoPullSpec ?? true,
     };
   }
 
@@ -125,6 +129,12 @@ async function resolveInitAnswers(
       choices: ["confirm", "block", "bypass"],
       default: options.startReviewPolicy ?? "confirm",
     },
+    {
+      type: "confirm",
+      name: "autoPullSpec",
+      message: "Auto-pull Hub specs after requirement intake?",
+      default: options.autoPullSpec ?? true,
+    },
   ]);
   return {
     ...answers,
@@ -141,6 +151,7 @@ function writeProjectHubConfig(
     developerId?: string;
     apiBaseUrl?: string;
     startReviewPolicy: StartReviewPolicy;
+    autoPullSpec: boolean;
   },
 ): void {
   const configPath = path.join(cwd, DIR_NAMES.WORKFLOW, "config.yaml");
@@ -158,6 +169,7 @@ function renderHubBlock(options: {
   developerId?: string;
   apiBaseUrl?: string;
   startReviewPolicy: StartReviewPolicy;
+  autoPullSpec: boolean;
   review?: HubReviewConfig;
 }): string {
   const review = options.review ?? DEFAULT_HUB_REVIEW_CONFIG;
@@ -169,6 +181,7 @@ function renderHubBlock(options: {
     `  developerId: ${options.developerId ? yamlString(options.developerId) : "null"}`,
     ...(options.apiBaseUrl ? [`  apiBaseUrl: ${yamlString(options.apiBaseUrl)}`] : []),
     `  startReviewPolicy: ${options.startReviewPolicy}`,
+    `  autoPullSpec: ${options.autoPullSpec}`,
     "  review:",
     `    enabled: ${review.enabled}`,
     `    provider: ${review.provider}`,

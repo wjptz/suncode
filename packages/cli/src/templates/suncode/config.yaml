@@ -83,6 +83,9 @@ max_journal_lines: 2000
 #   # block: require Hub review approval before starting
 #   # bypass: skip review-state gating
 #   startReviewPolicy: confirm
+#   # Set false to skip the automatic `suncode hub pull-spec` run after
+#   # `suncode hub intake`; manual `suncode hub pull-spec` still works.
+#   autoPullSpec: true
 #   review:
 #     enabled: false
 #     provider: engineer

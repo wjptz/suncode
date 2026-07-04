@@ -18,16 +18,16 @@ Use this skill only for projects that have Suncode Hub enabled. If Hub is disabl
 
 ## Flow
 
-1. Run `suncode hub state`.
-   - If disabled, continue with the ordinary Suncode workflow.
-   - If enabled but auth/config is missing, explain the exact missing value. For auth, ask the user to run `suncode hub login`.
-2. Run `suncode hub intake --auto` only when the user wants the single available assigned requirement. If multiple candidates are available, the command returns `ambiguous`; ask the user which requirement ID to claim, then run `suncode hub intake --requirement <id>`.
-3. The local task created by `hub intake` must keep the generated `HUB-REQ-<requirementId>` prefix in `task.json.name` and `task.json.title`. Chinese requirement titles remain in the human-facing title after that prefix; do not translate or pinyin them for display. The directory slug stays ASCII and starts with `hub-req-<requirementId>`.
-4. `hub intake` records the task route in `task.json.meta.hub.taskType`:
-   - taskType: `standard` — use the normal planning flow.
-   - taskType: `quick` — use the fast route: keep `prd.md` minimal, run `suncode hub plan-ready --task current` to upload the plan artifacts, skip Hub start preflight, skip plan approval, skip Hub code review/check-agent review, then start implementation directly. Quick tasks still need minimal deterministic validation where feasible and still upload completion artifacts with `suncode hub finish --task current`.
-   - taskType: `change` — treat the current requirement as authoritative, and use `sourceTask` only to understand the previous requirement. Read `research/source-task.md` when it exists before editing requirements or code.
-5. `hub intake` 已自动同步 Hub spec；若 intake 输出包含 `spec sync FAILED`，可运行 `suncode hub pull-spec` 重试，spec 同步失败不阻塞规划。Hub spec 是权威约束，不要手工对比或合并 spec 文件。
+1. 运行 `suncode hub state`。
+   - 如果 Hub disabled，继续普通 Suncode 流程。
+   - 如果 Hub enabled 但 auth/config 缺失，说明精确缺失项；auth 缺失时请用户运行 `suncode hub login`。
+2. 仅当用户想领取唯一可用的已分配 requirement 时，运行 `suncode hub intake --auto`。如果候选项不止一个，命令会返回 `ambiguous`；询问用户要领取哪个 requirement ID，然后运行 `suncode hub intake --requirement <id>`。
+3. `hub intake` 创建的本地任务必须在 `task.json.name` 和 `task.json.title` 中保留生成的 `HUB-REQ-<requirementId>` 前缀。中文需求标题保留在人类可读标题中，不要翻译或转拼音。目录 slug 保持 ASCII，并以 `hub-req-<requirementId>` 开头。
+4. `hub intake` 会把任务路线写入 `task.json.meta.hub.taskType`：
+   - taskType: `standard` — 使用普通规划流程。
+   - taskType: `quick` — 使用快速路线：`prd.md` 保持最小化，运行 `suncode hub plan-ready --task current` 上传 plan artifacts，跳过 Hub start preflight、计划审批、Hub code review/check-agent review，然后直接开始实施。Quick 仍需在可行时做最小确定性验证；完成产物按需生成并使用中文，至少要有有效的 `validation-summary.md`，最后仍通过 `suncode hub finish --task current` 上传已有完成产物。
+   - taskType: `change` — 当前 requirement 是权威需求，`sourceTask` 只用于理解旧需求。编辑需求或代码前，如果存在 `research/source-task.md`，先读取它。
+5. `hub intake` 默认会自动同步 Hub spec；若项目配置了 `hub.autoPullSpec: false`，intake 会跳过自动同步并提示可按需运行 `suncode hub pull-spec`。若 intake 输出包含 `spec sync FAILED`，可运行 `suncode hub pull-spec` 重试，spec 同步失败不阻塞规划。Hub spec 是权威约束，不要手工对比或合并 spec 文件。
 6. Write or update only the new task's `prd.md`, `design.md`, `implement.md`, and optional `research/**` files.
 7. After planning is complete, run:
 

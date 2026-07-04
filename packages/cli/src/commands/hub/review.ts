@@ -249,7 +249,7 @@ export async function hubReview(
     env: options.env,
     homeDir: options.homeDir,
     fetch: options.fetch,
-    status: finalReview.status,
+    status: hubTaskStatusAfterReview(finalReview),
     idempotencyPrefix: "hub:review-status",
   });
 
@@ -517,6 +517,10 @@ function reviewStatusValue(value: unknown): HubReviewStatus {
     return value;
   }
   return "blocked";
+}
+
+function hubTaskStatusAfterReview(review: ParsedProviderReview): string {
+  return review.status === "approved" ? "in_review" : "in_progress";
 }
 
 function issueCount(value: readonly ReviewIssue[], explicit: unknown): number {

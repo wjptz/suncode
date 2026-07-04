@@ -95,12 +95,14 @@ export async function hubIntake(
     homeDir: options.homeDir,
     fetch: options.fetch,
   });
-  const specSummary = await syncSpecsNonBlocking({
-    cwd,
-    env: options.env,
-    homeDir: options.homeDir,
-    fetch: options.fetch,
-  });
+  const specSummary = config.autoPullSpec
+    ? await syncSpecsNonBlocking({
+        cwd,
+        env: options.env,
+        homeDir: options.homeDir,
+        fetch: options.fetch,
+      })
+    : "spec: auto-pull disabled; run suncode hub pull-spec when needed";
 
   return {
     status: bindResult.status,

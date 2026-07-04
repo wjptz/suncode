@@ -34,6 +34,7 @@ interface HubSection {
   developerId?: string;
   apiBaseUrl?: string;
   startReviewPolicy?: string;
+  autoPullSpec?: boolean;
   review?: HubReviewSection;
 }
 
@@ -172,6 +173,9 @@ export function parseHubSection(content: string): HubSection {
       case "enabled":
         parsed.enabled = parseYamlBool(value, "hub.enabled");
         break;
+      case "autoPullSpec":
+        parsed.autoPullSpec = parseYamlBool(value, "hub.autoPullSpec");
+        break;
       case "mode":
       case "projectId":
       case "developerId":
@@ -263,6 +267,7 @@ export function resolveHubConfig(
     developerId,
     ...(session?.token ? { token: session.token } : {}),
     startReviewPolicy: parseStartReviewPolicy(hub.startReviewPolicy),
+    autoPullSpec: hub.autoPullSpec ?? true,
     review: parseHubReviewConfig(hub.review),
   };
 }

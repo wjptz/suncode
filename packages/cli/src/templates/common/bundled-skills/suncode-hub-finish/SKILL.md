@@ -1,66 +1,70 @@
 ---
 name: suncode-hub-finish
-description: "Use when finishing a Suncode Hub-backed task, preparing implementation summaries, submitting spec changes, evaluating reusable knowledge, or sending completion artifacts to Hub."
+description: "用于完成 Suncode Hub 任务、准备按需完成产物、提交 spec 变更、评估可复用知识，或向 Hub 上传最终产物。"
 ---
 
-# Suncode Hub Finish
+# Suncode Hub 完结
 
-Use this skill only when the current task is Hub-backed: already bound to Suncode Hub or pending a remote binding with `meta.hub.requirementId`. If the project is not Hub-enabled, use the normal Suncode finish-work flow.
+仅在当前任务是 Hub 任务时使用本技能：任务已经绑定到 Suncode Hub，或带有 `meta.hub.requirementId`、等待远端绑定。如果项目没有启用 Hub，使用普通 Suncode finish-work 流程。
 
-## Rules
+## 规则
 
-- Work only on the current task or the task explicitly named by the user.
-- Do not upload sibling task PRD, design, implement, summary, or retrospective documents.
-- Do not submit empty summaries or unverified claims.
-- Do not print or persist Hub tokens, passwords, or auth headers.
-- If `<hub-state>` says `hub-task:local-only`, stop this Hub-specific flow unless the user explicitly asks to bind a Hub requirement.
-- Long documents are uploaded through Hub-signed MinIO URLs by `suncode hub`; Hub API payloads must contain object references and hashes, not document bodies.
-- `hub finish` does not start code review. Hub code review belongs after final validation and before the work commit; finish only verifies any required approved review still matches.
-- For `meta.hub.taskType == "quick"`, do not run Hub code review or check-agent review. Quick still must produce useful completion artifacts and run `suncode hub finish --task current` so Hub receives the final upload.
+- 只处理当前任务，或用户明确指定的任务。
+- 不上传兄弟任务的 PRD、design、implement、summary 或 retrospective 文档。
+- 不提交空摘要，也不写未经验证的完成结论。
+- 不打印或持久化 Hub token、密码或 auth header。
+- 如果 `<hub-state>` 显示 `hub-task:local-only`，停止 Hub 专属流程；除非用户明确要求绑定 Hub requirement。
+- 长文档由 `suncode hub` 通过 Hub 签发的 MinIO URL 上传；Hub API payload 只能包含 object reference 和 hash，不直接放文档正文。
+- `hub finish` 不启动代码审查。Hub code review 属于最终验证后、工作提交前的流程；finish 只校验必需的已批准 review 仍匹配当前提交状态。
+- `meta.hub.taskType == "quick"` 时，不运行 Hub code review 或 check-agent review。Quick 仍要按需生成有用的完成产物，并运行 `suncode hub finish --task current` 让 Hub 收到最终上传。
 
-## Required Local Artifacts
+## 按需本地产物
 
-Before completion, ensure the current task directory has useful content in these files when applicable:
+完成产物按需生成，不要求四个文件齐全。`suncode hub finish` 会上传当前任务目录中已经存在的以下候选文件：
 
 - `implementation-summary.md`
 - `validation-summary.md`
 - `retrospective.md`
 - `reuse-assessment.md`
 
-Keep the summaries evidence-based:
+所有面向人的内容默认使用简体中文。命令名、API 字段、代码符号、文件路径、错误字符串和引用原文可以保留原文。
 
-- Implementation summary: what changed and where.
-- Validation summary: exact checks run and any checks not run.
-- Retrospective: what was learned while doing this task.
-- Reuse assessment: what can be reused as spec, template, helper, or process guidance.
+按需判断：
 
-## Flow
+- `implementation-summary.md`：当任务有代码、配置、模板、文档或行为变更时写；说明改了什么、改在哪里。
+- `validation-summary.md`：当执行过测试、类型检查、lint、构建、烟测、人工验证或明确未执行验证时写；记录具体命令、结果，或写明 `未执行` 和原因。
+- `retrospective.md`：只有当任务产生值得复盘的经验、风险、问题或后续注意点时写。
+- `reuse-assessment.md`：只有当任务产生可复用的 spec、模板、helper、流程约束或知识沉淀时写。
+- quick 任务必须至少提供有证据的 `validation-summary.md`；内容必须包含已执行验证证据，或包含 `未执行` 及具体原因。
 
-1. Confirm the active task:
+## 流程
+
+1. 确认当前任务：
 
 ```bash
 python3 ./.suncode/scripts/task.py current --source
 ```
 
-2. Submit Hub finish:
+2. 提交 Hub finish：
 
 ```bash
 suncode hub finish --task current
 ```
 
-`hub finish` verifies required completion artifacts, ensures the remote Hub binding (auto-binding a pending task when needed), enforces the required review gate through the existing completion submission checks for standard/change tasks, submits project-level spec artifacts, and submits completion artifacts plus commit metadata. Quick tasks bypass the review gate but not artifact upload.
+`hub finish` 会确保远端 Hub 绑定存在（必要时自动绑定 pending task），对 standard/change 任务通过现有 completion submission 检查执行必需 review gate，提交项目级 spec artifacts，并上传当前任务目录中存在的按需完成产物及 commit metadata。Quick 任务绕过 review gate，但不绕过完成产物上传；quick 缺少有效 `validation-summary.md` 时会失败。
 
-3. Act on the result:
-   - Missing completion artifacts: create those files with evidence-based content and rerun the command.
-   - Binding failure: report the exact error to the user; do not treat the task as completed on Hub.
-   - `skipped` with a local-only message: the task is not Hub-bound; continue with the normal Suncode finish workflow.
-   - Success (or intentionally deferred): continue with the normal Suncode archive/finish workflow.
+3. 根据结果处理：
+   - quick 缺少有效验证摘要：补充中文 `validation-summary.md`，写清已执行验证，或写 `未执行` 及原因，然后重跑。
+   - `No artifacts found.`：确认本任务是否确实没有需要上传的完成产物；如果有，补充对应中文产物后重跑。
+   - 绑定失败：向用户报告精确错误；不要把任务视为已在 Hub 完成。
+   - `skipped` 且提示 local-only：该任务不是 Hub 任务，继续普通 Suncode finish 流程。
+   - 成功或有意跳过：继续普通 Suncode archive/finish 流程。
 
-On demand only, when the user mentions requirement changes or Hub review comments:
+仅在用户提到需求变更或 Hub review comments 时，按需运行：
 
 ```bash
 suncode hub sync --task <task-dir>
 suncode hub pull-review --task <task-dir>
 ```
 
-If a response contains a document payload, download that exact document into the current task with `suncode hub download-document --document-id "<documentId>" --task "<task-dir>"`.
+如果响应包含 document payload，使用 `suncode hub download-document --document-id "<documentId>" --task "<task-dir>"` 将该文档下载到当前任务。

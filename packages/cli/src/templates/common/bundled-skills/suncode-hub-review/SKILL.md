@@ -17,6 +17,8 @@ suncode hub pull-review --task current
 
 Do not manually invent review prompts, round numbers, Hub status updates, upload steps, or finish gates. Let Suncode do the orchestration.
 
+Hard red line: after `suncode hub review` starts, do not interrupt, cancel, kill, or replace it because it is slow. Do not send Ctrl-C, use an external `timeout`, issue a channel interrupt, start a parallel review, or ask another agent to stop it. The review command owns its provider timeout and will stop itself if it exceeds that limit; wait for the command to finish and then report its result or its own timeout failure.
+
 Run:
 
 ```bash
@@ -62,5 +64,6 @@ suncode hub review --task current --module packages/cli/src/commands/hub
 - Review belongs before the work commit. Stage intended new files first when needed so the reviewed diff matches the content that will be committed.
 - Do not submit completion when `hub.review.required=true` until the latest review is approved for the current diff.
 - Do not upload files or patch Hub status by hand; `suncode hub review` owns those side effects.
+- Do not actively stop an in-progress Hub review. Slow review is not a reason to interrupt; the configured review timeout is the only normal timeout mechanism.
 - Treat `result.md` as the reviewer-authored finding summary. Do not treat `raw-output.md` as the review result; it is only a provider transcript and may be disabled by config.
 - If review is skipped because Hub review is disabled or the provider is unavailable with bypass policy, keep the existing workflow unchanged.

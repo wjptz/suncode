@@ -79,6 +79,7 @@ interface HubInitCliOptions {
   projectId?: string;
   developerId?: string;
   startReviewPolicy?: "confirm" | "block" | "bypass";
+  autoPullSpec?: boolean;
   yes?: boolean;
 }
 
@@ -145,6 +146,7 @@ export function registerHubCommand(program: Command): void {
       "confirm, block, or bypass",
       "confirm",
     )
+    .option("--no-auto-pull-spec", "disable automatic Hub spec pull after intake")
     .option("--yes", "non-interactive mode")
     .action(async (opts: HubInitCliOptions) => {
       await run(async () =>
@@ -155,6 +157,7 @@ export function registerHubCommand(program: Command): void {
           projectId: opts.projectId,
           developerId: opts.developerId,
           startReviewPolicy: opts.startReviewPolicy,
+          autoPullSpec: opts.autoPullSpec,
           yes: opts.yes,
         }),
       );

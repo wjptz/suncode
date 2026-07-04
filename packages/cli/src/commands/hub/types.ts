@@ -57,6 +57,7 @@ export interface EnabledHubConfig {
   developerId: string;
   token?: string;
   startReviewPolicy: StartReviewPolicy;
+  autoPullSpec: boolean;
   review: HubReviewConfig;
 }
 

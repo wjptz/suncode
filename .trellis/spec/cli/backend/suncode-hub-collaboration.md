@@ -16,7 +16,7 @@
 CLI commands:
 
 ```text
-suncode hub init [--api-base-url <url>] [--project-api-base-url <url>] --project-id <id> [--developer-id <id>] [--start-review-policy confirm|auto] [--yes]
+suncode hub init [--api-base-url <url>] [--project-api-base-url <url>] --project-id <id> [--developer-id <id>] [--start-review-policy confirm|block|bypass] [--no-auto-pull-spec] [--yes]
 suncode hub login [--api-base-url <url>] [--email <email>] [--username <email-alias>] [--password <password>]
 suncode hub logout [--api-base-url <url>]
 suncode hub state [--json]
@@ -82,6 +82,7 @@ hub:
   apiBaseUrl: null
   developerId: null
   startReviewPolicy: confirm
+  autoPullSpec: true
   review:
     enabled: false
     provider: engineer
@@ -157,6 +158,18 @@ Task display and language contract:
   protocol values, error text, and quoted external terms keep their original
   language.
 
+Spec sync config:
+
+- `hub.autoPullSpec` controls only the automatic spec pull after
+  `suncode hub intake`.
+- Missing `hub.autoPullSpec` defaults to `true` for backward compatibility.
+- `hub.autoPullSpec: false` skips the intake-time automatic `pull-spec` call
+  and reports that manual `suncode hub pull-spec` is available.
+- Manual `suncode hub pull-spec` ignores this flag and remains available on
+  demand.
+- `suncode hub init` writes `autoPullSpec: true` by default and supports
+  disabling it with `--no-auto-pull-spec`.
+
 ### 4. Validation & Error Matrix
 
 | Condition | Behavior |
@@ -170,6 +183,8 @@ Task display and language contract:
 | Active task has Hub metadata | Allow Hub task lifecycle commands for that task |
 | Active task has no Hub metadata | Report local-only; do not run Hub submit/mark commands |
 | `SUNCODE_HUB_TOKEN` is set | Ignore it; behavior depends only on login session |
+| `hub.autoPullSpec` is missing | Resolve as `true` |
+| `hub.autoPullSpec: false` | `hub intake` skips automatic spec pull; manual `pull-spec` still works |
 
 ### 5. Good/Base/Bad Cases
 
@@ -198,6 +213,8 @@ Task display and language contract:
   - preserves unrelated project config
   - supports optional project `apiBaseUrl` override
   - writes explicit review defaults without enabling or requiring review
+  - writes `autoPullSpec: true` by default
+  - writes `autoPullSpec: false` when `--no-auto-pull-spec` or `autoPullSpec: false` is used
 - Command tests for `hub login` / `hub logout`:
   - posts email/password to `/api/auth/login`
   - maps response `user.id` and `user.display_name` into the local auth session
@@ -228,6 +245,11 @@ Task display and language contract:
     preferred
   - `hub create-task` sends Chinese `localTaskName` / `title` while retaining
     slug-based `localTaskId`
+- Spec auto-pull config tests:
+  - `parseHubSection` accepts `hub.autoPullSpec`.
+  - `resolveHubConfig` defaults missing `autoPullSpec` to `true`.
+  - `hub intake` with `autoPullSpec: false` creates/binds the task without
+    requesting `/specs/bundle`.
 
 ### 7. Wrong vs Correct
 
@@ -258,82 +280,75 @@ that actually carry Hub metadata.
 
 ## Scenario: Hub Finish Binding Ensure
 
-### 1. Scope / Trigger
+### 1. 范围 / 触发
 
-- Trigger: `suncode hub finish` submits final spec and completion artifacts for
-  a Hub-backed task.
-- Applies to `packages/cli/src/commands/hub/workflow.ts`,
-  `create-task.ts`, `submissions.ts`, Hub finish tests, and
-  `suncode-hub-finish` bundled skill wording.
-- The finish command owns binding repair for Hub-backed pending tasks so agents
-  do not need a separate manual `create-task` branch before completion.
+- 触发：`suncode hub finish` 为 Hub 任务提交最终 spec 和按需 completion artifacts。
+- 适用范围：`packages/cli/src/commands/hub/workflow.ts`、`create-task.ts`、`submissions.ts`、Hub finish 测试，以及 `suncode-hub-finish` bundled skill 文案。
+- `finish` 命令负责修复 Hub pending task 的远端绑定缺口，agent 完成前不需要额外走手动 `create-task` 分支。
 
-### 2. Signatures
+### 2. 签名
 
-CLI command:
+CLI 命令：
 
 ```text
 suncode hub finish [--task current|<task>] [--task-json <path>] [--file <path>...] [--force] [--best-effort]
 ```
 
-Remote task binding source:
+远端任务绑定来源：
 
 ```text
 task.json meta.hub.remoteTaskId
 .suncode/tasks/<task>/hub-manifest.json remoteTaskId
 ```
 
-### 3. Contracts
+### 3. 合同
 
-- A bound task has `remoteTaskId` in `task.json.meta.hub` or the task
-  `hub-manifest.json`.
-- A Hub-pending task has `meta.hub.requirementId` but no `remoteTaskId`.
-- A local-only task has no `meta.hub.requirementId`.
-- `hub finish` must check required completion artifacts before network work:
-  `implementation-summary.md`, `validation-summary.md`, `retrospective.md`,
-  and `reuse-assessment.md`.
-- For Hub-pending tasks, `hub finish` calls `hubCreateTask`, records a `bind`
-  workflow step on success, rereads the task, then continues with
-  `submit-spec` and `submit-completion`.
-- Low-level `submit-spec` / `submit-completion` may still skip unbound tasks
-  when invoked directly; `hub finish` must not rely on that skip for
-  Hub-pending tasks.
+- 已绑定任务在 `task.json.meta.hub` 或任务 `hub-manifest.json` 中有 `remoteTaskId`。
+- Hub pending task 有 `meta.hub.requirementId`，但没有 `remoteTaskId`。
+- Local-only task 没有 `meta.hub.requirementId`。
+- Completion artifacts 按需生成和上传，不再要求四个文件齐全。
+- `submit-completion` 只收集当前任务目录中已经存在的固定候选文件：`implementation-summary.md`、`validation-summary.md`、`retrospective.md`、`reuse-assessment.md`。
+- 候选 completion artifacts 的面向人内容默认使用简体中文；命令名、API 字段、代码符号、文件路径、错误字符串和引用原文可以保留原文。
+- Quick task 完成时必须有有效的 `validation-summary.md`：内容必须包含已执行验证证据，或包含 `未执行` 及具体原因。该校验必须发生在 Hub binding 或 upload 之前。
+- Standard/change task 不强制 completion artifacts 的固定组合；没有任何 completion artifact 时，底层 `submit-completion` 可按既有行为返回 `skipped: No artifacts found.`。
+- 对 Hub pending task，`hub finish` 调用 `hubCreateTask`，成功后记录 `bind` workflow step，重新读取任务，然后继续 `submit-spec` 和 `submit-completion`。
+- 底层 `submit-spec` / `submit-completion` 直接调用时仍可跳过未绑定任务；`hub finish` 不能依赖这种 skip 来处理 Hub pending task。
 
-### 4. Validation & Error Matrix
+### 4. 校验与错误矩阵
 
-| Condition | Behavior |
+| 条件 | 行为 |
 | --- | --- |
-| Required completion artifact is missing | Throw before Hub binding or upload |
-| Task already has `remoteTaskId` | Submit spec and completion without a `bind` step |
-| Task has `requirementId` but no `remoteTaskId` | Auto-bind with `hubCreateTask`, include `bind` in the workflow summary, then submit |
-| Auto-bind fails or still leaves no `remoteTaskId` | Throw; command exits non-zero unless `--best-effort` was requested |
-| Task has no `requirementId` | Return `skipped` with a local-only message and make no Hub requests |
-| Hub is disabled while trying to bind | Return the disabled result; do not fake a successful finish |
+| Quick task 缺少 `validation-summary.md` | 在 Hub binding 或 upload 之前报错 |
+| Quick task 的 `validation-summary.md` 只是占位内容 | 在 Hub binding 或 upload 之前报错 |
+| Standard/change task 只有一个按需 completion artifact | 上传现有 artifact，不要求补齐四个文件 |
+| Standard/change task 没有任何 completion artifact | `submit-completion` 返回 `skipped: No artifacts found.`；`hub finish` 仍返回汇总结果 |
+| 任务已有 `remoteTaskId` | 不执行 `bind` step，直接提交 spec 和 completion |
+| 任务有 `requirementId` 但无 `remoteTaskId` | 使用 `hubCreateTask` 自动绑定，在 workflow summary 中包含 `bind`，然后提交 |
+| 自动绑定失败或绑定后仍无 `remoteTaskId` | 抛错；除非用户使用 `--best-effort`，否则命令非零退出 |
+| 任务没有 `requirementId` | 返回 local-only 的 `skipped`，不发送 Hub 请求 |
+| 尝试绑定时 Hub 被禁用 | 返回 disabled 结果；不要伪装成成功 finish |
 
 ### 5. Good/Base/Bad Cases
 
-- Good: A pending Hub task with completion summaries runs
-  `bind -> submit-spec -> submit-completion` and records the remote task ID
-  locally before uploading completion artifacts.
-- Good: A bound task keeps the existing finish output shape except for normal
-  submit step results.
-- Base: A local-only task is reported as not applicable and continues through
-  the normal local finish-work flow.
-- Bad: `hub finish` exits 0 after both low-level submit steps skipped with
-  "Task is not bound to a remote Hub task."
-- Bad: `suncode-hub-finish` tells the agent to manually run `hub create-task`
-  as a default pre-finish branch.
+- Good：pending Hub task 带有按需完成摘要时，执行 `bind -> submit-spec -> submit-completion`，先在本地记录远端任务 ID，再上传 completion artifacts。
+- Good：bound task 保持原有 finish 输出形状，只体现正常 submit step 结果。
+- Good：quick task 只有一份中文 `validation-summary.md`，内容包含验证证据；finish 绕过 review gate，但仍上传该完成产物。
+- Base：local-only task 被报告为不适用 Hub finish，然后继续普通 local finish-work 流程。
+- Bad：`hub finish` 在两个底层 submit step 都因 “Task is not bound to a remote Hub task.” 跳过后仍退出 0。
+- Bad：`suncode-hub-finish` 默认要求 agent 手动运行 `hub create-task`。
+- Bad：`hub finish` 无条件要求 `implementation-summary.md`、`validation-summary.md`、`retrospective.md`、`reuse-assessment.md` 四个文件齐全，导致 quick 或轻量任务为了过 gate 生成空文档。
 
-### 6. Tests Required
+### 6. 必需测试
 
-- Hub finish tests:
-  - pending Hub task auto-binds, then submits completion artifacts
-  - auto-bind failure rejects and does not submit completion
-  - local-only task returns skipped and performs no Hub requests
-  - already bound task submits without another create-task request
-  - missing completion artifacts reject before upload or binding
-- Skill/template tests should keep `suncode-hub-finish` aligned with the
-  auto-bind behavior and avoid default manual `create-task` instructions.
+- Hub finish 测试：
+  - pending Hub task 自动绑定，然后提交 completion artifacts
+  - 自动绑定失败时 reject，且不提交 completion
+  - local-only task 返回 skipped，且不发送 Hub 请求
+  - already bound task 提交时不再发 create-task 请求
+  - standard/change task 只上传当前任务目录中已有的按需 completion artifacts
+  - quick task 允许只上传有效 `validation-summary.md`
+  - quick task 缺少 `validation-summary.md` 或验证摘要只是占位内容时，在 binding/upload 之前 reject
+- Skill/template 测试应保证 `suncode-hub-finish` 与自动绑定和按需 completion artifact 行为一致，并避免默认手动 `create-task` 指令。
 
 ### 7. Wrong vs Correct
 
@@ -348,8 +363,7 @@ return summarizeWorkflow("finish", [
 ]);
 ```
 
-This lets a Hub-pending task finish with two skipped submit steps and exit 0,
-even though Hub never receives completion artifacts.
+这会让 Hub pending task 在两个底层 submit step 都 skipped 时仍退出 0，即使 Hub 没有收到 completion artifacts。
 
 #### Correct
 
@@ -362,8 +376,7 @@ if (!remoteTaskId && task.meta.requirementId) {
 }
 ```
 
-This makes the high-level finish command responsible for repairable binding
-gaps while preserving local-only tasks as explicit skips.
+这让高层 finish 命令负责可修复的绑定缺口，同时保留 local-only task 的显式 skip 行为。
 
 ## Scenario: Hub Requirement Task Type Routing
 
@@ -434,13 +447,15 @@ Persisted local metadata:
   plan artifacts, including `prd.md`. For quick tasks, `hub plan-ready` must
   skip plan approval and Hub start preflight after the upload, and quick still
   skips Hub code review/check-agent review.
-- Quick completion submission remains scoped to completion artifacts; do not
-  move `prd.md` into `submit-completion`, because PRD is a plan artifact.
-- `quick` still performs minimal deterministic validation when feasible. If a
-  check is not run, `validation-summary.md` must say `未执行` and why.
+- Quick completion submission 仍然只处理 completion artifacts；不要把
+  `prd.md` 移到 `submit-completion`，因为 PRD 是 plan artifact。
+- Quick completion artifacts 按需生成，不要求四个候选文件齐全；但 quick
+  必须有有效的 `validation-summary.md`。
+- `quick` 仍需在可行时执行最小确定性验证。如果未执行检查，
+  `validation-summary.md` 必须写明 `未执行` 和原因。
 - `hub finish` must reject quick tasks before binding or upload when
-  `validation-summary.md` is only a placeholder. It must contain executed
-  validation evidence, or `未执行` with a concrete reason.
+  `validation-summary.md` is missing or only a placeholder. It must contain
+  executed validation evidence, or `未执行` with a concrete reason.
 - `hub review` must return `skipped` for quick tasks before checking provider
   availability, patching Hub status, writing `reviews/`, or submitting review
   artifacts.
@@ -460,8 +475,8 @@ Persisted local metadata:
 | `quick` task calls `hub plan-ready` | Submit plan artifacts and any available structured subtasks, then skip Hub start preflight/plan approval without contacting the preflight endpoint |
 | `quick` task calls `hub preflight-start` directly or through `task.py start` | Return/perform a local skip before contacting Hub, because quick tasks do not use the start preflight gate |
 | `quick` task calls `hub review` | Return `skipped` before provider, status, or artifact side effects |
-| `quick` task finishes while review is required | Bypass the review gate, but still upload completion artifacts |
-| `quick` task finishes with placeholder `validation-summary.md` | Throw before Hub binding or upload |
+| `quick` task finishes while review is required | Bypass the review gate, but still upload existing completion artifacts |
+| `quick` task finishes with missing or placeholder `validation-summary.md` | Throw before Hub binding or upload |
 | `change` task includes `sourceTask` | Persist only the allowlisted summary and write `research/source-task.md` |
 | `sourceTask` has `description` but no explicit `summary` | Persist other allowlisted fields, but do not synthesize `summary` |
 | `sourceTask` contains secrets or signed URLs | Do not persist those fields |
@@ -469,7 +484,8 @@ Persisted local metadata:
 ### 5. Good/Base/Bad Cases
 
 - Good: A quick task is claimed, started from the minimal PRD, validated with a
-  short evidence trail, and finished through Hub so completion artifacts upload.
+  short Chinese evidence trail in `validation-summary.md`, and finished through
+  Hub so the needed completion artifact uploads.
 - Good: A change task includes the old task summary in research while the PRD
   states the current Hub requirement is authoritative.
 - Base: Older Hub responses without type continue as standard tasks.
@@ -487,9 +503,9 @@ Persisted local metadata:
 - Preflight/start test proving quick tasks skip Hub start preflight before any
   Hub request, including the `task.py start` `before_start` hook path.
 - Finish/completion test proving quick bypasses required review while still
-  uploading completion artifacts.
-- Finish test proving quick placeholder `validation-summary.md` rejects before
-  binding or upload.
+  uploading existing completion artifacts.
+- Finish tests proving quick missing or placeholder `validation-summary.md`
+  rejects before binding or upload.
 - Review test proving quick tasks skip provider checks, status patches,
   `reviews/` writes, and review submissions.
 - Intake test proving `sourceTask.description` is not persisted as `summary`.
@@ -499,7 +515,7 @@ Persisted local metadata:
 
 ### 1. 范围 / 触发
 
-- 触发：`suncode hub intake` 成功认领 Hub requirement 后自动拉取项目权威 spec；恢复会话、用户要求手动刷新，或 intake/plan-ready 输出 spec 同步失败时也可手动运行 `suncode hub pull-spec`。
+- 触发：`suncode hub intake` 成功认领 Hub requirement 后，默认自动拉取项目权威 spec；项目显式配置 `hub.autoPullSpec: false` 时跳过这次自动拉取。恢复会话、用户要求手动刷新，或 intake/plan-ready 输出 spec 同步失败时也可手动运行 `suncode hub pull-spec`。
 - 适用范围：`packages/cli/src/commands/hub/**`、生成的 `<hub-state>` hook、OpenCode plugin、以及 Hub 相关 bundled skill。
 - Hub spec 同步是固定 CLI 流程。AI 只允许调度命令并读取结构化结果，不允许手工逐文件对比、合并、重写、删除或恢复 spec。
 
@@ -621,6 +637,7 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
 | 存在 local-only spec | 报告它，不阻塞、不删除 |
 | `spec-deletions keep` 目标不在 `.suncode/spec/local/**` | 抛出面向用户的错误 |
 | `hub intake` 之后 spec 同步失败 | 保留本地任务和远程绑定，在 intake message 中报告 `spec sync FAILED` 和 `suncode hub pull-spec` 重试命令，不回滚、不阻塞规划 |
+| `hub.autoPullSpec: false` 后运行 `hub intake` | 保留任务创建/绑定流程，不请求 `/specs/bundle`；message 提示自动拉取已禁用，可按需手动运行 `suncode hub pull-spec` |
 
 ### 5. 正例 / 基线 / 反例
 
@@ -630,7 +647,8 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
 - 正例：Hub 返回 MinIO/S3 预签名地址时，CLI 不会把 Hub login token 加到对象存储请求上。
 - 正例：`pull-spec --json` 展示 revision、local-only 和 deletion candidates；
   `<hub-state>` 不展示 spec 摘要，只提示 Hub 是否可用于当前 workflow。
-- 正例：`hub intake` 成功绑定远程任务后自动执行一次 spec 同步；失败只写入可行动的重试提示，不让任务认领失效。
+- 正例：`hub.autoPullSpec` 默认开启时，`hub intake` 成功绑定远程任务后自动执行一次 spec 同步；失败只写入可行动的重试提示，不让任务认领失效。
+- 正例：项目配置 `hub.autoPullSpec: false` 时，`hub intake` 不请求 spec bundle，只提示可按需手动运行 `suncode hub pull-spec`。
 - 基线：没有历史 spec manifest 时，第一次 bundle 写入所有远端文件，同时保留无关 local-only 文件。
 - 反例：AI 手工 diff 每个 spec 文件并决定如何合并。
 - 反例：被 Hub 删除的 Hub-managed spec 被恢复到旧路径，导致下一次 Hub 同步继续冲突。
@@ -650,13 +668,15 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
   - `list` 返回 pending/kept/discarded 候选。
   - `keep` 只能写入 `.suncode/spec/local/**`。
   - `discard` 将候选标记为 discarded。
+- Intake 集成测试：
+  - `hub.autoPullSpec: false` 时，`hub intake` 不调用 spec bundle 接口，并提示可按需手动运行 `suncode hub pull-spec`。
 - State/hook 测试：
   - `hub state --json` 不包含 spec 摘要。
   - `<hub-state>` 使用 `hub:*`、`workflow:primary`、`hub-task:*`、`work:*` 紧凑行，并通过 `Flow add-on:` 表达对 `<workflow-state>` 的补充关系。
   - hook 输出不包含 token、password、auth header、spec 摘要或 signed URL。
 - Skill/template 测试：
   - `suncode-hub-spec-sync` 会被安装到各平台 skill root。
-  - `suncode-hub-requirements` 说明 `hub intake` 已自动同步 spec，只有 intake 输出同步失败或用户要求手动刷新时才提示 `suncode hub pull-spec`。
+  - `suncode-hub-requirements` 说明 `hub intake` 默认自动同步 spec；如果 `hub.autoPullSpec: false`，intake 会跳过自动同步并提示可手动运行 `suncode hub pull-spec`。
   - `suncode-hub-spec-sync` 定位为恢复、手动刷新、同步失败重试，而不是每次规划前的默认步骤。
 
 ### 7. 错误与正确示例
@@ -1210,7 +1230,23 @@ Idempotency-Key: hub:submit-subtasks:{remoteTaskId}:{subtasksHash}
 
 ### 3. Contracts
 
-Local file, scoped to the target task directory only:
+Local source, scoped to the target task directory only:
+
+1. If `.suncode/tasks/<task>/subtasks.json` exists, treat it as the explicit
+   override.
+2. Otherwise derive structured subtasks from parseable checklist lines in
+   `.suncode/tasks/<task>/implement.md`.
+
+Every complex task `implement.md` must include this parseable checklist section:
+
+```md
+## 实施清单
+
+- [ ] [P1] 子任务名称: 子任务说明
+- [ ] [P2] 子任务名称: 子任务说明
+```
+
+Override file:
 
 ```text
 .suncode/tasks/<task>/subtasks.json
@@ -1259,7 +1295,8 @@ Task manifest fields after success:
 | --- | --- |
 | Hub disabled | Return `disabled`; no network |
 | Task has no remote Hub binding | Return `skipped`; no network |
-| `subtasks.json` missing | Return `skipped`; no network |
+| `subtasks.json` missing and `implement.md` has parseable checklist items | Derive subtasks from `implement.md` and submit |
+| `subtasks.json` missing and `implement.md` has no parseable checklist items | Return `skipped`; no network |
 | `subtasks` empty | Return `skipped`; no network |
 | Entry missing `priority`, `name`, or `description` | Throw a user-facing error |
 | `subtasksHash` equals `lastSubtasksHash` and not `--force` | Return `skipped`; no network |
@@ -1268,19 +1305,25 @@ Task manifest fields after success:
 
 ### 5. Good/Base/Bad Cases
 
-- Good: Current task has two structured subtasks; command POSTs exactly those
-  items and stores `lastSubtasksHash`.
+- Good: Current task has a `subtasks.json` override with two structured
+  subtasks; command POSTs exactly those items and stores `lastSubtasksHash`.
+- Good: Current task has no override but `implement.md` contains a parseable
+  `## 实施清单` checklist; command derives and POSTs those items.
 - Base: Local-only project has no Hub enabled; `after_start` does not add Hub
   hooks.
 - Bad: Command scans `.suncode/tasks/**/subtasks.json` and uploads sibling task
   work.
 - Bad: Command sends `prd.md`, `design.md`, or `implement.md` bodies in the
   subtask API payload.
+- Bad: Workflow template asks for subtasks in prose or an ordered list that is
+  not parseable as checklist items.
 
 ### 6. Tests Required
 
 - Unit/function-level test for `submitSubtasks`:
-  - reads only the target task's `subtasks.json`
+  - uses the target task's `subtasks.json` override when present
+  - generates structured subtasks from the target task's `implement.md`
+    `## 实施清单` checklist when no override exists
   - rejects or ignores sibling task `subtasks.json`
   - sends `priority`, `name`, `description`, `subtasksHash`
   - stores `lastSubtasksHash`
@@ -1290,7 +1333,8 @@ Task manifest fields after success:
   - Hub team enabled returns `submit-subtasks` before `mark-started`
 - Template test:
   - workflow documents `subtasks.json`
-  - planning breadcrumb reminds Hub projects to create it before start
+  - planning breadcrumb requires the parseable `## 实施清单` checklist before
+    start
 
 ### 7. Wrong vs Correct
 
@@ -1400,6 +1444,13 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `reviews/round-NNN/result.md`. Local `review.json`, `diff.patch`, and
   `raw-output.md` remain local diagnostics/state files and must not be uploaded
   to Hub as artifacts.
+- Hub task status patches from `suncode hub review` are lifecycle-state patches,
+  not review-result patches. Entering review always patches `in_review`. After
+  the provider result and review artifact submission, `approved` patches
+  `in_review` again, while `changes_requested` and `blocked` patch
+  `in_progress` so the task returns to implementation work.
+- Review result status remains preserved separately in `review.json`, the
+  review submission payload, and `hub-manifest.json.lastReviewStatus`.
 - Status patch payloads include `updatedAt`, so the status idempotency key must
   include a payload discriminator:
   `hub:review-status:{remoteTaskId}:{status}:{payloadHash}`.
@@ -1412,6 +1463,12 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `suncode hub pull-review --task current`. Hub-bound prompt allowed-actions
   should expose `plan-ready pull-review finish`, not a bare `review` action that
   can be confused with the code-review provider flow.
+- The `suncode-hub-review` skill must treat actively interrupting an in-progress
+  review as a red-line violation. Review provider runs own their configured
+  timeout; agents must wait for `suncode hub review` to finish or fail by that
+  timeout, not send Ctrl-C, kill the process, wrap it in a shorter external
+  timeout, issue channel interrupts, or start a replacement review because the
+  current one is slow.
 
 ### 4. Validation & Error Matrix
 
@@ -1426,6 +1483,9 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
 | Provider prints banners/examples before final JSON | Parse the final fenced `json` block |
 | Provider output includes `tokens used` after final JSON | Ignore the footer and parse the fenced JSON |
 | Provider transcript exceeds Node's default spawn buffer | Preserve output up to the configured large provider buffer and parse the final JSON if present |
+| `suncode hub review` is slow but still running | Do not interrupt it; wait for the command's own timeout or final result |
+| Review provider returns `changes_requested` or `blocked` | Submit the review result, then patch Hub task status back to `in_progress` |
+| Review provider returns `approved` | Submit the review result, then keep Hub task status as `in_review` |
 | `hub-manifest.json` is also deleted | CLI cannot infer remote review history locally; Hub may still reject reused server-side keys |
 
 ### 5. Good/Base/Bad Cases
@@ -1435,6 +1495,10 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `hub:submit-review:*:2:*` key.
 - Good: Two separate review runs patch `in_review`; both use distinct
   idempotency keys because their payloads have distinct `updatedAt` values.
+- Good: A review with must-fix findings patches `in_review` on entry and
+  `in_progress` after the review result is submitted.
+- Good: An approved review patches `in_review` on entry and `in_review` again
+  after the review result is submitted.
 - Good: Provider prompt is an entry-point document: it lists the task directory,
   task/review files, and a capped directory-level code area hint; it does not
   embed PRD/design/implement bodies, concrete changed-file lists, or diff
@@ -1456,6 +1520,9 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   contents into `prompt.md`, causing the provider's first context to balloon.
 - Bad: The review prompt asks the provider to review the PRD/design/plan itself
   rather than reviewing the code implementation against those files.
+- Bad: An agent decides a slow `suncode hub review` is taking too long and
+  actively interrupts, kills, externally times out, or replaces that review
+  instead of waiting for the configured provider timeout.
 
 ### 6. Tests Required
 
@@ -1464,6 +1531,12 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   - second submission body has `review.round = 2`
   - submission idempotency keys contain matching round numbers
   - all status patch idempotency keys are unique across the two runs
+- Status transition tests:
+  - `changes_requested` / `blocked` review result patches
+    `in_review -> in_progress`
+  - `approved` review result patches `in_review -> in_review`
+  - review submission payload and local manifest still preserve the actual
+    review result status
 - Existing review artifact tests must still prove only the target round is
   uploaded, and only `prompt.md` / `result.md` are included in the upload
   session.
@@ -1487,6 +1560,11 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   - provider output larger than Node's default spawn buffer still preserves and
     parses the final JSON block
   - provider-selected findings are preserved in `result.md` and `review.json`
+- Bundled `suncode-hub-review` skill test:
+  - skill content explicitly marks manual interruption of an in-progress review
+    as a red-line violation
+  - skill content explains that the configured provider timeout is the only
+    normal timeout mechanism
 
 ### 7. Wrong vs Correct
 

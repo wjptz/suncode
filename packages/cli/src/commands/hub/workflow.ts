@@ -33,12 +33,7 @@ interface WorkflowStepResult {
   result: HubCommandResult;
 }
 
-const REQUIRED_COMPLETION_FILES = [
-  "implementation-summary.md",
-  "validation-summary.md",
-  "retrospective.md",
-  "reuse-assessment.md",
-] as const;
+const QUICK_VALIDATION_SUMMARY_FILE = "validation-summary.md";
 
 export async function hubPlanReady(
   options: HubPlanReadyOptions,
@@ -111,7 +106,6 @@ export async function hubFinish(
 ): Promise<HubCommandResult> {
   const cwd = options.cwd ?? process.cwd();
   const task = readHubTask(options.taskJsonPath, cwd);
-  assertCompletionArtifactsPresent(task);
   if (task.meta.taskType === "quick") {
     assertQuickValidationSummary(task);
   }
@@ -157,17 +151,13 @@ function resolveRemoteTaskId(task: HubTaskContext): string | undefined {
   return task.meta.remoteTaskId ?? loadHubManifest(task.taskDir).remoteTaskId;
 }
 
-function assertCompletionArtifactsPresent(task: HubTaskContext): void {
-  const missing = REQUIRED_COMPLETION_FILES.filter(
-    (file) => !fs.existsSync(path.join(task.taskDir, file)),
-  );
-  if (missing.length > 0) {
-    throw new Error(`Missing completion artifacts: ${missing.join(", ")}`);
-  }
-}
-
 function assertQuickValidationSummary(task: HubTaskContext): void {
-  const validationPath = path.join(task.taskDir, "validation-summary.md");
+  const validationPath = path.join(task.taskDir, QUICK_VALIDATION_SUMMARY_FILE);
+  if (!fs.existsSync(validationPath)) {
+    throw new Error(
+      "Quick task requires validation-summary.md with executed validation evidence or `未执行` with a reason.",
+    );
+  }
   const content = fs.readFileSync(validationPath, "utf-8");
   if (
     hasExecutedValidationEvidence(content) ||

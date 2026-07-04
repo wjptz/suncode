@@ -451,6 +451,15 @@ Skip this step. Context is loaded directly by the `suncode-before-dev` skill in 
 
 For Hub team projects, `suncode hub submit-subtasks` derives structured Hub display data from the reviewed `implement.md` checklist when `{TASK_DIR}/subtasks.json` is absent. Write `subtasks.json` only when the derived structure needs an explicit override. The override must describe the current task only. Structured subtasks are uploaded automatically when the task starts; no manual submit step is needed.
 
+Every complex task `implement.md` must include this parseable checklist section:
+
+```md
+## 实施清单
+
+- [ ] [P1] 子任务名称: 子任务说明
+- [ ] [P2] 子任务名称: 子任务说明
+```
+
 Override format:
 
 ```json

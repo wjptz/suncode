@@ -93,4 +93,19 @@ describe("copilot getAllPrompts", () => {
 		expect(names).toContain("start");
 		expect(names).toContain("update-spec");
 	});
+
+	it("brainstorm and update-spec prompts require Simplified Chinese output", () => {
+		const prompts = getAllPrompts();
+		const brainstorm = prompts.find((p) => p.name === "brainstorm");
+		const updateSpec = prompts.find((p) => p.name === "update-spec");
+
+		expect(brainstorm?.content).toContain("Language Requirement (Hard Requirement)");
+		expect(brainstorm?.content).toContain("Chinese is the first-priority language");
+		expect(brainstorm?.content).toContain("Simplified Chinese");
+		expect(brainstorm?.content).toContain("## 实施清单");
+		expect(brainstorm?.content).toContain("- [ ] [P1] 子任务名称: 子任务说明");
+		expect(updateSpec?.content).toContain("Language Requirement (Hard Requirement)");
+		expect(updateSpec?.content).toContain("Chinese is the first-priority language");
+		expect(updateSpec?.content).toContain("Simplified Chinese");
+	});
 });

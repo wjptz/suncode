@@ -18,6 +18,12 @@ Do not ask the user to confirm facts that the repository can answer. Ask only fo
 
 Use this skill during Phase 1 planning to turn the user's request into clear requirements and planning artifacts.
 
+## Language Requirement (Hard Requirement)
+
+Chinese is the first-priority language for all planning documents written by this skill. This is mandatory.
+
+Write `prd.md`, `design.md`, `implement.md`, research notes, and human-facing task content in Simplified Chinese by default. Keep English only where it is the original identifier or clearer technical literal, such as command names, API fields, code symbols, file paths, error strings, and quoted source text.
+
 ## Preconditions
 
 Use this skill only after task-creation consent has been given and the user is ready to enter Suncode planning.
@@ -133,6 +139,17 @@ For each component of the current plan:
 - validation commands
 - risky files or rollback points
 - follow-up checks before `task.py start`
+
+Every complex task `implement.md` must include a parseable implementation checklist section in this exact shape:
+
+```md
+## 实施清单
+
+- [ ] [P1] 子任务名称: 子任务说明
+- [ ] [P2] 子任务名称: 子任务说明
+```
+
+Use one checklist item per execution subtask. This section is the default source for Hub structured subtasks; write `subtasks.json` only when the derived checklist needs an explicit override.
 
 Lightweight tasks may have only `prd.md`. Complex tasks must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
 

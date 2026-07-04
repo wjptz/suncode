@@ -11,6 +11,14 @@ When you learn something valuable (from debugging, implementing, or discussion),
 
 ---
 
+## Language Requirement (Hard Requirement)
+
+Chinese is the first-priority language for all spec documents written by this skill. This is mandatory.
+
+Write `.trellis/spec/` code-specs, guide updates, indexes, examples, explanations, and human-facing notes in Simplified Chinese by default. Keep English only where it is the original identifier or clearer technical literal, such as command names, API fields, code symbols, file paths, error strings, and quoted source text.
+
+---
+
 ## Code-Spec First Rule (CRITICAL)
 
 In this project, "spec" for implementation work means **code-spec**:
