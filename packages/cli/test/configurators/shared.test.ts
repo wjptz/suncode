@@ -585,6 +585,14 @@ describe("resolveBundledSkills", () => {
     expect(requirements?.content).toContain("MinIO");
     expect(requirements?.content).toContain("suncode hub intake");
     expect(requirements?.content).toContain("suncode hub plan-ready");
+    expect(requirements?.content).toContain("taskType: `quick`");
+    expect(requirements?.content).toContain("sourceTask");
     expect(requirements?.content).toContain("suncode hub pull-spec");
+
+    const finish = bundled.find(
+      (file) => file.relativePath === "suncode-hub-finish/SKILL.md",
+    );
+    expect(finish?.content).toContain("quick");
+    expect(finish?.content).toContain("completion artifacts");
   });
 });

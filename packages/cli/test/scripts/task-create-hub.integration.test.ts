@@ -96,7 +96,11 @@ function writeTeamHubConfig(repo: string): void {
   );
 }
 
-function markTaskHubBound(repo: string, taskPath: string): void {
+function markTaskHubBound(
+  repo: string,
+  taskPath: string,
+  taskType?: string,
+): void {
   const taskJsonPath = path.join(repo, taskPath, "task.json");
   const task = JSON.parse(
     fs.readFileSync(taskJsonPath, "utf-8"),
@@ -110,6 +114,7 @@ function markTaskHubBound(repo: string, taskPath: string): void {
       requirementRevision: 1,
       remoteTaskId: "TASK-2001",
       bindingStatus: "bound",
+      ...(taskType ? { taskType } : {}),
     },
   };
   fs.writeFileSync(taskJsonPath, `${JSON.stringify(task, null, 2)}\n`);
@@ -332,6 +337,30 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
     const result = runTaskStart(tmp, taskPath);
 
     expect(result.status).toBe(0);
+    expect(readTask(tmp, taskPath).status).toBe("in_progress");
+  });
+
+  it("does not run Hub before_start preflight for a quick Hub task", () => {
+    writeTeamHubConfig(tmp);
+    const { binDir, logPath } = installFakeSuncode(tmp, 7);
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "Quick Hub task",
+      "--slug",
+      "quick-hub-task",
+      "--hub-requirement-id",
+      "REQ-1001",
+    ]);
+    markTaskHubBound(tmp, taskPath, "quick");
+
+    const result = runTaskStart(tmp, taskPath, {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+    });
+
+    expect(result.status).toBe(0);
+    expect(fs.readFileSync(logPath, "utf-8")).not.toContain(
+      "hub preflight-start --task-json ",
+    );
     expect(readTask(tmp, taskPath).status).toBe("in_progress");
   });
 

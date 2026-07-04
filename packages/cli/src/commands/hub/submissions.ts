@@ -276,7 +276,11 @@ async function submitArtifacts(
     };
   }
 
-  if (options.submissionKind === "completion" && config.review.required) {
+  if (
+    options.submissionKind === "completion" &&
+    config.review.required &&
+    task.meta.taskType !== "quick"
+  ) {
     assertCompletionReviewGate(cwd, taskManifest);
   }
 

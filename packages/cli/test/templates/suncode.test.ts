@@ -139,6 +139,27 @@ describe("suncode template constants", () => {
     expect(workflowMdTemplate).toContain("suncode hub submit-subtasks");
   });
 
+  it("workflow documents quick Hub tasks as a fast route that still uploads finish artifacts", () => {
+    expect(workflowMdTemplate).toContain("meta.hub.taskType == `quick`");
+    expect(workflowMdTemplate).toContain(
+      "run `suncode hub plan-ready --task current` to upload the plan artifacts",
+    );
+    expect(workflowMdTemplate).toContain(
+      "skips Hub start preflight/plan approval",
+    );
+    expect(workflowMdTemplate).toContain("skip Hub code review");
+    expect(workflowMdTemplate).toContain("still run `suncode hub finish --task current`");
+  });
+
+  it("workflow excludes quick Hub tasks from the detailed code-review command", () => {
+    expect(workflowMdTemplate).toContain(
+      "For Hub-bound standard/change tasks with code review enabled or required",
+    );
+    expect(workflowMdTemplate).not.toContain(
+      "For Hub-bound tasks with code review enabled or required",
+    );
+  });
+
   it("workflow tells agents to use Simplified Chinese for task and spec artifacts", () => {
     expect(workflowMdTemplate).toContain("## 语言策略");
     expect(workflowMdTemplate).toContain("默认以简体中文作为第一语言");

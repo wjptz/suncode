@@ -8,6 +8,7 @@ export type HubReviewProvider = "engineer";
 export type HubReviewStatus = "approved" | "changes_requested" | "blocked";
 export type HubReviewTrigger = "manual" | "beforeCompletion";
 export type HubReviewUnavailablePolicy = "bypass" | "warn" | "block";
+export type HubTaskType = "quick" | "standard" | "change";
 
 export interface HubEngineerReviewConfig {
   command: string;
@@ -23,6 +24,19 @@ export interface HubReviewConfig {
   trigger: HubReviewTrigger;
   unavailablePolicy: HubReviewUnavailablePolicy;
   engineer: HubEngineerReviewConfig;
+}
+
+export interface HubSourceTaskSummary {
+  id?: string;
+  remoteTaskId?: string;
+  localTaskId?: string;
+  localTaskPath?: string;
+  title?: string;
+  requirementId?: string;
+  requirementRevision?: number;
+  status?: string;
+  summary?: string;
+  completedAt?: string;
 }
 
 export interface DisabledHubConfig {
@@ -53,6 +67,9 @@ export interface HubTaskMeta {
   developerId?: string;
   requirementId?: string;
   requirementRevision?: number;
+  taskType?: HubTaskType;
+  rawTaskType?: string;
+  sourceTask?: HubSourceTaskSummary;
   taskRole?: "single" | "parent" | "child";
   parentLocalTaskId?: string | null;
   parentRemoteTaskId?: string | null;

@@ -7,7 +7,7 @@ import { HubConfigError, resolveHubConfig } from "./config.js";
 import { isHubSessionExpired, getHubSession } from "./auth.js";
 import { resolveTaskJsonPath, readHubTask } from "./task.js";
 import { pendingSyncCount } from "./sync-queue.js";
-import type { FetchLike, HubTaskContext } from "./types.js";
+import type { FetchLike, HubTaskContext, HubTaskType } from "./types.js";
 
 export type HubOnOff = "on" | "off";
 export type HubConfigState = "off" | "ok" | "invalid";
@@ -54,6 +54,7 @@ export interface HubStateResult {
     state: HubCurrentTaskState;
     taskId?: string;
     reason?: string;
+    taskType?: HubTaskType;
   };
   sync?: {
     pendingSyncCount: number;
@@ -264,16 +265,18 @@ export function formatHubStatePrompt(result: HubStateResult): string {
 
   const hubCode = promptHubCode(result);
   const currentTask = result.currentTask?.state ?? result.summary.currentTask;
+  const taskType = result.currentTask?.taskType;
   const lines = [
     "<hub-state>",
     `hub:${hubCode}`,
     "workflow:primary",
     `hub-task:${currentTask}`,
+    ...(taskType ? [`task-type:${taskType}`] : []),
     `work:${promptWorkSummary(result)}`,
     ...promptPendingSyncLines(result),
-    `allowed:${promptAllowedActions(hubCode, currentTask)}`,
+    `allowed:${promptAllowedActions(hubCode, currentTask, taskType)}`,
     `blocked:${promptBlockedReason(hubCode, result)}`,
-    ...promptDoNotLines(hubCode, currentTask),
+    ...promptDoNotLines(hubCode, currentTask, taskType),
     "</hub-state>",
   ];
   return lines.join("\n");
@@ -337,9 +340,11 @@ function promptPendingSyncLines(result: HubStateResult): string[] {
 function promptAllowedActions(
   hubCode: string,
   currentTask: HubCurrentTaskState,
+  taskType?: HubTaskType,
 ): string {
   if (hubCode !== "ok") return "none";
   if (currentTask === "hub-bound") {
+    if (taskType === "quick") return "intake sync plan-ready start finish";
     return "intake sync plan-ready pull-review review finish";
   }
   if (currentTask === "hub-pending") {
@@ -360,9 +365,13 @@ function promptBlockedReason(hubCode: string, result: HubStateResult): string {
 function promptDoNotLines(
   hubCode: string,
   currentTask: HubCurrentTaskState,
+  taskType?: HubTaskType,
 ): string[] {
   if (hubCode !== "ok") {
     return ["do-not:hub-workflow"];
+  }
+  if (currentTask === "hub-bound" && taskType === "quick") {
+    return ["do-not:review"];
   }
   if (currentTask === "local-only") {
     return ["do-not:submit-plan submit-completion mark-started"];
@@ -382,10 +391,15 @@ function readCurrentTaskState(
     });
     const task = readHubTask(taskJsonPath, cwd);
     const classification = classifyHubTaskState(task);
+    const taskType =
+      classification.state === "hub-bound" || classification.state === "hub-pending"
+        ? (task.meta.taskType ?? "standard")
+        : undefined;
     return {
       state: classification.state,
       taskId: task.localTaskId,
       reason: classification.reason,
+      ...(taskType ? { taskType } : {}),
     };
   } catch {
     return { state: "none", reason: "no active session task" };

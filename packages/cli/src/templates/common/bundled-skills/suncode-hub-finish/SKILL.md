@@ -16,6 +16,7 @@ Use this skill only when the current task is Hub-backed: already bound to Suncod
 - If `<hub-state>` says `hub-task:local-only`, stop this Hub-specific flow unless the user explicitly asks to bind a Hub requirement.
 - Long documents are uploaded through Hub-signed MinIO URLs by `suncode hub`; Hub API payloads must contain object references and hashes, not document bodies.
 - `hub finish` does not start code review. Hub code review belongs after final validation and before the work commit; finish only verifies any required approved review still matches.
+- For `meta.hub.taskType == "quick"`, do not run Hub code review or check-agent review. Quick still must produce useful completion artifacts and run `suncode hub finish --task current` so Hub receives the final upload.
 
 ## Required Local Artifacts
 
@@ -47,7 +48,7 @@ python3 ./.suncode/scripts/task.py current --source
 suncode hub finish --task current
 ```
 
-`hub finish` verifies required completion artifacts, ensures the remote Hub binding (auto-binding a pending task when needed), enforces the required review gate through the existing completion submission checks, submits project-level spec artifacts, and submits completion artifacts plus commit metadata.
+`hub finish` verifies required completion artifacts, ensures the remote Hub binding (auto-binding a pending task when needed), enforces the required review gate through the existing completion submission checks for standard/change tasks, submits project-level spec artifacts, and submits completion artifacts plus commit metadata. Quick tasks bypass the review gate but not artifact upload.
 
 3. Act on the result:
    - Missing completion artifacts: create those files with evidence-based content and rerun the command.

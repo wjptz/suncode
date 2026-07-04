@@ -8,7 +8,12 @@ import { resolveHubConfig } from "./config.js";
 import { hubCreateTask } from "./create-task.js";
 import { pullHubSpecs, type HubSpecSyncResult } from "./specs.js";
 import { setCurrentSessionTask } from "./task.js";
-import type { FetchLike, HubCommandResult } from "./types.js";
+import type {
+  FetchLike,
+  HubCommandResult,
+  HubSourceTaskSummary,
+  HubTaskType,
+} from "./types.js";
 
 export interface HubIntakeOptions {
   cwd?: string;
@@ -28,6 +33,9 @@ interface HubRequirement {
   description?: string;
   revision?: number;
   status?: string;
+  taskType: HubTaskType;
+  rawTaskType?: string;
+  sourceTask?: HubSourceTaskSummary;
 }
 
 export async function hubIntake(
@@ -212,6 +220,13 @@ function createLocalHubTask(options: {
             developerId: options.developerId,
             requirementId: options.requirement.id,
             requirementRevision: options.requirement.revision,
+            taskType: options.requirement.taskType,
+            ...(options.requirement.rawTaskType
+              ? { rawTaskType: options.requirement.rawTaskType }
+              : {}),
+            ...(options.requirement.sourceTask
+              ? { sourceTask: options.requirement.sourceTask }
+              : {}),
             taskRole: "single",
             bindingStatus: "pending",
           },
@@ -227,6 +242,15 @@ function createLocalHubTask(options: {
     defaultPrd(title, options.requirement),
     "utf-8",
   );
+  if (options.requirement.taskType === "change") {
+    const researchDir = path.join(taskDir, "research");
+    fs.mkdirSync(researchDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(researchDir, "source-task.md"),
+      sourceTaskResearch(title, options.requirement),
+      "utf-8",
+    );
+  }
   return taskJsonPath;
 }
 
@@ -235,6 +259,10 @@ function normalizeRequirements(value: unknown): HubRequirement[] {
   return raw.flatMap((item) => {
     const id = stringValue(item.id) ?? stringValue(item.requirementId);
     if (!id) return [];
+    const taskType = normalizeTaskType(
+      firstString(item, ["taskType", "kind", "type", "requirementType"]),
+    );
+    const sourceTask = normalizeSourceTask(item.sourceTask);
     return [
       {
         id,
@@ -243,6 +271,9 @@ function normalizeRequirements(value: unknown): HubRequirement[] {
         revision:
           numberValue(item.revision) ?? numberValue(item.requirementRevision),
         status: stringValue(item.status),
+        taskType: taskType.taskType,
+        ...(taskType.rawTaskType ? { rawTaskType: taskType.rawTaskType } : {}),
+        ...(sourceTask ? { sourceTask } : {}),
       },
     ];
   });
@@ -295,6 +326,9 @@ function datePrefix(now: Date): string {
 }
 
 function defaultPrd(title: string, requirement: HubRequirement): string {
+  const rawTypeLine = requirement.rawTaskType
+    ? `\n- Raw Type: ${requirement.rawTaskType}`
+    : "";
   return `# ${title}
 
 ## Hub Requirement
@@ -302,11 +336,13 @@ function defaultPrd(title: string, requirement: HubRequirement): string {
 - ID: ${requirement.id}
 - Revision: ${requirement.revision ?? "-"}
 - Status: ${requirement.status ?? "-"}
+- Type: ${requirement.taskType}${rawTypeLine}
 
 ## 目标
 
 ${requirement.description?.trim() ? requirement.description : requirement.title}
 
+${taskTypePrdSection(requirement)}
 ## 需求
 
 - 待补充
@@ -315,6 +351,128 @@ ${requirement.description?.trim() ? requirement.description : requirement.title}
 
 - [ ] 待补充
 `;
+}
+
+function taskTypePrdSection(requirement: HubRequirement): string {
+  if (requirement.taskType === "quick") {
+    return `## 快速任务约束
+
+- 运行 \`suncode hub plan-ready --task current\` 上传 plan artifacts；quick 分支会跳过计划审核和 Hub start preflight。
+- 跳过 Hub code review 和 check-agent review。
+- 保持最小确定性验证；若未执行检查，\`validation-summary.md\` 必须写明 \`未执行\` 及原因。
+- 仍需生成并通过 \`suncode hub finish --task current\` 上传完成产物。
+
+`;
+  }
+  if (requirement.taskType === "change") {
+    return `## 需求变更约束
+
+- 本次 Hub Requirement 是当前需求的唯一权威；\`sourceTask\` 只用于理解旧需求背景。
+- 修改前先阅读 \`research/source-task.md\`，避免误把旧需求当作新验收标准。
+
+## Source Task
+
+${formatSourceTask(requirement.sourceTask)}
+
+`;
+  }
+  return "";
+}
+
+function sourceTaskResearch(title: string, requirement: HubRequirement): string {
+  return `# Source Task for ${title}
+
+## Usage
+
+- 当前需求：${requirement.id}
+- 当前类型：${requirement.taskType}
+- 旧任务仅作为历史背景；实现与验收以当前 Hub Requirement 为准。
+
+## Source Task
+
+${formatSourceTask(requirement.sourceTask)}
+`;
+}
+
+function formatSourceTask(sourceTask: HubSourceTaskSummary | undefined): string {
+  if (!sourceTask) return "- Hub 未提供 sourceTask 摘要。";
+  const lines: string[] = [];
+  if (sourceTask.id) lines.push(`- ID: ${sourceTask.id}`);
+  if (sourceTask.remoteTaskId) {
+    lines.push(`- Remote Task ID: ${sourceTask.remoteTaskId}`);
+  }
+  if (sourceTask.localTaskId) {
+    lines.push(`- Local Task ID: ${sourceTask.localTaskId}`);
+  }
+  if (sourceTask.localTaskPath) {
+    lines.push(`- Local Task Path: ${sourceTask.localTaskPath}`);
+  }
+  if (sourceTask.title) lines.push(`- Title: ${sourceTask.title}`);
+  if (sourceTask.requirementId) {
+    lines.push(`- Requirement ID: ${sourceTask.requirementId}`);
+  }
+  if (sourceTask.requirementRevision !== undefined) {
+    lines.push(`- Requirement Revision: ${sourceTask.requirementRevision}`);
+  }
+  if (sourceTask.status) lines.push(`- Status: ${sourceTask.status}`);
+  if (sourceTask.completedAt) {
+    lines.push(`- Completed At: ${sourceTask.completedAt}`);
+  }
+  if (sourceTask.summary) lines.push(`- Summary: ${sourceTask.summary}`);
+  return lines.length > 0 ? lines.join("\n") : "- Hub 未提供 sourceTask 摘要。";
+}
+
+function normalizeTaskType(value: string | undefined): {
+  taskType: HubTaskType;
+  rawTaskType?: string;
+} {
+  if (!value) return { taskType: "standard" };
+  const normalized = value.toLowerCase();
+  if (
+    normalized === "quick" ||
+    normalized === "standard" ||
+    normalized === "change"
+  ) {
+    return { taskType: normalized };
+  }
+  return { taskType: "standard", rawTaskType: value };
+}
+
+function normalizeSourceTask(
+  value: unknown,
+): HubSourceTaskSummary | undefined {
+  if (typeof value === "string") {
+    const id = stringValue(value);
+    return id ? { id } : undefined;
+  }
+  if (!isRecord(value)) return undefined;
+
+  const summary: HubSourceTaskSummary = {};
+  const id = firstString(value, ["id", "taskId"]);
+  if (id) summary.id = id;
+  const remoteTaskId = firstString(value, ["remoteTaskId", "remoteId"]);
+  if (remoteTaskId) summary.remoteTaskId = remoteTaskId;
+  const localTaskId = stringValue(value.localTaskId);
+  if (localTaskId) summary.localTaskId = localTaskId;
+  const localTaskPath = stringValue(value.localTaskPath);
+  if (localTaskPath) summary.localTaskPath = localTaskPath;
+  const title = firstString(value, ["title", "name"]);
+  if (title) summary.title = title;
+  const requirementId = stringValue(value.requirementId);
+  if (requirementId) summary.requirementId = requirementId;
+  const requirementRevision =
+    numberValue(value.requirementRevision) ?? numberValue(value.revision);
+  if (requirementRevision !== undefined) {
+    summary.requirementRevision = requirementRevision;
+  }
+  const status = stringValue(value.status);
+  if (status) summary.status = status;
+  const completedAt = stringValue(value.completedAt);
+  if (completedAt) summary.completedAt = completedAt;
+  const sourceSummary = firstString(value, ["summary"]);
+  if (sourceSummary) summary.summary = sourceSummary;
+
+  return Object.keys(summary).length > 0 ? summary : undefined;
 }
 
 function formatRequirementList(requirements: readonly HubRequirement[]): string {
@@ -342,4 +500,15 @@ function numberValue(value: unknown): number | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
+}
+
+function firstString(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = stringValue(record[key]);
+    if (value) return value;
+  }
+  return undefined;
 }

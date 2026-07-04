@@ -111,7 +111,7 @@ max_journal_lines: 2000
 # sync hooks for create/start/archive according to hub.sync. You can still add
 # ordinary hooks: entries under hooks.after_* run together with the built-in Hub
 # hooks.
-# - before_start: suncode hub preflight-start (blocking, Hub-bound tasks only)
+# - before_start: suncode hub preflight-start (blocking, Hub-bound standard/change tasks only; quick skips)
 # - after_create: suncode hub create-task
 # - after_start: suncode hub submit-subtasks, then suncode hub mark-started
 # - after_archive: suncode hub submit-completion

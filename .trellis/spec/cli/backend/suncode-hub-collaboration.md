@@ -365,6 +365,136 @@ if (!remoteTaskId && task.meta.requirementId) {
 This makes the high-level finish command responsible for repairable binding
 gaps while preserving local-only tasks as explicit skips.
 
+## Scenario: Hub Requirement Task Type Routing
+
+### 1. Scope / Trigger
+
+- Trigger: Hub requirement intake/pull responses include a task route type:
+  `quick`, `standard`, or `change`.
+- Applies to `hub intake`, Hub task metadata parsing, `<hub-state>` prompt
+  formatting, `hub plan-ready`, completion review gates, workflow templates,
+  and Hub bundled skills.
+- Missing task type is a backward-compatible `standard` task.
+
+### 2. Signatures
+
+Hub requirement fields accepted by intake:
+
+```json
+{
+  "id": "REQ-1001",
+  "taskType": "quick",
+  "kind": "quick",
+  "type": "standard",
+  "requirementType": "change",
+  "sourceTask": {
+    "id": "TASK-OLD",
+    "title": "Previous requirement",
+    "summary": "Historical context only"
+  }
+}
+```
+
+Persisted local metadata:
+
+```json
+{
+  "meta": {
+    "hub": {
+      "taskType": "quick",
+      "rawTaskType": "hotfix",
+      "sourceTask": {
+        "id": "TASK-OLD",
+        "title": "Previous requirement",
+        "summary": "Historical context only"
+      }
+    }
+  }
+}
+```
+
+### 3. Contracts
+
+- Normalize task type from `taskType`, then `kind`, then `type`, then
+  `requirementType`.
+- Valid values are exactly `quick`, `standard`, and `change`.
+- Unknown values must fall back to `standard` while preserving the original
+  value as `rawTaskType` for visibility.
+- `sourceTask` is only persisted as a safe allowlisted summary:
+  `id`, `remoteTaskId`, `localTaskId`, `localTaskPath`, `title`,
+  `requirementId`, `requirementRevision`, `status`, `summary`, and
+  `completedAt`.
+- `sourceTask.summary` must come only from an explicit `summary` field. Do not
+  treat `description` as a summary fallback, because it may contain full
+  historical requirement text, signed URLs, or credentials.
+- Do not persist tokens, auth headers, signed URLs, arbitrary nested payloads,
+  or full historical documents from `sourceTask`.
+- `standard` follows the existing full planning and review flow.
+- `quick` keeps only minimal planning and still runs `hub plan-ready` to submit
+  plan artifacts, including `prd.md`. For quick tasks, `hub plan-ready` must
+  skip plan approval and Hub start preflight after the upload, and quick still
+  skips Hub code review/check-agent review.
+- Quick completion submission remains scoped to completion artifacts; do not
+  move `prd.md` into `submit-completion`, because PRD is a plan artifact.
+- `quick` still performs minimal deterministic validation when feasible. If a
+  check is not run, `validation-summary.md` must say `未执行` and why.
+- `hub finish` must reject quick tasks before binding or upload when
+  `validation-summary.md` is only a placeholder. It must contain executed
+  validation evidence, or `未执行` with a concrete reason.
+- `hub review` must return `skipped` for quick tasks before checking provider
+  availability, patching Hub status, writing `reviews/`, or submitting review
+  artifacts.
+- `change` follows the standard flow but intake writes source-task context into
+  the PRD and `research/source-task.md`. The current requirement remains the
+  authority; `sourceTask` is historical context only.
+- `<hub-state>` must expose `task-type:quick` for quick Hub tasks, allow
+  `plan-ready` as an upload-only step, and guard the AI away from Hub code
+  `review`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Task type missing | Persist `taskType: "standard"` and use normal flow |
+| Task type unknown | Persist `taskType: "standard"` plus `rawTaskType`; do not fail intake |
+| `quick` task calls `hub plan-ready` | Submit plan artifacts and any available structured subtasks, then skip Hub start preflight/plan approval without contacting the preflight endpoint |
+| `quick` task calls `hub preflight-start` directly or through `task.py start` | Return/perform a local skip before contacting Hub, because quick tasks do not use the start preflight gate |
+| `quick` task calls `hub review` | Return `skipped` before provider, status, or artifact side effects |
+| `quick` task finishes while review is required | Bypass the review gate, but still upload completion artifacts |
+| `quick` task finishes with placeholder `validation-summary.md` | Throw before Hub binding or upload |
+| `change` task includes `sourceTask` | Persist only the allowlisted summary and write `research/source-task.md` |
+| `sourceTask` has `description` but no explicit `summary` | Persist other allowlisted fields, but do not synthesize `summary` |
+| `sourceTask` contains secrets or signed URLs | Do not persist those fields |
+
+### 5. Good/Base/Bad Cases
+
+- Good: A quick task is claimed, started from the minimal PRD, validated with a
+  short evidence trail, and finished through Hub so completion artifacts upload.
+- Good: A change task includes the old task summary in research while the PRD
+  states the current Hub requirement is authoritative.
+- Base: Older Hub responses without type continue as standard tasks.
+- Bad: A quick task is marked done locally without `suncode hub finish`.
+- Bad: `sourceTask` is treated as a second current requirement or copied
+  wholesale into local files.
+
+### 6. Tests Required
+
+- Intake tests for default standard, quick, change with sourceTask, and unknown
+  raw type fallback.
+- Hub state prompt test for quick allowed/do-not actions.
+- Plan-ready test proving quick tasks upload plan artifacts but skip Hub start
+  preflight/plan approval.
+- Preflight/start test proving quick tasks skip Hub start preflight before any
+  Hub request, including the `task.py start` `before_start` hook path.
+- Finish/completion test proving quick bypasses required review while still
+  uploading completion artifacts.
+- Finish test proving quick placeholder `validation-summary.md` rejects before
+  binding or upload.
+- Review test proving quick tasks skip provider checks, status patches,
+  `reviews/` writes, and review submissions.
+- Intake test proving `sourceTask.description` is not persisted as `summary`.
+- Template/skill tests proving quick/change routing remains visible to agents.
+
 ## Scenario: Hub Spec 拉取
 
 ### 1. 范围 / 触发
@@ -1226,6 +1356,46 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
 - Review submission idempotency keys must use the review summary round that is
   sent in the payload:
   `hub:submit-review:{remoteTaskId}:{review.round}:{reviewBundleHash}`.
+- Hub code review prompt must not include a `Review Boundary` section or a
+  changed-file list derived from `git diff --name-only`; those lists can grow
+  without useful prioritization and waste provider context. The prompt must
+  also avoid embedding task document bodies, previous review JSON, or diff
+  contents. It should stay lightweight: describe the current review task, list
+  task/requirement file paths to inspect, constrain provider behavior to
+  task-relevant implementation review, and let the provider read task files,
+  related module code, and any directory-level code area hints.
+- Hub code review prompt is an implementation review prompt: it checks whether
+  the code implementation satisfies the requirement, design, and implementation
+  plan. It must not ask the provider to review the plan itself as the primary
+  artifact.
+- Hub code review prompt must emphasize requirement-level and logic-level
+  review rather than low-level validation re-runs. The expected focus includes
+  functional completeness, logic correctness, boundary cases, data/API
+  contracts, user-visible behavior, security/side effects, and maintainability.
+- Hub code review prompt must not ask the provider to run build, tests, lint,
+  format, dependency install, code generation, or other validation commands.
+  Existing validation artifacts may be read as background only.
+- Hub code review prompt may include directory-level code area hints derived
+  from git changes. These hints must be directories/modules only, capped to a
+  small number, and must not disclose a concrete changed-file list.
+- Hub code review prompt must tell the provider to return a single fenced JSON
+  block with the fixed parseable fields `status`, `summary`, `mustFix`,
+  `advisory`, `mustFixCount`, and `advisoryCount`. Descriptive fields should be
+  Chinese. The prompt must explain that the CLI renders that JSON into
+  `reviews/round-NNN/result.md`; the provider must not edit `result.md`
+  directly.
+- Hub code review prompt must not include a parseable fenced JSON example,
+  because providers may echo the prompt and the parser must not mistake a
+  prompt example for the final review result.
+- Hub review parsing must prefer the final fenced `json` block in provider
+  output, so provider banners, echoed examples, and token-usage footers do not
+  override the actual result.
+- The engineer review provider must set a larger `spawnSync` output buffer than
+  Node's default 1 MiB so verbose provider transcripts do not get truncated
+  before the final JSON block.
+- Review result normalization must preserve provider-selected findings instead
+  of dropping findings solely because their file path is outside a local
+  changed-file list.
 - Review artifact upload must include only `reviews/round-NNN/prompt.md` and
   `reviews/round-NNN/result.md`. Local `review.json`, `diff.patch`, and
   `raw-output.md` remain local diagnostics/state files and must not be uploaded
@@ -1248,10 +1418,14 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
 | Condition | Behavior |
 | --- | --- |
 | AI needs plan approval/comments after `plan-ready` | Use `pull-review`; do not trigger the code review provider |
+| Provider reports findings for files outside the local diff | Preserve the provider-selected findings in `result.md`, `review.json`, and review submission metadata |
 | Previous review artifacts were deleted but `hub-manifest.json` has `lastReviewRound = 1` | Next review is round 2 |
 | Same task enters `in_review` again in a later review run | Status patch uses a different idempotency key because `updatedAt` changed |
 | Review summary missing when submitting review artifacts | Throw `Review submission requires a review summary.` |
 | Review submission key round and payload `review.round` disagree | Bug; add/keep a regression test before changing the key logic |
+| Provider prints banners/examples before final JSON | Parse the final fenced `json` block |
+| Provider output includes `tokens used` after final JSON | Ignore the footer and parse the fenced JSON |
+| Provider transcript exceeds Node's default spawn buffer | Preserve output up to the configured large provider buffer and parse the final JSON if present |
 | `hub-manifest.json` is also deleted | CLI cannot infer remote review history locally; Hub may still reject reused server-side keys |
 
 ### 5. Good/Base/Bad Cases
@@ -1261,6 +1435,10 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `hub:submit-review:*:2:*` key.
 - Good: Two separate review runs patch `in_review`; both use distinct
   idempotency keys because their payloads have distinct `updatedAt` values.
+- Good: Provider prompt is an entry-point document: it lists the task directory,
+  task/review files, and a capped directory-level code area hint; it does not
+  embed PRD/design/implement bodies, concrete changed-file lists, or diff
+  contents, and result files preserve the provider-selected findings.
 - Good: After `plan-ready`, workflow text tells the AI to inspect Hub plan
   comments/status with `suncode hub pull-review --task current`.
 - Base: Fresh Hub-bound task with no manifest and no review artifacts starts at
@@ -1272,6 +1450,12 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
   `manifest.lastReviewRound`.
 - Bad: Status patch key is only `hub:review-status:{remoteTaskId}:{status}`
   while the body still includes `updatedAt`.
+- Bad: The CLI expands an unbounded changed-file list into the provider prompt
+  or filters provider findings only by local changed-file membership.
+- Bad: The CLI embeds full task documents, previous review JSON, or large diff
+  contents into `prompt.md`, causing the provider's first context to balloon.
+- Bad: The review prompt asks the provider to review the PRD/design/plan itself
+  rather than reviewing the code implementation against those files.
 
 ### 6. Tests Required
 
@@ -1288,6 +1472,21 @@ POST /api/v1/projects/{projectId}/tasks/{remoteTaskId}/review-submissions
 - Hub state prompt tests must prove Hub-bound allowed actions mention
   `pull-review` for Hub comments/status and do not expose the old
   `submit-plan review` sequence.
+- Review prompt scope regression test:
+  - provider prompt does not contain a `Review Boundary` section
+  - provider prompt does not contain a `Changed Files` list
+  - provider prompt lists task files but does not embed task document bodies or
+    diff contents
+  - provider prompt may include directory-level code area hints without listing
+    concrete changed file paths
+  - provider prompt explains JSON-only output, Chinese descriptive fields, and
+    CLI-rendered `result.md`
+  - provider prompt does not contain a parseable fenced JSON example
+  - provider parser uses the final fenced JSON block when earlier examples are
+    present
+  - provider output larger than Node's default spawn buffer still preserves and
+    parses the final JSON block
+  - provider-selected findings are preserved in `result.md` and `review.json`
 
 ### 7. Wrong vs Correct
 

@@ -409,7 +409,9 @@ export function registerHubCommand(program: Command): void {
 
   hub
     .command("plan-ready")
-    .description("Submit plan, submit structured subtasks, and run Hub start preflight")
+    .description(
+      "Submit plan and structured subtasks; run Hub start preflight for standard/change tasks",
+    )
     .option("--task-json <path>", "path to task.json")
     .option("--task <task>", "task directory/name fallback", "current")
     .option("--force", "submit even when local hashes match the manifest")

@@ -4,7 +4,11 @@ import path from "node:path";
 
 import { DIR_NAMES, FILE_NAMES } from "../../constants/paths.js";
 import { toPosix } from "../../utils/posix.js";
-import type { HubTaskContext, HubTaskMeta } from "./types.js";
+import type {
+  HubSourceTaskSummary,
+  HubTaskContext,
+  HubTaskMeta,
+} from "./types.js";
 
 const ENV_SESSION_KEYS: readonly [platform: string, keys: readonly string[]][] = [
   ["claude", ["CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"]],
@@ -324,6 +328,9 @@ function readHubMeta(task: Record<string, unknown>): HubTaskMeta {
     developerId: stringValue(record.developerId),
     requirementId: stringValue(record.requirementId),
     requirementRevision: numberValue(record.requirementRevision),
+    taskType: taskTypeValue(record.taskType),
+    rawTaskType: stringValue(record.rawTaskType),
+    sourceTask: sourceTaskValue(record.sourceTask),
     taskRole: taskRoleValue(record.taskRole),
     parentLocalTaskId: nullableStringValue(record.parentLocalTaskId),
     parentRemoteTaskId: nullableStringValue(record.parentRemoteTaskId),
@@ -343,6 +350,44 @@ function nullableStringValue(value: unknown): string | null | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function sourceTaskValue(value: unknown): HubSourceTaskSummary | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const summary: HubSourceTaskSummary = {};
+  const id = stringValue(record.id);
+  if (id) summary.id = id;
+  const remoteTaskId = stringValue(record.remoteTaskId);
+  if (remoteTaskId) summary.remoteTaskId = remoteTaskId;
+  const localTaskId = stringValue(record.localTaskId);
+  if (localTaskId) summary.localTaskId = localTaskId;
+  const localTaskPath = stringValue(record.localTaskPath);
+  if (localTaskPath) summary.localTaskPath = localTaskPath;
+  const title = stringValue(record.title);
+  if (title) summary.title = title;
+  const requirementId = stringValue(record.requirementId);
+  if (requirementId) summary.requirementId = requirementId;
+  const requirementRevision = numberValue(record.requirementRevision);
+  if (requirementRevision !== undefined) {
+    summary.requirementRevision = requirementRevision;
+  }
+  const status = stringValue(record.status);
+  if (status) summary.status = status;
+  const sourceSummary = stringValue(record.summary);
+  if (sourceSummary) summary.summary = sourceSummary;
+  const completedAt = stringValue(record.completedAt);
+  if (completedAt) summary.completedAt = completedAt;
+  return Object.keys(summary).length > 0 ? summary : undefined;
+}
+
+function taskTypeValue(value: unknown): HubTaskMeta["taskType"] | undefined {
+  if (value === "quick" || value === "standard" || value === "change") {
+    return value;
+  }
+  return undefined;
 }
 
 function taskRoleValue(value: unknown): HubTaskMeta["taskRole"] | undefined {

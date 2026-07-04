@@ -40,6 +40,25 @@ suncode hub review --task current --module packages/cli/src/commands/hub
 ## Boundaries
 
 - Review is report-only. Do not ask the review provider to edit files.
+- Do not manually add a Review Boundary section or a changed-file list. The
+  review prompt should stay lightweight: describe the task entry point, list
+  task/requirement file paths, and constrain provider behavior. The provider
+  decides what to inspect by reading task files, directory-level code area
+  hints, related module code, and any explicit `--module` scopes the user
+  supplied.
+- The provider prompt should review the implementation against the task
+  requirement/design/implementation plan; it must not turn into a plan review.
+- The provider prompt should emphasize requirement-level review: functional
+  completeness, logic correctness, boundary cases, data/API contracts,
+  user-visible behavior, security/side effects, and maintainability.
+- Do not ask the provider to run build, tests, lint, format, dependency
+  install, code generation, or other validation commands. Existing validation
+  artifacts may be read as background only.
+- The provider prompt may include directory-level code area hints derived from
+  git changes, but must not include a concrete changed-file list.
+- Provider descriptive fields (`summary`, issue `title`, issue `detail`) should
+  be Chinese. The provider returns a single fenced JSON block; the CLI parses it
+  and renders `result.md`.
 - Review belongs before the work commit. Stage intended new files first when needed so the reviewed diff matches the content that will be committed.
 - Do not submit completion when `hub.review.required=true` until the latest review is approved for the current diff.
 - Do not upload files or patch Hub status by hand; `suncode hub review` owns those side effects.

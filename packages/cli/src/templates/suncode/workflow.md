@@ -194,7 +194,7 @@ Complex task: ask the user if you can create a Suncode task and enter the planni
 - 1.2 Research `[optional · repeatable]`
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix (sub-agent-dispatch platforms only; inline platforms skip)
 - 1.4 Structure subtasks `[optional override for Hub team projects · once]` (`subtasks.json`; otherwise derived from `implement.md`)
-- 1.5 Activate task `[required · once]` (`suncode hub plan-ready` for Hub-bound tasks, then `task.py start`; status → in_progress)
+- 1.5 Activate task `[required · once]` (`suncode hub plan-ready` for Hub-bound tasks; quick tasks use it to upload plan artifacts only, then `task.py start`; status → in_progress)
 - 1.6 Completion criteria
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
@@ -202,7 +202,7 @@ Complex task: ask the user if you can create a Suncode task and enter the planni
 [workflow-state:planning]
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask the user to review planning artifacts before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
-Hub team project: run `suncode hub plan-ready --task current` after planning; write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
+Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
@@ -216,7 +216,7 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
 [workflow-state:planning-inline]
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask the user to review planning artifacts before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
-Hub team project: run `suncode hub plan-ready --task current` after planning; write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
+Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `suncode-before-dev`.
 [/workflow-state:planning-inline]
@@ -237,6 +237,7 @@ Sub-agent dispatch protocol applies to all platforms and all sub-agents, includi
 [workflow-state:in_progress]
 Tools: `suncode-implement` / `suncode-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `suncode-update-spec` is a skill. `suncode-check` exists as both; prefer the Agent form when verifying after code changes.
 Flow: `suncode-implement` -> `suncode-check` -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Quick Hub task (meta.hub.taskType == `quick`): skip Hub code review and check-agent review, keep validation minimal and evidence-based, and still run `suncode hub finish --task current` so completion artifacts upload.
 Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `suncode-implement`, do NOT spawn another `suncode-implement` or `suncode-check`; if already running as `suncode-check`, do NOT spawn another `suncode-check` or `suncode-implement`. Dispatch is main session only.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 [/workflow-state:in_progress]
@@ -248,6 +249,7 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
 
 [workflow-state:in_progress-inline]
 Flow: `suncode-before-dev` -> edit -> `suncode-check` -> validation -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Quick Hub task (meta.hub.taskType == `quick`): skip Hub code review and check-agent review, keep validation minimal and evidence-based, and still run `suncode hub finish --task current` so completion artifacts upload.
 Do not dispatch implement/check sub-agents in inline mode.
 Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
 [/workflow-state:in_progress-inline]
@@ -474,11 +476,13 @@ Rules:
 After planning artifact review, prepare Hub-bound tasks and then flip the task status to `in_progress`:
 
 ```bash
-suncode hub plan-ready --task current   # Hub-bound tasks only
+suncode hub plan-ready --task current
 python3 ./.suncode/scripts/task.py start <task-dir>
 ```
 
-`suncode hub plan-ready` submits planning artifacts, submits structured subtasks from `subtasks.json` or `implement.md`, and runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
+`suncode hub plan-ready` submits planning artifacts and structured subtasks from `subtasks.json` or `implement.md`. For standard/change tasks it also runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound standard/change tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Quick, Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
+
+For quick Hub tasks (meta.hub.taskType == `quick`), use the minimal PRD generated by intake, run `suncode hub plan-ready --task current` to upload the plan artifacts, skip Hub start preflight/plan approval, then run `python3 ./.suncode/scripts/task.py start <task-dir>` directly and keep the completion path focused on minimal validation plus `suncode hub finish --task current`. Quick tasks still skip Hub code review.
 
 If Hub returns plan review comments or start-review status after `plan-ready`, inspect them with `suncode hub pull-review --task current`. Do not run `suncode hub review` during planning; that command is for post-implementation code review rounds.
 
@@ -598,7 +602,7 @@ If issues are found → fix → re-check, until green.
 
 **Final pass (before Phase 3.4 commit)**: the last 2.2 of a task must run full-scope, not just on the latest implement chunk. List all affected packages with `python3 ./.suncode/scripts/get_context.py --mode packages`, then load each package's spec index Quality Check section. This catches cross-layer / multi-package issues a mid-iteration local 2.2 cannot.
 
-For Hub-bound tasks with code review enabled or required, run `suncode hub review --task current` after the final pass and before the work commit. Stage intended new files first when needed so the reviewed diff matches the content that will be committed.
+For Hub-bound standard/change tasks with code review enabled or required, run `suncode hub review --task current` after the final pass and before the work commit. Quick Hub tasks (`meta.hub.taskType == quick`) skip this review step and continue to minimal validation plus finish artifact upload. Stage intended new files first when needed so the reviewed diff matches the content that will be committed.
 
 #### 2.3 Rollback `[on demand]`
 

@@ -43,6 +43,10 @@ const REQUIRED_COMPLETION_FILES = [
 export async function hubPlanReady(
   options: HubPlanReadyOptions,
 ): Promise<HubCommandResult> {
+  const cwd = options.cwd ?? process.cwd();
+  const task = readHubTask(options.taskJsonPath, cwd);
+  const isQuickTask = task.meta.taskType === "quick";
+
   const tracer = createPlanReadyTracer(options);
   const commandOptions = {
     ...options,
@@ -67,7 +71,23 @@ export async function hubPlanReady(
     () => submitSubtasks(commandOptions),
   );
   if (shouldStopPlanReady(subtasks)) {
-    tracer.log("stop after submit-subtasks");
+    if (isQuickTask && subtasks.message === "No structured subtasks found.") {
+      tracer.log("quick continues without structured subtasks");
+    } else {
+      tracer.log("stop after submit-subtasks");
+      return summarizeWorkflow("plan-ready", steps);
+    }
+  }
+
+  if (isQuickTask) {
+    steps.push({
+      name: "preflight-start",
+      result: {
+        status: "skipped",
+        message: "quick task skips start preflight and plan approval.",
+      },
+    });
+    tracer.log("quick skips preflight-start");
     return summarizeWorkflow("plan-ready", steps);
   }
 
@@ -92,6 +112,9 @@ export async function hubFinish(
   const cwd = options.cwd ?? process.cwd();
   const task = readHubTask(options.taskJsonPath, cwd);
   assertCompletionArtifactsPresent(task);
+  if (task.meta.taskType === "quick") {
+    assertQuickValidationSummary(task);
+  }
 
   const steps: WorkflowStepResult[] = [];
   if (!resolveRemoteTaskId(task)) {
@@ -141,6 +164,43 @@ function assertCompletionArtifactsPresent(task: HubTaskContext): void {
   if (missing.length > 0) {
     throw new Error(`Missing completion artifacts: ${missing.join(", ")}`);
   }
+}
+
+function assertQuickValidationSummary(task: HubTaskContext): void {
+  const validationPath = path.join(task.taskDir, "validation-summary.md");
+  const content = fs.readFileSync(validationPath, "utf-8");
+  if (
+    hasExecutedValidationEvidence(content) ||
+    hasExplicitNotRunReason(content)
+  ) {
+    return;
+  }
+  throw new Error(
+    "Quick task validation-summary.md must record executed validation evidence or `未执行` with a reason.",
+  );
+}
+
+function hasExecutedValidationEvidence(content: string): boolean {
+  const commandPattern =
+    /\b(pnpm|npm|yarn|bun|vitest|jest|node --test|tsc|typecheck|lint|eslint|cargo|mvn|gradle|pytest|go test|ruff|biome)\b/i;
+  const resultPattern = /(通过|passed|pass|exit\s*0|成功|green|0 failures|无失败)/i;
+  const manualPattern =
+    /(静态检查|手动验证|人工验证|代码审查|smoke|烟测)[\s\S]*(通过|完成|未发现|pass)/i;
+  return (
+    (commandPattern.test(content) && resultPattern.test(content)) ||
+    manualPattern.test(content)
+  );
+}
+
+function hasExplicitNotRunReason(content: string): boolean {
+  const marker = "未执行";
+  const index = content.indexOf(marker);
+  if (index < 0) return false;
+  const reason = content
+    .slice(index + marker.length)
+    .replace(/[#>*`_\-\s:：。.,，]/g, "")
+    .trim();
+  return reason.length >= 4;
 }
 
 function summarizeWorkflow(

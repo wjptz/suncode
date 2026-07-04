@@ -88,6 +88,9 @@ export async function preflightStart(
   }
 
   const task = readHubTask(options.taskJsonPath, cwd);
+  if (task.meta.taskType === "quick") {
+    return { status: "skipped", message: "quick task skips start preflight." };
+  }
   const manifest = loadHubManifest(task.taskDir);
   const remoteTaskId = task.meta.remoteTaskId ?? manifest.remoteTaskId;
   if (!remoteTaskId) {

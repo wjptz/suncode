@@ -22,6 +22,9 @@ import type {
   HubReviewProvider,
   HubReviewStatus,
 } from "./types.js";
+import { toPosix } from "../../utils/posix.js";
+
+const REVIEW_PROVIDER_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
 
 export interface ReviewProviderRunOptions {
   cwd: string;
@@ -110,6 +113,9 @@ export async function hubReview(
   }
 
   const task = readHubTask(options.taskJsonPath, cwd);
+  if (task.meta.taskType === "quick") {
+    return { status: "skipped", message: "quick task skips Hub review." };
+  }
   const manifest = loadHubManifest(task.taskDir);
   const remoteTaskId = task.meta.remoteTaskId ?? manifest.remoteTaskId;
   if (!remoteTaskId) {
@@ -139,14 +145,16 @@ export async function hubReview(
 
   const startedAt = new Date().toISOString();
   const before = collectReviewCodeSnapshot(cwd);
+  const resultPath = path.join(roundDir, "result.md");
   const prompt = buildReviewPrompt({
+    cwd,
     taskDir: task.taskDir,
+    resultPath,
     scope: [...(options.modules ?? [])],
-    snapshot: before,
-    previousReview: readPreviousReview(task.taskDir, round - 1),
+    reviewAreas: reviewDirectoryHints(before.diff),
+    previousReviewPath: previousReviewPath(cwd, task.taskDir, round - 1),
   });
   const promptPath = path.join(roundDir, "prompt.md");
-  const resultPath = path.join(roundDir, "result.md");
   const rawOutputPath = path.join(roundDir, "raw-output.md");
   const diffPath = path.join(roundDir, "diff.patch");
   fs.writeFileSync(promptPath, prompt, "utf-8");
@@ -267,6 +275,7 @@ function createEngineerReviewProvider(
           input: options.prompt,
           encoding: "utf-8",
           timeout: options.timeoutSeconds * 1000,
+          maxBuffer: REVIEW_PROVIDER_MAX_BUFFER_BYTES,
         },
       );
       const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
@@ -301,65 +310,120 @@ async function runReviewProvider(
 }
 
 function buildReviewPrompt(options: {
+  cwd: string;
   taskDir: string;
+  resultPath: string;
   scope: readonly string[];
-  snapshot: ReviewCodeSnapshot;
-  previousReview?: string;
+  reviewAreas: readonly string[];
+  previousReviewPath?: string;
 }): string {
   return [
-    "# Suncode Hub Review",
+    "# Suncode Hub 代码审查",
     "",
-    "Review this task in report-only mode. Do not edit files, commit, merge, push, or run destructive commands.",
+    "你是本次 Hub 任务的代码审查员。审查对象是代码实现是否满足任务需求、设计和实施方案，不是评审需求、设计或实施方案本身。",
+    "只审查本次 Hub 任务的代码实现；不要做全仓泛化审计；不要报告无关历史问题，除非它直接影响本次任务。",
+    "只做报告，不要编辑文件、提交、合并、推送或运行破坏性命令。",
+    "不要运行编译、测试、lint、format、代码生成、安装依赖或其他验证/构建命令；这些验证应由开发流程完成，你只需读取已有任务产物作为背景。",
     "",
-    "Return exactly one fenced JSON block with this shape:",
+    `任务目录：${formatPromptPath(options.cwd, options.taskDir)}`,
     "",
-    "```json",
-    JSON.stringify(
-      {
-        status: "changes_requested",
-        summary: "One concise review summary.",
-        mustFix: [
-          {
-            severity: "high",
-            file: "path/to/file.ts",
-            line: 123,
-            title: "Concrete issue title",
-            detail: "Why this must be fixed.",
-          },
-        ],
-        advisory: [
-          {
-            severity: "low",
-            file: "path/to/file.ts",
-            title: "Optional improvement",
-            detail: "Why this can be improved later.",
-          },
-        ],
-      },
-      null,
-      2,
-    ),
-    "```",
+    "任务/需求文件：",
+    ...taskDocumentReferences(options.cwd, options.taskDir),
     "",
-    `Scope: ${options.scope.length > 0 ? options.scope.join(", ") : "current task diff"}`,
+    ...previousReviewReference(options.previousReviewPath),
+    ...reviewAreaHint(options.reviewAreas),
+    "请读取任务文件和范围提示下的相关模块代码，重点从需求视角核查实现质量：",
+    "- 功能完整性：需求、验收标准、变更点是否都由代码覆盖，没有漏实现或误实现。",
+    "- 逻辑正确性：核心分支、状态流转、数据归一化、错误路径和回退策略是否符合需求。",
+    "- 边界条件：空值、缺失字段、未知枚举、重复调用、旧数据兼容和异常响应是否处理合理。",
+    "- 数据流与接口契约：输入输出、持久化字段、上传/提交 payload、幂等键和调用顺序是否一致。",
+    "- 用户可见行为：CLI 提示、产物生成、跳过/阻塞语义是否清晰且不会误导后续流程。",
+    "- 安全与副作用：是否避免泄露敏感信息，是否避免越权写入、误上传、误状态变更或扩大修改范围。",
+    "- 可维护性：实现是否遵循现有模块边界和本地模式，没有引入不必要复杂度或重复逻辑。",
     "",
-    ...taskDocuments(options.taskDir),
-    options.previousReview ? `\n## Previous Review\n\n${options.previousReview}` : "",
-    "## Diff",
+    "输出要求：",
+    "- 只返回一个 fenced JSON 代码块，不要输出其他 Markdown 正文。",
+    "- 描述性字段必须使用中文，包括 `summary`、`title` 和 `detail`。",
+    "- `status` 只能是 `approved`、`changes_requested` 或 `blocked`。",
+    `- CLI 会根据你的 JSON 生成 ${formatPromptPath(options.cwd, options.resultPath)}；不要直接写入或编辑 result.md / review.json。`,
+    "- result.md 会由 CLI 渲染为 Summary / Must Fix / Advisory 等固定章节。",
     "",
-    "```diff",
-    options.snapshot.diff,
-    "```",
+    "固定字段：",
+    "- `status`: `approved`、`changes_requested` 或 `blocked`。",
+    "- `summary`: 一句中文审查结论。",
+    "- `mustFix`: 必须修复问题数组；每项可包含 `severity`、`file`、`line`、`title`、`detail`。",
+    "- `advisory`: 建议项数组；每项可包含 `severity`、`file`、`line`、`title`、`detail`。",
+    "- `mustFixCount`: 必须修复问题数量。",
+    "- `advisoryCount`: 建议项数量。",
+    "",
+    ...renderScopeHint(options.scope),
   ].join("\n");
 }
 
-function taskDocuments(taskDir: string): string[] {
-  const files = ["prd.md", "design.md", "implement.md", "subtasks.json"];
+function renderScopeHint(scope: readonly string[]): string[] {
+  if (scope.length === 0) return [];
+  return [`用户显式 scope hint：${scope.join(", ")}`, ""];
+}
+
+function taskDocumentReferences(cwd: string, taskDir: string): string[] {
+  const files = [
+    "task.json",
+    "prd.md",
+    "design.md",
+    "implement.md",
+    "subtasks.json",
+  ];
   return files.flatMap((file) => {
     const filePath = path.join(taskDir, file);
     if (!fs.existsSync(filePath)) return [];
-    return [`## ${file}`, "", fs.readFileSync(filePath, "utf-8")];
+    return [`- ${formatPromptPath(cwd, filePath)}`];
   });
+}
+
+function previousReviewReference(previousReview?: string): string[] {
+  if (!previousReview) return [];
+  return ["上一轮 review 文件：", `- ${previousReview}`, ""];
+}
+
+function reviewAreaHint(reviewAreas: readonly string[]): string[] {
+  if (reviewAreas.length === 0) return [];
+  return [
+    "代码审查范围提示（目录级，非文件清单）：",
+    ...reviewAreas.map((area) => `- ${area}`),
+    "",
+  ];
+}
+
+function reviewDirectoryHints(diff: string): string[] {
+  const limit = 12;
+  const directories = new Set<string>();
+  for (const line of diff.split("\n")) {
+    const match = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+    if (!match) continue;
+    const changedPath = normalizeDiffPath(match[2] ?? match[1]);
+    if (!changedPath) continue;
+    const directory = path.posix.dirname(changedPath);
+    directories.add(directory === "." ? "repository-root" : directory);
+    if (directories.size >= limit) break;
+  }
+  return [...directories].sort();
+}
+
+function normalizeDiffPath(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === "/dev/null") return undefined;
+  return toPosix(trimmed.replace(/^"|"$/g, ""));
+}
+
+function formatPromptPath(cwd: string, filePath: string): string {
+  const relativePath = path.relative(cwd, filePath);
+  const displayPath =
+    relativePath &&
+    !relativePath.startsWith("..") &&
+    !path.isAbsolute(relativePath)
+      ? relativePath
+      : filePath;
+  return toPosix(displayPath);
 }
 
 function parseProviderReview(
@@ -416,11 +480,24 @@ function parseProviderReview(
 }
 
 function parseJsonBlock(output: string): Record<string, unknown> | undefined {
-  const fenced = output.match(/```json\s*([\s\S]*?)```/i)?.[1];
+  const fencedBlocks = [...output.matchAll(/```json\s*([\s\S]*?)```/gi)]
+    .map((match) => match[1])
+    .reverse();
+  for (const block of fencedBlocks) {
+    const parsed = parseJsonObject(block);
+    if (parsed) return parsed;
+  }
+
   const start = output.indexOf("{");
   const end = output.lastIndexOf("}");
-  const jsonText = fenced ?? (start >= 0 && end >= start ? output.slice(start, end + 1) : "");
-  if (!jsonText.trim()) return undefined;
+  const jsonText = start >= 0 && end >= start ? output.slice(start, end + 1) : "";
+  return parseJsonObject(jsonText);
+}
+
+function parseJsonObject(
+  jsonText: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!jsonText?.trim()) return undefined;
   try {
     const parsed = JSON.parse(jsonText) as unknown;
     return parsed && typeof parsed === "object"
@@ -502,7 +579,7 @@ function renderReviewResultMarkdown(options: {
     `Round: ${options.round}`,
     `Provider: ${options.provider}`,
     `Status: ${options.review.status}`,
-    `Scope: ${options.scope.length > 0 ? options.scope.join(", ") : "current task diff"}`,
+    `Scope: ${options.scope.length > 0 ? options.scope.join(", ") : "provider-selected"}`,
     "",
     "## Summary",
     "",
@@ -621,7 +698,8 @@ function nextReviewRound(taskDir: string): number {
   return rounds.length === 0 ? 1 : Math.max(...rounds) + 1;
 }
 
-function readPreviousReview(
+function previousReviewPath(
+  cwd: string,
   taskDir: string,
   round: number,
 ): string | undefined {
@@ -633,7 +711,7 @@ function readPreviousReview(
     "review.json",
   );
   if (!fs.existsSync(filePath)) return undefined;
-  return fs.readFileSync(filePath, "utf-8");
+  return formatPromptPath(cwd, filePath);
 }
 
 function reviewRoundName(round: number): string {

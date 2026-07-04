@@ -241,8 +241,26 @@ def _is_hub_bound_task(task_json_path: Path) -> bool:
     return binding_status not in ("pending", "failed", "unbound", "local-only", "local_only")
 
 
+def _is_quick_hub_task(task_json_path: Path) -> bool:
+    try:
+        task = json.loads(task_json_path.read_text(encoding="utf-8"))
+    except (OSError, IOError, json.JSONDecodeError):
+        return False
+
+    meta = task.get("meta")
+    if not isinstance(meta, dict):
+        return False
+    hub = meta.get("hub")
+    if not isinstance(hub, dict):
+        return False
+
+    return str(hub.get("taskType") or "").strip().lower() == "quick"
+
+
 def _should_skip_hook_command(event: str, command: str, task_json_path: Path) -> bool:
     if event == "before_start" and _is_hub_preflight_command(command):
+        if _is_quick_hub_task(task_json_path):
+            return True
         return not _is_hub_bound_task(task_json_path)
     return False
 

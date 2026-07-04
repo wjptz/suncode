@@ -58,6 +58,7 @@ import {
   submitSubtasks,
 } from "../../src/commands/hub/submissions.js";
 import { syncPending } from "../../src/commands/hub/sync-queue.js";
+import { preflightStart } from "../../src/commands/hub/lifecycle.js";
 import { hubFinish, hubPlanReady } from "../../src/commands/hub/workflow.js";
 import { hubReview } from "../../src/commands/hub/review.js";
 import {
@@ -227,7 +228,7 @@ function textResponse(data: string, status = 200): Response {
   });
 }
 
-function createMockFetch(): {
+function createMockFetch(options: { requirements?: unknown[] } = {}): {
   calls: FetchCall[];
   fetch: ReturnType<typeof vi.fn>;
 } {
@@ -335,13 +336,15 @@ function createMockFetch(): {
       });
     }
 
-    if (String(url).includes("/requirements/REQ-1001/tasks")) {
+    const taskCreateMatch = /\/requirements\/([^/]+)\/tasks$/.exec(String(url));
+    if (method === "POST" && taskCreateMatch) {
+      const payload = JSON.parse(body ?? "{}") as { localTaskId?: string };
       return jsonResponse({
         task: {
           id: "TASK-2001",
           projectId: "proj_123",
-          requirementId: "REQ-1001",
-          localTaskId: "06-30-payment-retry",
+          requirementId: decodeURIComponent(taskCreateMatch[1] ?? ""),
+          localTaskId: payload.localTaskId ?? "06-30-payment-retry",
           taskRole: "single",
           parentTaskId: null,
           status: "planning",
@@ -359,7 +362,7 @@ function createMockFetch(): {
 
     if (method === "GET" && String(url).includes("/requirements?")) {
       return jsonResponse({
-        requirements: [
+        requirements: options.requirements ?? [
           {
             id: "REQ-1001",
             title: "登录状态识别",
@@ -1567,6 +1570,34 @@ describe("hub state prompt", () => {
     expect(prompt).toContain("blocked:none");
   });
 
+  it("formats quick Hub-bound state with the fast-route guardrail", () => {
+    const prompt = formatHubStatePrompt(
+      state({
+        summary: {
+          hub: "on",
+          config: "ok",
+          login: "ok",
+          service: "ok",
+          work: "available",
+          currentTask: "hub-bound",
+        },
+        work: { availableCount: 1, items: [] },
+        currentTask: {
+          state: "hub-bound",
+          taskId: "hub",
+          reason: "test",
+          taskType: "quick",
+        },
+      }),
+    );
+
+    expect(prompt).toContain("hub-task:hub-bound");
+    expect(prompt).toContain("task-type:quick");
+    expect(prompt).toContain("allowed:intake sync plan-ready start finish");
+    expect(prompt).toContain("do-not:review");
+    expect(prompt).not.toContain("plan-ready pull-review review");
+  });
+
   it("formats service failures as fail-closed", () => {
     const prompt = formatHubStatePrompt(
       state({
@@ -2409,12 +2440,275 @@ describe("hub commands", () => {
     expect(taskJson.meta.hub).toMatchObject({
       requirementId: "REQ-1001",
       requirementRevision: 7,
+      taskType: "standard",
       remoteTaskId: "TASK-2001",
       bindingStatus: "bound",
     });
     expect(
       fs.readFileSync(path.join(tasksDir, taskDirName ?? "", "prd.md"), "utf-8"),
     ).toContain("识别用户登录状态。");
+  });
+
+  it("hub intake records quick task type and writes a fast-route PRD", async () => {
+    const { fetch } = createMockFetch({
+      requirements: [
+        {
+          id: "REQ-1001",
+          title: "快速修复登录文案",
+          description: "只调整登录页提示。",
+          revision: 8,
+          status: "ready",
+          taskType: "quick",
+        },
+      ],
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+      now: new Date("2026-07-03T08:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("created");
+    const taskDir = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "07-03-hub-req-1001",
+    );
+    const taskJson = JSON.parse(
+      fs.readFileSync(path.join(taskDir, "task.json"), "utf-8"),
+    ) as { meta: { hub: Record<string, unknown> } };
+    expect(taskJson.meta.hub.taskType).toBe("quick");
+    const prd = fs.readFileSync(path.join(taskDir, "prd.md"), "utf-8");
+    expect(prd).toContain("- Type: quick");
+    expect(prd).toContain(
+      "运行 `suncode hub plan-ready --task current` 上传 plan artifacts",
+    );
+    expect(prd).toContain("跳过计划审核和 Hub start preflight");
+    expect(prd).toContain("`validation-summary.md` 必须写明 `未执行` 及原因");
+    expect(prd).toContain("仍需生成并通过 `suncode hub finish --task current` 上传完成产物");
+  });
+
+  it("hub intake accepts Hub requirement kind as the task type", async () => {
+    const { fetch } = createMockFetch({
+      requirements: [
+        {
+          id: "REQ-11",
+          projectId: "mchs-op",
+          title: "知识库搭建",
+          summary: "知识库",
+          body: {
+            kind: "text",
+            text: "知识库搭建",
+            document: null,
+          },
+          acceptanceCriteria: [
+            {
+              kind: "text",
+              text: "知识库搭建完成",
+              document: null,
+            },
+          ],
+          status: "ready",
+          priority: "P2",
+          kind: "quick",
+          revision: 1,
+          assigneeDeveloperId: "dev_1",
+          updatedAt: "2026-07-03T14:19:27.668196+08:00",
+        },
+      ],
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+      now: new Date("2026-07-03T08:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("created");
+    const taskDir = path.join(tmpDir, ".suncode", "tasks", "07-03-hub-req-11");
+    const taskJson = JSON.parse(
+      fs.readFileSync(path.join(taskDir, "task.json"), "utf-8"),
+    ) as { meta: { hub: Record<string, unknown> } };
+    expect(taskJson.meta.hub).toMatchObject({
+      requirementId: "REQ-11",
+      requirementRevision: 1,
+      taskType: "quick",
+    });
+    const prd = fs.readFileSync(path.join(taskDir, "prd.md"), "utf-8");
+    expect(prd).toContain("- Type: quick");
+    expect(prd).toContain(
+      "运行 `suncode hub plan-ready --task current` 上传 plan artifacts",
+    );
+  });
+
+  it("hub intake records change sourceTask without persisting unsafe fields", async () => {
+    const { fetch } = createMockFetch({
+      requirements: [
+        {
+          id: "REQ-1001",
+          title: "调整登录状态识别",
+          description: "新需求以本次描述为准。",
+          revision: 9,
+          status: "changes_requested",
+          type: "change",
+          sourceTask: {
+            id: "TASK-OLD-1",
+            title: "旧登录状态识别",
+            status: "completed",
+            summary: "旧需求曾要求识别登录状态。",
+            description:
+              "完整旧需求含 signedUrl=https://storage.example.test/doc?token=SECRET-SHOULD-NOT-PERSIST",
+            token: "SECRET-SHOULD-NOT-PERSIST",
+          },
+        },
+      ],
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+      now: new Date("2026-07-03T08:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("created");
+    const taskDir = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "07-03-hub-req-1001",
+    );
+    const taskJsonText = fs.readFileSync(
+      path.join(taskDir, "task.json"),
+      "utf-8",
+    );
+    const taskJson = JSON.parse(taskJsonText) as {
+      meta: { hub: { taskType?: string; sourceTask?: Record<string, unknown> } };
+    };
+    expect(taskJson.meta.hub.taskType).toBe("change");
+    expect(taskJson.meta.hub.sourceTask).toMatchObject({
+      id: "TASK-OLD-1",
+      title: "旧登录状态识别",
+      status: "completed",
+      summary: "旧需求曾要求识别登录状态。",
+    });
+    expect(taskJsonText).not.toContain("SECRET-SHOULD-NOT-PERSIST");
+    const prd = fs.readFileSync(path.join(taskDir, "prd.md"), "utf-8");
+    expect(prd).toContain("- Type: change");
+    expect(prd).toContain("## Source Task");
+    expect(prd).toContain("旧登录状态识别");
+    const sourceTaskResearch = fs.readFileSync(
+      path.join(taskDir, "research", "source-task.md"),
+      "utf-8",
+    );
+    expect(sourceTaskResearch).toContain("TASK-OLD-1");
+    expect(sourceTaskResearch).not.toContain("SECRET-SHOULD-NOT-PERSIST");
+  });
+
+  it("hub intake does not persist sourceTask.description as a summary fallback", async () => {
+    const { fetch } = createMockFetch({
+      requirements: [
+        {
+          id: "REQ-1001",
+          title: "调整旧任务描述",
+          description: "当前需求以本次描述为准。",
+          revision: 10,
+          status: "changes_requested",
+          taskType: "change",
+          sourceTask: {
+            id: "TASK-OLD-2",
+            title: "旧任务",
+            description:
+              "旧需求全文含 signedUrl=https://storage.example.test/doc?token=SECRET-SHOULD-NOT-PERSIST",
+          },
+        },
+      ],
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+      now: new Date("2026-07-03T08:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("created");
+    const taskDir = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "07-03-hub-req-1001",
+    );
+    const taskJsonText = fs.readFileSync(
+      path.join(taskDir, "task.json"),
+      "utf-8",
+    );
+    const taskJson = JSON.parse(taskJsonText) as {
+      meta: { hub: { sourceTask?: Record<string, unknown> } };
+    };
+    expect(taskJson.meta.hub.sourceTask).toMatchObject({
+      id: "TASK-OLD-2",
+      title: "旧任务",
+    });
+    expect(taskJson.meta.hub.sourceTask).not.toHaveProperty("summary");
+    expect(taskJsonText).not.toContain("SECRET-SHOULD-NOT-PERSIST");
+    expect(
+      fs.readFileSync(path.join(taskDir, "research", "source-task.md"), "utf-8"),
+    ).not.toContain("SECRET-SHOULD-NOT-PERSIST");
+  });
+
+  it("hub intake treats unknown task types as standard while keeping the raw value visible", async () => {
+    const { fetch } = createMockFetch({
+      requirements: [
+        {
+          id: "REQ-1001",
+          title: "未知类型需求",
+          description: "Hub 返回了未识别类型。",
+          revision: 10,
+          status: "ready",
+          requirementType: "hotfix",
+        },
+      ],
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+      now: new Date("2026-07-03T08:00:00.000Z"),
+    });
+
+    expect(result.status).toBe("created");
+    const taskDir = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "07-03-hub-req-1001",
+    );
+    const taskJson = JSON.parse(
+      fs.readFileSync(path.join(taskDir, "task.json"), "utf-8"),
+    ) as { meta: { hub: Record<string, unknown> } };
+    expect(taskJson.meta.hub).toMatchObject({
+      taskType: "standard",
+      rawTaskType: "hotfix",
+    });
+    const prd = fs.readFileSync(path.join(taskDir, "prd.md"), "utf-8");
+    expect(prd).toContain("- Type: standard");
+    expect(prd).toContain("- Raw Type: hotfix");
   });
 
   it("hub intake activates the created task for the current session", async () => {
@@ -3108,6 +3402,73 @@ describe("hub commands", () => {
     );
   });
 
+  it("hub plan-ready uploads quick plan artifacts but skips start preflight", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    taskJson.meta.hub.taskType = "quick";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubPlanReady({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(
+      calls.some((call) => call.url.endsWith("/plan-submissions")),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call.url.endsWith("/preflight-start")),
+    ).toBe(false);
+    const uploadSession = calls.find(
+      (call) =>
+        call.url.endsWith("/artifact-upload-sessions") &&
+        call.body?.includes('"submissionKind":"plan"'),
+    );
+    expect(uploadSession).toBeDefined();
+    const uploadPayload = JSON.parse(uploadSession?.body ?? "{}") as {
+      artifacts?: { path: string }[];
+    };
+    expect(uploadPayload.artifacts?.map((artifact) => artifact.path)).toEqual([
+      "prd.md",
+    ]);
+    expect(result.message).toContain("quick task skips start preflight");
+  });
+
+  it("hub preflight-start skips quick tasks before contacting Hub", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    taskJson.meta.hub.taskType = "quick";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+
+    const result = await preflightStart({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message: "quick task skips start preflight.",
+    });
+    expect(calls).toHaveLength(0);
+  });
+
   it("hub finish reports missing completion artifacts before uploading", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const { fetch } = createMockFetch();
@@ -3184,6 +3545,113 @@ describe("hub commands", () => {
           call.url.includes("/requirements/REQ-1001/tasks"),
       ),
     ).toBe(false);
+  });
+
+  it("quick hub finish bypasses required review but still uploads completion artifacts", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    required: true",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    taskJson.meta.hub.taskType = "quick";
+    writeJson(taskJsonPath, taskJson);
+    for (const file of [
+      "implementation-summary.md",
+      "retrospective.md",
+      "reuse-assessment.md",
+    ]) {
+      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
+    }
+    fs.writeFileSync(
+      path.join(taskDir, "validation-summary.md"),
+      "## 已执行验证\n- pnpm test test/commands/hub.test.ts：通过。\n",
+      "utf-8",
+    );
+
+    const { calls, fetch } = createMockFetch();
+    const result = await hubFinish({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(
+      calls.some((call) => call.url.endsWith("/completion-submissions")),
+    ).toBe(true);
+    expect(calls.some((call) => call.url.endsWith("/review-submissions"))).toBe(
+      false,
+    );
+    const uploadSession = calls.find(
+      (call) =>
+        call.url.endsWith("/artifact-upload-sessions") &&
+        call.body?.includes('"submissionKind":"completion"'),
+    );
+    expect(uploadSession).toBeDefined();
+    const uploadPayload = JSON.parse(uploadSession?.body ?? "{}") as {
+      artifacts?: { path: string }[];
+    };
+    expect(uploadPayload.artifacts?.map((artifact) => artifact.path).sort()).toEqual(
+      [
+        "implementation-summary.md",
+        "retrospective.md",
+        "reuse-assessment.md",
+        "validation-summary.md",
+      ],
+    );
+  });
+
+  it("quick hub finish rejects placeholder validation summaries before uploading", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    taskJson.meta.hub.taskType = "quick";
+    writeJson(taskJsonPath, taskJson);
+    for (const file of [
+      "implementation-summary.md",
+      "validation-summary.md",
+      "retrospective.md",
+      "reuse-assessment.md",
+    ]) {
+      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
+    }
+
+    const { calls, fetch } = createMockFetch();
+    await expect(
+      hubFinish({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+        fetch,
+      }),
+    ).rejects.toThrow(
+      "Quick task validation-summary.md must record executed validation evidence or `未执行` with a reason.",
+    );
+    expect(calls).toHaveLength(0);
   });
 
   it("hub finish auto-binds a pending task before submitting", async () => {
@@ -3414,6 +3882,61 @@ describe("hub commands", () => {
     );
   });
 
+  it("hub review skips quick tasks before provider, status, or artifact submission", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    required: true",
+        "    provider: engineer",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    taskJson.meta.hub.taskType = "quick";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+    let providerChecked = false;
+
+    const result = await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => {
+          providerChecked = true;
+          return true;
+        },
+        run: async () => {
+          throw new Error("quick tasks must not invoke review providers");
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message: "quick task skips Hub review.",
+    });
+    expect(providerChecked).toBe(false);
+    expect(fs.existsSync(path.join(taskDir, "reviews"))).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
   it("hub review creates a review round, syncs statuses, and submits review artifacts", async () => {
     writeProjectConfig(
       tmpDir,
@@ -3563,6 +4086,350 @@ describe("hub commands", () => {
     expect(manifest.lastReviewStatus).toBe("changes_requested");
     expect(manifest.lastReviewRound).toBe(1);
     expect(manifest.lastReviewSubmissionId).toBe("REVIEW-6001");
+  });
+
+  it("hub review keeps the provider prompt lightweight and preserves provider-selected findings", async () => {
+    initGitRepo(tmpDir);
+    fs.mkdirSync(path.join(tmpDir, "packages", "cli", "src", "commands", "hub"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(
+        tmpDir,
+        "packages",
+        "cli",
+        "src",
+        "commands",
+        "hub",
+        "current.ts",
+      ),
+      "export const current = 1;\n",
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(
+        tmpDir,
+        "packages",
+        "cli",
+        "src",
+        "commands",
+        "hub",
+        "legacy.ts",
+      ),
+      "export const legacy = 1;\n",
+      "utf-8",
+    );
+    git(tmpDir, [
+      "add",
+      "packages/cli/src/commands/hub/current.ts",
+      "packages/cli/src/commands/hub/legacy.ts",
+    ]);
+    git(tmpDir, ["commit", "-m", "chore: add fixtures"]);
+    fs.writeFileSync(
+      path.join(
+        tmpDir,
+        "packages",
+        "cli",
+        "src",
+        "commands",
+        "hub",
+        "current.ts",
+      ),
+      "export const current = 2;\n",
+      "utf-8",
+    );
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(
+      path.join(taskDir, "prd.md"),
+      "# PRD\n\nFULL PRD BODY SHOULD NOT BE EMBEDDED\n",
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "design.md"),
+      "# Design\n\nFULL DESIGN BODY SHOULD NOT BE EMBEDDED\n",
+      "utf-8",
+    );
+    fs.writeFileSync(
+      path.join(taskDir, "implement.md"),
+      "# Implementation\n\nFULL IMPLEMENT BODY SHOULD NOT BE EMBEDDED\n",
+      "utf-8",
+    );
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const { fetch } = createMockFetch();
+    let promptText = "";
+
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => true,
+        run: async (options) => {
+          promptText = options.prompt;
+          return {
+            exitCode: 0,
+            output: [
+              "```json",
+              JSON.stringify({
+                status: "changes_requested",
+                summary: "需要修复当前任务。",
+                mustFix: [
+                  {
+                    severity: "high",
+                    file: "src/current.ts",
+                    title: "Current task regression",
+                  },
+                  {
+                    severity: "high",
+                    file: "src/legacy.ts",
+                    title: "Unrelated legacy issue",
+                  },
+                ],
+                advisory: [
+                  {
+                    severity: "low",
+                    file: "docs/outside.md",
+                    title: "Unrelated docs suggestion",
+                  },
+                ],
+              }),
+              "```",
+            ].join("\n"),
+          };
+        },
+      },
+    });
+
+    expect(promptText).toContain("只审查本次 Hub 任务的代码实现");
+    expect(promptText).toContain("不要做全仓泛化审计");
+    expect(promptText).toContain("任务目录：");
+    expect(promptText).toContain("任务/需求文件：");
+    expect(promptText).toContain("prd.md");
+    expect(promptText).toContain("design.md");
+    expect(promptText).toContain("implement.md");
+    expect(promptText).toContain("重点从需求视角核查");
+    expect(promptText).toContain("功能完整性");
+    expect(promptText).toContain("逻辑正确性");
+    expect(promptText).toContain("边界条件");
+    expect(promptText).toContain("数据流与接口契约");
+    expect(promptText).toContain("用户可见行为");
+    expect(promptText).toContain("安全与副作用");
+    expect(promptText).toContain("可维护性");
+    expect(promptText).toContain("不要运行编译、测试、lint、format");
+    expect(promptText).toContain("CLI 会根据你的 JSON 生成");
+    expect(promptText).toContain("result.md");
+    expect(promptText).toContain("描述性字段必须使用中文");
+    expect(promptText).toContain("审查对象是代码实现");
+    expect(promptText).toContain("不是评审需求、设计或实施方案本身");
+    expect(promptText).toContain("只返回一个 fenced JSON 代码块");
+    expect(promptText).toContain("固定字段");
+    expect(promptText).toContain("代码审查范围提示");
+    expect(promptText).toContain("packages/cli/src/commands/hub");
+    expect(promptText).not.toContain("```json");
+    expect(promptText).not.toContain("Review Boundary");
+    expect(promptText).not.toContain("Changed Files:");
+    expect(promptText).not.toContain("- packages/cli/src/commands/hub/current.ts");
+    expect(promptText).not.toContain("- packages/cli/src/commands/hub/legacy.ts");
+    expect(promptText).not.toContain("## Diff");
+    expect(promptText).not.toContain("export const current = 2");
+    expect(promptText).not.toContain("git diff");
+    expect(promptText).not.toContain("git status");
+    expect(promptText).not.toContain("git diff --stat");
+    expect(promptText).not.toContain("One concise review summary.");
+    expect(promptText).not.toContain("FULL PRD BODY SHOULD NOT BE EMBEDDED");
+    expect(promptText).not.toContain("FULL DESIGN BODY SHOULD NOT BE EMBEDDED");
+    expect(promptText).not.toContain("FULL IMPLEMENT BODY SHOULD NOT BE EMBEDDED");
+    const review = JSON.parse(
+      fs.readFileSync(
+        path.join(taskDir, "reviews", "round-001", "review.json"),
+        "utf-8",
+      ),
+    ) as {
+      mustFix: { file?: string; title: string }[];
+      advisory: { file?: string; title: string }[];
+      mustFixCount: number;
+      advisoryCount: number;
+    };
+    expect(review.mustFix).toEqual([
+      expect.objectContaining({
+        file: "src/current.ts",
+        title: "Current task regression",
+      }),
+      expect.objectContaining({
+        file: "src/legacy.ts",
+        title: "Unrelated legacy issue",
+      }),
+    ]);
+    expect(review.advisory).toEqual([
+      expect.objectContaining({
+        file: "docs/outside.md",
+        title: "Unrelated docs suggestion",
+      }),
+    ]);
+    expect(review.mustFixCount).toBe(2);
+    expect(review.advisoryCount).toBe(1);
+    const resultMd = fs.readFileSync(
+      path.join(taskDir, "reviews", "round-001", "result.md"),
+      "utf-8",
+    );
+    expect(resultMd).toContain("Current task regression");
+    expect(resultMd).toContain("Unrelated legacy issue");
+    expect(resultMd).toContain("Unrelated docs suggestion");
+  });
+
+  it("hub review parses the final fenced JSON block when provider output includes earlier JSON examples", async () => {
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const { fetch } = createMockFetch();
+
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+      provider: {
+        name: "engineer",
+        isAvailable: () => true,
+        run: async () => ({
+          exitCode: 0,
+          output: [
+            "provider echoed an example first",
+            "```json",
+            JSON.stringify({
+              status: "changes_requested",
+              summary: "示例结果，不应被采用。",
+              mustFix: [{ title: "示例问题" }],
+              advisory: [],
+            }),
+            "```",
+            "final result",
+            "```json",
+            JSON.stringify({
+              status: "approved",
+              summary: "最终审查通过。",
+              mustFix: [],
+              advisory: [],
+              mustFixCount: 0,
+              advisoryCount: 0,
+            }),
+            "```",
+            "tokens used",
+            "228,532",
+          ].join("\n"),
+        }),
+      },
+    });
+
+    const roundDir = path.join(taskDir, "reviews", "round-001");
+    const review = JSON.parse(
+      fs.readFileSync(path.join(roundDir, "review.json"), "utf-8"),
+    ) as { status: string; summary: string; mustFixCount: number };
+    const resultMd = fs.readFileSync(path.join(roundDir, "result.md"), "utf-8");
+    expect(review).toMatchObject({
+      status: "approved",
+      summary: "最终审查通过。",
+      mustFixCount: 0,
+    });
+    expect(resultMd).toContain("最终审查通过。");
+    expect(resultMd).not.toContain("示例结果，不应被采用。");
+  });
+
+  it("hub review preserves large provider output beyond the default spawn buffer", async () => {
+    const script = [
+      "process.stdout.write('x'.repeat(2 * 1024 * 1024));",
+      "process.stdout.write('\\n```json\\n');",
+      "process.stdout.write(JSON.stringify({status:'approved',summary:'大输出审查通过。',mustFix:[],advisory:[],mustFixCount:0,advisoryCount:0}));",
+      "process.stdout.write('\\n```\\n');",
+    ].join("");
+    writeProjectConfig(
+      tmpDir,
+      [
+        "hub:",
+        "  enabled: true",
+        "  mode: team",
+        "  projectId: proj_123",
+        "  developerId: dev_456",
+        "  apiBaseUrl: https://hub.example.test",
+        "  review:",
+        "    enabled: true",
+        "    provider: engineer",
+        "    engineer:",
+        `      command: ${process.execPath}`,
+        `      args: ${JSON.stringify(["-e", script])}`,
+        "",
+      ].join("\n"),
+    );
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.remoteTaskId = "TASK-2001";
+    taskJson.meta.hub.bindingStatus = "bound";
+    writeJson(taskJsonPath, taskJson);
+    const { fetch } = createMockFetch();
+
+    await hubReview({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+    });
+
+    const roundDir = path.join(taskDir, "reviews", "round-001");
+    const review = JSON.parse(
+      fs.readFileSync(path.join(roundDir, "review.json"), "utf-8"),
+    ) as { status: string; summary: string };
+    const rawOutput = fs.readFileSync(path.join(roundDir, "raw-output.md"), "utf-8");
+    expect(review).toMatchObject({
+      status: "approved",
+      summary: "大输出审查通过。",
+    });
+    expect(rawOutput.length).toBeGreaterThan(2 * 1024 * 1024);
   });
 
   it("hub review advances rounds and status idempotency keys after local review artifacts are deleted", async () => {
