@@ -6,6 +6,7 @@ import { toPosix } from "../../utils/posix.js";
 import { createHubApiClient } from "./client.js";
 import { resolveHubConfig } from "./config.js";
 import { hubCreateTask } from "./create-task.js";
+import { pullHubSpecs, type HubSpecSyncResult } from "./specs.js";
 import { setCurrentSessionTask } from "./task.js";
 import type { FetchLike, HubCommandResult } from "./types.js";
 
@@ -86,11 +87,44 @@ export async function hubIntake(
     homeDir: options.homeDir,
     fetch: options.fetch,
   });
+  const specSummary = await syncSpecsNonBlocking({
+    cwd,
+    env: options.env,
+    homeDir: options.homeDir,
+    fetch: options.fetch,
+  });
 
   return {
     status: bindResult.status,
-    message: `intake: ${toPosix(path.relative(cwd, path.dirname(taskJsonPath)))}; ${bindResult.message ?? bindResult.status}`,
+    message: `intake: ${toPosix(path.relative(cwd, path.dirname(taskJsonPath)))}; ${bindResult.message ?? bindResult.status}; ${specSummary}`,
   };
+}
+
+async function syncSpecsNonBlocking(options: {
+  cwd: string;
+  env?: Record<string, string | undefined>;
+  homeDir?: string;
+  fetch?: FetchLike;
+}): Promise<string> {
+  try {
+    return formatSpecSyncSummary(await pullHubSpecs(options));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return `spec sync FAILED (${reason}); retry: suncode hub pull-spec`;
+  }
+}
+
+function formatSpecSyncSummary(result: HubSpecSyncResult): string {
+  const parts: string[] = [];
+  if (result.actions.added.length > 0) parts.push(`+${result.actions.added.length}`);
+  if (result.actions.updated.length > 0) parts.push(`~${result.actions.updated.length}`);
+  if (result.actions.deleted.length > 0) {
+    const preserved = result.deletionCandidates.length > 0 ? "(preserved)" : "";
+    parts.push(`-${result.actions.deleted.length}${preserved}`);
+  }
+  if (result.localOnly.length > 0) parts.push(`local-only ${result.localOnly.length}`);
+  if (parts.length === 0) return "spec: up-to-date";
+  return `spec: ${parts.join(" ")}`;
 }
 
 function selectRequirement(

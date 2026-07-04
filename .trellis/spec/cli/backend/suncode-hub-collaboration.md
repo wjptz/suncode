@@ -244,11 +244,120 @@ if (currentTask.state === "local-only") {
 This keeps auth explicit, bound to the resolved Hub service, and scoped to tasks
 that actually carry Hub metadata.
 
+## Scenario: Hub Finish Binding Ensure
+
+### 1. Scope / Trigger
+
+- Trigger: `suncode hub finish` submits final spec and completion artifacts for
+  a Hub-backed task.
+- Applies to `packages/cli/src/commands/hub/workflow.ts`,
+  `create-task.ts`, `submissions.ts`, Hub finish tests, and
+  `suncode-hub-finish` bundled skill wording.
+- The finish command owns binding repair for Hub-backed pending tasks so agents
+  do not need a separate manual `create-task` branch before completion.
+
+### 2. Signatures
+
+CLI command:
+
+```text
+suncode hub finish [--task current|<task>] [--task-json <path>] [--file <path>...] [--force] [--best-effort]
+```
+
+Remote task binding source:
+
+```text
+task.json meta.hub.remoteTaskId
+.suncode/tasks/<task>/hub-manifest.json remoteTaskId
+```
+
+### 3. Contracts
+
+- A bound task has `remoteTaskId` in `task.json.meta.hub` or the task
+  `hub-manifest.json`.
+- A Hub-pending task has `meta.hub.requirementId` but no `remoteTaskId`.
+- A local-only task has no `meta.hub.requirementId`.
+- `hub finish` must check required completion artifacts before network work:
+  `implementation-summary.md`, `validation-summary.md`, `retrospective.md`,
+  and `reuse-assessment.md`.
+- For Hub-pending tasks, `hub finish` calls `hubCreateTask`, records a `bind`
+  workflow step on success, rereads the task, then continues with
+  `submit-spec` and `submit-completion`.
+- Low-level `submit-spec` / `submit-completion` may still skip unbound tasks
+  when invoked directly; `hub finish` must not rely on that skip for
+  Hub-pending tasks.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+| --- | --- |
+| Required completion artifact is missing | Throw before Hub binding or upload |
+| Task already has `remoteTaskId` | Submit spec and completion without a `bind` step |
+| Task has `requirementId` but no `remoteTaskId` | Auto-bind with `hubCreateTask`, include `bind` in the workflow summary, then submit |
+| Auto-bind fails or still leaves no `remoteTaskId` | Throw; command exits non-zero unless `--best-effort` was requested |
+| Task has no `requirementId` | Return `skipped` with a local-only message and make no Hub requests |
+| Hub is disabled while trying to bind | Return the disabled result; do not fake a successful finish |
+
+### 5. Good/Base/Bad Cases
+
+- Good: A pending Hub task with completion summaries runs
+  `bind -> submit-spec -> submit-completion` and records the remote task ID
+  locally before uploading completion artifacts.
+- Good: A bound task keeps the existing finish output shape except for normal
+  submit step results.
+- Base: A local-only task is reported as not applicable and continues through
+  the normal local finish-work flow.
+- Bad: `hub finish` exits 0 after both low-level submit steps skipped with
+  "Task is not bound to a remote Hub task."
+- Bad: `suncode-hub-finish` tells the agent to manually run `hub create-task`
+  as a default pre-finish branch.
+
+### 6. Tests Required
+
+- Hub finish tests:
+  - pending Hub task auto-binds, then submits completion artifacts
+  - auto-bind failure rejects and does not submit completion
+  - local-only task returns skipped and performs no Hub requests
+  - already bound task submits without another create-task request
+  - missing completion artifacts reject before upload or binding
+- Skill/template tests should keep `suncode-hub-finish` aligned with the
+  auto-bind behavior and avoid default manual `create-task` instructions.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const spec = await submitSpec(options);
+const completion = await submitCompletion(options);
+return summarizeWorkflow("finish", [
+  { name: "submit-spec", result: spec },
+  { name: "submit-completion", result: completion },
+]);
+```
+
+This lets a Hub-pending task finish with two skipped submit steps and exit 0,
+even though Hub never receives completion artifacts.
+
+#### Correct
+
+```ts
+if (!remoteTaskId && task.meta.requirementId) {
+  const bind = await hubCreateTask(options);
+  if (!remoteTaskIdAfterBind()) {
+    throw new Error("Hub finish binding failed");
+  }
+}
+```
+
+This makes the high-level finish command responsible for repairable binding
+gaps while preserving local-only tasks as explicit skips.
+
 ## Scenario: Hub Spec 拉取
 
 ### 1. 范围 / 触发
 
-- 触发：Hub 任务规划或实现前，需要通过 CLI、生命周期 hook、工作流模板或 bundled skill 拉取 Hub 上的项目权威 spec。
+- 触发：`suncode hub intake` 成功认领 Hub requirement 后自动拉取项目权威 spec；恢复会话、用户要求手动刷新，或 intake/plan-ready 输出 spec 同步失败时也可手动运行 `suncode hub pull-spec`。
 - 适用范围：`packages/cli/src/commands/hub/**`、生成的 `<hub-state>` hook、OpenCode plugin、以及 Hub 相关 bundled skill。
 - Hub spec 同步是固定 CLI 流程。AI 只允许调度命令并读取结构化结果，不允许手工逐文件对比、合并、重写、删除或恢复 spec。
 
@@ -369,6 +478,7 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
 | Hub 更新或删除了本地改过的 Hub-managed spec | 执行 Hub 结果；删除前保存旧内容 |
 | 存在 local-only spec | 报告它，不阻塞、不删除 |
 | `spec-deletions keep` 目标不在 `.suncode/spec/local/**` | 抛出面向用户的错误 |
+| `hub intake` 之后 spec 同步失败 | 保留本地任务和远程绑定，在 intake message 中报告 `spec sync FAILED` 和 `suncode hub pull-spec` 重试命令，不回滚、不阻塞规划 |
 
 ### 5. 正例 / 基线 / 反例
 
@@ -378,6 +488,7 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
 - 正例：Hub 返回 MinIO/S3 预签名地址时，CLI 不会把 Hub login token 加到对象存储请求上。
 - 正例：`pull-spec --json` 展示 revision、local-only 和 deletion candidates；
   `<hub-state>` 不展示 spec 摘要，只提示 Hub 是否可用于当前 workflow。
+- 正例：`hub intake` 成功绑定远程任务后自动执行一次 spec 同步；失败只写入可行动的重试提示，不让任务认领失效。
 - 基线：没有历史 spec manifest 时，第一次 bundle 写入所有远端文件，同时保留无关 local-only 文件。
 - 反例：AI 手工 diff 每个 spec 文件并决定如何合并。
 - 反例：被 Hub 删除的 Hub-managed spec 被恢复到旧路径，导致下一次 Hub 同步继续冲突。
@@ -403,7 +514,8 @@ Hub 是团队 spec 的权威来源。本地同步策略固定为 `remote_wins`�
   - hook 输出不包含 token、password、auth header、spec 摘要或 signed URL。
 - Skill/template 测试：
   - `suncode-hub-spec-sync` 会被安装到各平台 skill root。
-  - `suncode-hub-requirements` 在写规划 artifact 前触发 spec sync。
+  - `suncode-hub-requirements` 说明 `hub intake` 已自动同步 spec，只有 intake 输出同步失败或用户要求手动刷新时才提示 `suncode hub pull-spec`。
+  - `suncode-hub-spec-sync` 定位为恢复、手动刷新、同步失败重试，而不是每次规划前的默认步骤。
 
 ### 7. 错误与正确示例
 

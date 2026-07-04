@@ -1,0 +1,3 @@
+{"file":".trellis/spec/cli/backend/suncode-hub-collaboration.md","reason":"Check intake spec-sync, finish bind-ensure, and message formats against the primary Hub contract."}
+{"file":".trellis/spec/cli/unit-test/conventions.md","reason":"Check test placement, naming, and mock-fetch patterns for the new hub.test.ts cases."}
+{"file":".trellis/tasks/07-04-hub-slim-round2/research/review-round2-findings.md","reason":"Verify the three problems are actually fixed at the recorded locations and P2 items were not accidentally pulled in."}

@@ -5,7 +5,7 @@ description: "Use when finishing a Suncode Hub-backed task, preparing implementa
 
 # Suncode Hub Finish
 
-Use this skill only when the current task is bound to Suncode Hub. If the project is not Hub-enabled, use the normal Suncode finish-work flow.
+Use this skill only when the current task is Hub-backed: already bound to Suncode Hub or pending a remote binding with `meta.hub.requirementId`. If the project is not Hub-enabled, use the normal Suncode finish-work flow.
 
 ## Rules
 
@@ -41,31 +41,25 @@ Keep the summaries evidence-based:
 python3 ./.suncode/scripts/task.py current --source
 ```
 
-2. If the task is not bound, run or repair:
+2. Submit Hub finish:
 
 ```bash
-suncode hub create-task --task <task-dir>
+suncode hub finish --task current
 ```
 
-3. Pull last-minute Hub changes or review comments when the user mentions requirement changes:
+`hub finish` verifies required completion artifacts, ensures the remote Hub binding (auto-binding a pending task when needed), enforces the required review gate through the existing completion submission checks, submits project-level spec artifacts, and submits completion artifacts plus commit metadata.
+
+3. Act on the result:
+   - Missing completion artifacts: create those files with evidence-based content and rerun the command.
+   - Binding failure: report the exact error to the user; do not treat the task as completed on Hub.
+   - `skipped` with a local-only message: the task is not Hub-bound; continue with the normal Suncode finish workflow.
+   - Success (or intentionally deferred): continue with the normal Suncode archive/finish workflow.
+
+On demand only, when the user mentions requirement changes or Hub review comments:
 
 ```bash
 suncode hub sync --task <task-dir>
 suncode hub pull-review --task <task-dir>
 ```
 
-If the response contains a document payload, download that exact document into the current task:
-
-```bash
-suncode hub download-document --document-id "<documentId>" --task "<task-dir>"
-```
-
-4. Submit Hub finish:
-
-```bash
-suncode hub finish --task current
-```
-
-`hub finish` checks required completion artifacts, enforces required review gate through the existing completion submission checks, submits project-level spec artifacts, and submits completion artifacts plus commit metadata. If it reports missing files, create those files with evidence-based content and rerun the command.
-
-5. Only after Hub completion submission succeeds or is intentionally deferred, continue with the normal Suncode archive/finish workflow.
+If a response contains a document payload, download that exact document into the current task with `suncode hub download-document --document-id "<documentId>" --task "<task-dir>"`.

@@ -1,6 +1,6 @@
 ---
 name: suncode-hub-spec-sync
-description: "在启动、规划、恢复或绑定 Suncode Hub 任务时使用；也用于拉取/选择 Hub 需求后、<hub-state> 显示 hub-task:hub-bound 或 hub-task:hub-pending 时、或用户要求在开工前从 Hub 刷新项目 spec 时。"
+description: "在恢复 Suncode Hub 任务会话、用户要求手动刷新项目 spec、或 `hub intake` / `hub plan-ready` 输出显示 spec 同步失败需要重试时使用。日常 intake 流程已自动同步 spec，无需默认调用本 skill。"
 ---
 
 # Suncode Hub Spec 同步
@@ -13,7 +13,7 @@ description: "在启动、规划、恢复或绑定 Suncode Hub 任务时使用�
 - 不要逐个打开 spec 文件来判断哪里变了。
 - 不要把 local-only spec 当成 Hub 权威规范。
 - 不要把 Hub 已删除的文件恢复到旧的 Hub-managed 路径。
-- 如果 Hub 关闭、登录缺失、服务不可用，或 spec 同步失败，停止 Hub 任务规划，并说明准确阻塞原因。
+- 如果 Hub 关闭、登录缺失或服务不可用，停止 Hub 专用流程，并说明准确原因。spec 同步失败本身不阻塞任务进行，可稍后重试。
 - 如果存在 local-only spec，继续 Hub 任务。它们不阻塞当前任务。
 - 如果存在删除候选，继续 Hub 任务。只有用户明确要求时才复盘这些候选。
 
@@ -29,7 +29,7 @@ suncode hub pull-spec --json
 ```
 
 5. 命令成功后，在已同步的 Hub spec 约束下继续。
-6. 命令失败或超时时，将 Hub spec 判断为当前不可用；同步成功前不要规划或实现 Hub 任务。
+6. 命令失败或超时时，将 Hub spec 判断为当前不可用；可稍后重试，spec 同步失败不阻塞任务继续进行，但不要手工替代或猜测 Hub spec 内容。
 7. 如果结果包含 `localOnly`，说明 local-only spec 不阻塞、也不是 Hub 权威规范。
 8. 如果结果包含 `deletionCandidates`，说明被删除内容已保存，后续可按用户要求复盘。
 

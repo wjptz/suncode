@@ -1,0 +1,4 @@
+{"file":".trellis/spec/cli/backend/suncode-hub-collaboration.md","reason":"Primary Hub command contract: intake, finish, spec sync, and workflow orchestration rules this task extends."}
+{"file":".trellis/spec/cli/backend/configurator-shared.md","reason":"Bundled skills and suncode workflow.md are template assets; check shared configurator/template conventions before editing."}
+{"file":".trellis/spec/cli/unit-test/conventions.md","reason":"Testing rules for new intake spec-sync and finish bind-ensure coverage in hub.test.ts."}
+{"file":".trellis/tasks/07-04-hub-slim-round2/research/review-round2-findings.md","reason":"Exact file/line evidence for the three fixes, prior-round scope to not redo, and out-of-scope P2 list."}

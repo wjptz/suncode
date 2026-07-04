@@ -345,6 +345,13 @@ function createMockFetch(): {
       });
     }
 
+    if (method === "GET" && String(url).endsWith("/specs/bundle")) {
+      return jsonResponse({
+        revision: "spec-rev-1",
+        files: [],
+      });
+    }
+
     if (method === "GET" && String(url).includes("/requirements?")) {
       return jsonResponse({
         requirements: [
@@ -2189,6 +2196,98 @@ describe("hub commands", () => {
     ).toBe(taskJsonPath);
   });
 
+  it("hub intake pulls hub specs after claiming a requirement", async () => {
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.message).toContain("spec: up-to-date");
+    expect(
+      calls.some((call) =>
+        call.url.endsWith("/projects/proj_123/specs/bundle"),
+      ),
+    ).toBe(true);
+  });
+
+  it("hub intake keeps the claimed task when spec sync fails", async () => {
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const urlText = String(url);
+      if (method === "GET" && urlText.includes("/requirements?")) {
+        return jsonResponse({
+          requirements: [{ id: "REQ-1001", title: "登录状态识别", revision: 7 }],
+        });
+      }
+      if (
+        method === "POST" &&
+        urlText.includes("/requirements/REQ-1001/tasks")
+      ) {
+        return jsonResponse({
+          task: {
+            id: "TASK-2001",
+            projectId: "proj_123",
+            requirementId: "REQ-1001",
+          },
+        });
+      }
+      if (method === "GET" && urlText.endsWith("/specs/bundle")) {
+        return jsonResponse({ error: "bundle unavailable" }, 500);
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${urlText}`);
+    });
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      auto: true,
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.message).toContain("spec sync FAILED");
+    expect(result.message).toContain("retry: suncode hub pull-spec");
+    const tasksDir = path.join(tmpDir, ".suncode", "tasks");
+    const taskDirName = fs
+      .readdirSync(tasksDir)
+      .find((name) => name.endsWith("hub-req-1001"));
+    expect(taskDirName).toBeDefined();
+    const taskJson = JSON.parse(
+      fs.readFileSync(
+        path.join(tasksDir, taskDirName ?? "", "task.json"),
+        "utf-8",
+      ),
+    ) as { meta: { hub: Record<string, unknown> } };
+    expect(taskJson.meta.hub).toMatchObject({
+      remoteTaskId: "TASK-2001",
+      bindingStatus: "bound",
+    });
+  });
+
+  it("hub intake --list does not pull hub specs", async () => {
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      list: true,
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(calls.some((call) => call.url.includes("/specs/bundle"))).toBe(
+      false,
+    );
+  });
+
   it("reads the latest local review result without Hub config, auth, or network", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);
@@ -2812,6 +2911,127 @@ describe("hub commands", () => {
     expect(
       calls.some((call) => call.url.endsWith("/completion-submissions")),
     ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "POST" &&
+          call.url.includes("/requirements/REQ-1001/tasks"),
+      ),
+    ).toBe(false);
+  });
+
+  it("hub finish auto-binds a pending task before submitting", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    for (const file of [
+      "implementation-summary.md",
+      "validation-summary.md",
+      "retrospective.md",
+      "reuse-assessment.md",
+    ]) {
+      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
+    }
+
+    const { calls, fetch } = createMockFetch();
+    const result = await hubFinish({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.message).toContain("bind created");
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "POST" &&
+          call.url.includes("/requirements/REQ-1001/tasks"),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call.url.endsWith("/completion-submissions")),
+    ).toBe(true);
+  });
+
+  it("hub finish fails when auto-binding fails", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    for (const file of [
+      "implementation-summary.md",
+      "validation-summary.md",
+      "retrospective.md",
+      "reuse-assessment.md",
+    ]) {
+      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
+    }
+
+    const calls: FetchCall[] = [];
+    const fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({
+        url: String(url),
+        method,
+        headers: {},
+        body: undefined,
+      });
+      if (
+        method === "POST" &&
+        String(url).includes("/requirements/REQ-1001/tasks")
+      ) {
+        return jsonResponse({ error: "server down" }, 500);
+      }
+      throw new Error(`Unexpected fetch call: ${method} ${String(url)}`);
+    });
+
+    await expect(
+      hubFinish({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+        fetch,
+      }),
+    ).rejects.toThrow(/HTTP 500/);
+    expect(
+      calls.some((call) => call.url.endsWith("/completion-submissions")),
+    ).toBe(false);
+  });
+
+  it("hub finish skips local-only tasks without Hub requests", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta?: unknown;
+    };
+    delete taskJson.meta;
+    fs.writeFileSync(
+      taskJsonPath,
+      `${JSON.stringify(taskJson, null, 2)}\n`,
+      "utf-8",
+    );
+    for (const file of [
+      "implementation-summary.md",
+      "validation-summary.md",
+      "retrospective.md",
+      "reuse-assessment.md",
+    ]) {
+      fs.writeFileSync(path.join(taskDir, file), `# ${file}\n`, "utf-8");
+    }
+
+    const { calls, fetch } = createMockFetch();
+    const result = await hubFinish({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+    });
+
+    expect(result.status).toBe("skipped");
+    expect(result.message).toContain("local-only");
+    expect(calls).toHaveLength(0);
   });
 
   it("submit-completion includes git commit records in the Hub summary", async () => {

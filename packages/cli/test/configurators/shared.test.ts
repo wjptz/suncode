@@ -585,6 +585,6 @@ describe("resolveBundledSkills", () => {
     expect(requirements?.content).toContain("MinIO");
     expect(requirements?.content).toContain("suncode hub intake");
     expect(requirements?.content).toContain("suncode hub plan-ready");
-    expect(requirements?.content).toContain("suncode-hub-spec-sync");
+    expect(requirements?.content).toContain("suncode hub pull-spec");
   });
 });

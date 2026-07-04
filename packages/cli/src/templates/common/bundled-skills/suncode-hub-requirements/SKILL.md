@@ -23,14 +23,7 @@ Use this skill only for projects that have Suncode Hub enabled. If Hub is disabl
    - If enabled but auth/config is missing, explain the exact missing value. For auth, ask the user to run `suncode hub login`.
 2. Run `suncode hub intake --auto` only when the user wants the single available assigned requirement. If multiple candidates are available, the command returns `ambiguous`; ask the user which requirement ID to claim, then run `suncode hub intake --requirement <id>`.
 3. The local task created by `hub intake` must keep the generated `HUB-REQ-<requirementId>` prefix in `task.json.name` and `task.json.title`. Chinese requirement titles remain in the human-facing title after that prefix; do not translate or pinyin them for display. The directory slug stays ASCII and starts with `hub-req-<requirementId>`.
-4. 写规划 artifacts 前，先使用 `suncode-hub-spec-sync`。该 skill 会运行：
-
-```bash
-suncode hub pull-spec --json
-```
-
-Hub spec 是权威约束。不要手工对比或合并 spec 文件。
-
+4. `hub intake` 已自动同步 Hub spec；若 intake 输出包含 `spec sync FAILED`，可运行 `suncode hub pull-spec` 重试，spec 同步失败不阻塞规划。Hub spec 是权威约束，不要手工对比或合并 spec 文件。
 5. Write or update only the new task's `prd.md`, `design.md`, `implement.md`, and optional `research/**` files.
 6. After planning is complete, run:
 

@@ -445,9 +445,9 @@ Skip this step. Context is loaded directly by the `suncode-before-dev` skill in 
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
-#### 1.4 Structure subtasks `[required for Hub team projects · once]`
+#### 1.4 Structure subtasks `[optional override for Hub team projects · once]`
 
-For Hub team projects, `suncode hub submit-subtasks` derives structured Hub display data from the reviewed `implement.md` checklist when `{TASK_DIR}/subtasks.json` is absent. Write `subtasks.json` only when the derived structure needs an explicit override. The override must describe the current task only.
+For Hub team projects, `suncode hub submit-subtasks` derives structured Hub display data from the reviewed `implement.md` checklist when `{TASK_DIR}/subtasks.json` is absent. Write `subtasks.json` only when the derived structure needs an explicit override. The override must describe the current task only. Structured subtasks are uploaded automatically when the task starts; no manual submit step is needed.
 
 Override format:
 
@@ -468,16 +468,6 @@ Rules:
 - Keep each subtask small enough to be understandable in Hub.
 - Use `priority`, `name`, and `description` only for each item.
 - Derive the list from the current task's `implement.md`; do not include sibling task work.
-- Local-only projects may skip this file.
-- Hub team projects may skip this file when `implement.md` has clear checklist items.
-
-When `task.py start` runs in a Hub team project, the built-in `after_start` hook uploads the override file or derived checklist with:
-
-```bash
-suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort
-```
-
-Then it marks the Hub task as started.
 
 #### 1.5 Activate task `[required · once]`
 
@@ -508,7 +498,8 @@ If `task.py start` errors with a session-identity message (no context key from h
 | `research/` has artifacts (complex tasks) | recommended |
 | `design.md` exists (complex tasks) | ✅ |
 | `implement.md` exists (complex tasks) | ✅ |
-| `subtasks.json` exists (Hub team projects) | ✅ |
+
+For Hub team projects, structured subtasks are derived from `implement.md` automatically; `subtasks.json` is only an explicit override, never a completion requirement.
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, ZCode, Reasonix, Trae]
 

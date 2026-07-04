@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { hubCreateTask } from "./create-task.js";
 import { preflightStart } from "./lifecycle.js";
+import { loadHubManifest } from "./manifest.js";
 import {
   submitCompletion,
   submitPlan,
@@ -11,7 +13,12 @@ import {
   type SubmitSpecOptions,
 } from "./submissions.js";
 import { readHubTask } from "./task.js";
-import type { FetchLike, HubCommandResult, HubCommandStatus } from "./types.js";
+import type {
+  FetchLike,
+  HubCommandResult,
+  HubCommandStatus,
+  HubTaskContext,
+} from "./types.js";
 
 export interface HubPlanReadyOptions extends SubmitArtifactsOptions {
   confirmUnapprovedReview?: boolean;
@@ -82,19 +89,52 @@ export async function hubPlanReady(
 export async function hubFinish(
   options: HubFinishOptions,
 ): Promise<HubCommandResult> {
-  assertCompletionArtifactsPresent(options);
+  const cwd = options.cwd ?? process.cwd();
+  const task = readHubTask(options.taskJsonPath, cwd);
+  assertCompletionArtifactsPresent(task);
+
+  const steps: WorkflowStepResult[] = [];
+  if (!resolveRemoteTaskId(task)) {
+    if (!task.meta.requirementId) {
+      return {
+        status: "skipped",
+        message:
+          "local-only task; Hub finish not applicable, use normal finish workflow.",
+      };
+    }
+    const bind = await hubCreateTask({
+      cwd,
+      taskJsonPath: options.taskJsonPath,
+      env: options.env,
+      homeDir: options.homeDir,
+      fetch: options.fetch,
+    });
+    if (bind.status === "disabled") {
+      return bind;
+    }
+    steps.push({ name: "bind", result: bind });
+    if (!resolveRemoteTaskId(readHubTask(options.taskJsonPath, cwd))) {
+      throw new Error(
+        `Hub finish binding failed: ${bind.message ?? bind.status}`,
+      );
+    }
+  }
+
   const spec = await submitSpec(options);
   const completion = await submitCompletion(options);
 
   return summarizeWorkflow("finish", [
+    ...steps,
     { name: "submit-spec", result: spec },
     { name: "submit-completion", result: completion },
   ]);
 }
 
-function assertCompletionArtifactsPresent(options: HubFinishOptions): void {
-  const cwd = options.cwd ?? process.cwd();
-  const task = readHubTask(options.taskJsonPath, cwd);
+function resolveRemoteTaskId(task: HubTaskContext): string | undefined {
+  return task.meta.remoteTaskId ?? loadHubManifest(task.taskDir).remoteTaskId;
+}
+
+function assertCompletionArtifactsPresent(task: HubTaskContext): void {
   const missing = REQUIRED_COMPLETION_FILES.filter(
     (file) => !fs.existsSync(path.join(task.taskDir, file)),
   );
