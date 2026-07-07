@@ -6,12 +6,14 @@ import { toPosix } from "../../utils/posix.js";
 import { createHubApiClient } from "./client.js";
 import { resolveHubConfig } from "./config.js";
 import { hubCreateTask } from "./create-task.js";
+import { loadHubManifest } from "./manifest.js";
 import { pullHubSpecs, type HubSpecSyncResult } from "./specs.js";
-import { setCurrentSessionTask } from "./task.js";
+import { readHubTask, setCurrentSessionTask, updateHubTaskMeta } from "./task.js";
 import type {
   FetchLike,
   HubCommandResult,
   HubSourceTaskSummary,
+  HubTaskMeta,
   HubTaskType,
 } from "./types.js";
 
@@ -24,6 +26,7 @@ export interface HubIntakeOptions {
   auto?: boolean;
   requirementId?: string;
   slug?: string;
+  taskJsonPath?: string;
   now?: Date;
 }
 
@@ -51,6 +54,9 @@ export async function hubIntake(
   if (!config.enabled) {
     return { status: "disabled", message: config.reason };
   }
+  if (options.list && options.taskJsonPath) {
+    throw new Error("hub intake --list cannot be combined with --task or --task-json.");
+  }
 
   const client = createHubApiClient(config, options.fetch);
   const query = new URLSearchParams({
@@ -75,14 +81,22 @@ export async function hubIntake(
     return { status: "skipped", message: selected.message };
   }
 
-  const taskJsonPath = createLocalHubTask({
-    cwd,
-    projectId: config.projectId,
-    developerId: config.developerId,
-    requirement: selected.requirement,
-    slug: options.slug,
-    now: options.now ?? new Date(),
-  });
+  const taskJsonPath = options.taskJsonPath
+    ? prepareExistingLocalHubTask({
+        cwd,
+        projectId: config.projectId,
+        developerId: config.developerId,
+        requirement: selected.requirement,
+        taskJsonPath: options.taskJsonPath,
+      })
+    : createLocalHubTask({
+        cwd,
+        projectId: config.projectId,
+        developerId: config.developerId,
+        requirement: selected.requirement,
+        slug: options.slug,
+        now: options.now ?? new Date(),
+      });
   setCurrentSessionTask({
     cwd,
     taskDir: path.dirname(taskJsonPath),
@@ -254,6 +268,61 @@ function createLocalHubTask(options: {
     );
   }
   return taskJsonPath;
+}
+
+function prepareExistingLocalHubTask(options: {
+  cwd: string;
+  projectId: string;
+  developerId: string;
+  requirement: HubRequirement;
+  taskJsonPath: string;
+}): string {
+  const task = readHubTask(options.taskJsonPath, options.cwd);
+  const manifest = loadHubManifest(task.taskDir);
+  const existingRemoteTaskId = task.meta.remoteTaskId ?? manifest.remoteTaskId;
+  if (existingRemoteTaskId) {
+    return task.taskJsonPath;
+  }
+
+  if (task.meta.projectId && task.meta.projectId !== options.projectId) {
+    throw new Error(
+      `Existing task Hub projectId (${task.meta.projectId}) does not match configured projectId (${options.projectId}).`,
+    );
+  }
+  if (
+    task.meta.requirementId &&
+    task.meta.requirementId !== options.requirement.id
+  ) {
+    throw new Error(
+      `Existing task is already prepared for Hub requirement ${task.meta.requirementId}.`,
+    );
+  }
+
+  updateHubTaskMeta(task, hubMetaFromRequirement(options, task.meta));
+  return task.taskJsonPath;
+}
+
+function hubMetaFromRequirement(
+  options: {
+    projectId: string;
+    developerId: string;
+    requirement: HubRequirement;
+  },
+  current: HubTaskMeta,
+): HubTaskMeta {
+  return {
+    projectId: options.projectId,
+    developerId: options.developerId,
+    requirementId: options.requirement.id,
+    requirementRevision: options.requirement.revision,
+    taskType: options.requirement.taskType,
+    rawTaskType: options.requirement.rawTaskType,
+    sourceTask: options.requirement.sourceTask,
+    taskRole: current.taskRole ?? "single",
+    parentLocalTaskId: current.parentLocalTaskId,
+    parentRemoteTaskId: current.parentRemoteTaskId,
+    bindingStatus: "pending",
+  };
 }
 
 function normalizeRequirements(value: unknown): HubRequirement[] {

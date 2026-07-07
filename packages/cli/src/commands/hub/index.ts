@@ -55,6 +55,8 @@ interface IntakeCliOptions {
   auto?: boolean;
   requirement?: string;
   slug?: string;
+  taskJson?: string;
+  task?: string;
 }
 
 interface PlanReadyCliOptions extends TaskOptions {
@@ -226,6 +228,8 @@ export function registerHubCommand(program: Command): void {
     .option("--auto", "claim only when exactly one requirement is available")
     .option("--requirement <id>", "specific Hub requirement ID to claim")
     .option("--slug <slug>", "optional ASCII slug suffix; HUB-REQ prefix is preserved")
+    .option("--task-json <path>", "existing local task.json to bind instead of creating a task")
+    .option("--task <task>", "existing local task directory/name/current to bind instead of creating a task")
     .action(async (opts: IntakeCliOptions) => {
       await run(async () =>
         hubIntake({
@@ -234,6 +238,14 @@ export function registerHubCommand(program: Command): void {
           auto: opts.auto,
           requirementId: opts.requirement,
           slug: opts.slug,
+          taskJsonPath:
+            opts.taskJson || opts.task
+              ? resolveTaskJsonPath({
+                  cwd: process.cwd(),
+                  taskJsonPath: opts.taskJson,
+                  task: opts.task,
+                })
+              : undefined,
         }),
       );
     });

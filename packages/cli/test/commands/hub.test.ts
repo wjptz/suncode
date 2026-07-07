@@ -1698,6 +1698,10 @@ describe("hub commands", () => {
         "sync-pending",
       ]),
     );
+    const intake = hub?.commands.find((command) => command.name() === "intake");
+    expect(intake?.options.map((option) => option.long)).toEqual(
+      expect.arrayContaining(["--task", "--task-json"]),
+    );
   });
 
   it("sync-pending retries queued Hub sync failures and keeps remaining failures", () => {
@@ -2515,6 +2519,87 @@ describe("hub commands", () => {
     expect(
       fs.readFileSync(path.join(tasksDir, taskDirName ?? "", "prd.md"), "utf-8"),
     ).toContain("识别用户登录状态。");
+  });
+
+  it("hub intake can bind a selected requirement to an existing local task", async () => {
+    const taskJsonPath = makeTask(tmpDir, "07-07-existing-task");
+    const taskDir = path.dirname(taskJsonPath);
+    const originalTask = JSON.parse(
+      fs.readFileSync(taskJsonPath, "utf-8"),
+    ) as Record<string, unknown>;
+    originalTask.meta = {};
+    writeJson(taskJsonPath, originalTask);
+    fs.writeFileSync(path.join(taskDir, "prd.md"), "# Existing PRD\n", "utf-8");
+    const { calls, fetch } = createMockFetch();
+
+    const result = await hubIntake({
+      cwd: tmpDir,
+      homeDir,
+      env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+      fetch,
+      requirementId: "REQ-1001",
+      taskJsonPath,
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.message).toContain(".suncode/tasks/07-07-existing-task");
+    expect(fs.readdirSync(path.join(tmpDir, ".suncode", "tasks"))).toEqual([
+      "07-07-existing-task",
+    ]);
+    expect(fs.readFileSync(path.join(taskDir, "prd.md"), "utf-8")).toBe(
+      "# Existing PRD\n",
+    );
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    expect(taskJson.meta.hub).toMatchObject({
+      projectId: "proj_123",
+      developerId: "dev_456",
+      requirementId: "REQ-1001",
+      requirementRevision: 7,
+      taskType: "standard",
+      taskRole: "single",
+      remoteTaskId: "TASK-2001",
+      bindingStatus: "bound",
+    });
+    const createTaskCall = calls.find(
+      (call) =>
+        call.method === "POST" && call.url.includes("/requirements/REQ-1001/tasks"),
+    );
+    expect(JSON.parse(createTaskCall?.body ?? "{}")).toMatchObject({
+      localTaskId: "07-07-existing-task",
+      localTaskPath: ".suncode/tasks/07-07-existing-task",
+    });
+  });
+
+  it("hub intake refuses to re-target an existing pending local task", async () => {
+    const taskJsonPath = makeTask(tmpDir, "07-07-existing-task");
+    const taskJson = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8")) as {
+      meta: { hub: Record<string, unknown> };
+    };
+    taskJson.meta.hub.requirementId = "REQ-OLD";
+    writeJson(taskJsonPath, taskJson);
+    const { calls, fetch } = createMockFetch();
+
+    await expect(
+      hubIntake({
+        cwd: tmpDir,
+        homeDir,
+        env: { SUNCODE_HUB_TOKEN: "jwt-token" },
+        fetch,
+        requirementId: "REQ-1001",
+        taskJsonPath,
+      }),
+    ).rejects.toThrow(
+      "Existing task is already prepared for Hub requirement REQ-OLD.",
+    );
+    expect(
+      calls.some(
+        (call) =>
+          call.method === "POST" &&
+          call.url.includes("/requirements/REQ-1001/tasks"),
+      ),
+    ).toBe(false);
   });
 
   it("hub intake records quick task type and writes a fast-route PRD", async () => {
