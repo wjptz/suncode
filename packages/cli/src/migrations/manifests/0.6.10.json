@@ -1,0 +1,9 @@
+{
+  "version": "0.6.10",
+  "description": "Patch release: adds Hub intake binding for existing local tasks, completes ZCode pull-based adaptation, and hardens Hub lifecycle commands on Windows shells.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- feat(hub): add `suncode hub intake --task` and `--task-json` so an existing local task can bind to a selected Hub requirement without creating a replacement task or overwriting the local PRD.\n\n**Fixes:**\n- fix(zcode): complete the ZCode pull-based platform adaptation with research/check/implement agent guidance and CLI adapter support that avoids hook-only behavior.\n- fix(hub): make built-in Hub lifecycle hook commands and queued sync retries safe for Windows shells.",
+  "migrations": [],
+  "notes": "No `--migrate` required.\n\nRun `suncode update` after upgrading to receive refreshed ZCode pull-based guidance and Hub workflow behavior.\n\nInstall: `npm install -g @wjptz/suncode`"
+}
