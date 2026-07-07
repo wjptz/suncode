@@ -149,6 +149,46 @@ function installFakeSuncode(
   return { binDir, logPath };
 }
 
+function installEnvTaskJsonRequiredSuncode(
+  repo: string,
+): { binDir: string; logPath: string } {
+  const binDir = path.join(repo, "bin");
+  const logPath = path.join(repo, "suncode-hook.log");
+  fs.mkdirSync(binDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(binDir, "suncode"),
+    [
+      "#!/bin/sh",
+      `printf "%s\\n" "$*" >> ${JSON.stringify(logPath)}`,
+      `printf "TASK_JSON_PATH=%s\\n" "$TASK_JSON_PATH" >> ${JSON.stringify(logPath)}`,
+      'case "$*" in',
+      '  *"--task-json"*) echo "explicit --task-json should not be passed" >&2; exit 9 ;;',
+      "esac",
+      'if [ -z "$TASK_JSON_PATH" ]; then echo "TASK_JSON_PATH missing" >&2; exit 8; fi',
+      "exit 0",
+      "",
+    ].join("\n"),
+  );
+  fs.chmodSync(path.join(binDir, "suncode"), 0o755);
+
+  fs.writeFileSync(
+    path.join(binDir, "suncode.cmd"),
+    [
+      "@echo off",
+      `echo %*>>"${logPath}"`,
+      `echo TASK_JSON_PATH=%TASK_JSON_PATH%>>"${logPath}"`,
+      'echo %* | findstr /C:"--task-json" >nul',
+      "if %ERRORLEVEL%==0 exit /b 9",
+      'if "%TASK_JSON_PATH%"=="" exit /b 8',
+      "exit /b 0",
+      "",
+    ].join("\r\n"),
+  );
+
+  return { binDir, logPath };
+}
+
 function installPreflightOkSyncFailSuncode(
   repo: string,
 ): { binDir: string; logPath: string } {
@@ -309,17 +349,17 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
     writeTeamHubConfig(tmp);
 
     expect(readHooks(tmp, "after_create")).toContain(
-      'suncode hub create-task --task-json "$TASK_JSON_PATH" --best-effort',
+      "suncode hub create-task --best-effort",
     );
     expect(readHooks(tmp, "before_start")).toEqual([
-      'suncode hub preflight-start --task-json "$TASK_JSON_PATH"',
+      "suncode hub preflight-start",
     ]);
     expect(readHooks(tmp, "after_start")).toEqual([
-      'suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort',
-      'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
+      "suncode hub submit-subtasks --best-effort",
+      "suncode hub mark-started --best-effort",
     ]);
     expect(readHooks(tmp, "after_archive")).toContain(
-      'suncode hub submit-completion --task-json "$TASK_JSON_PATH" --best-effort',
+      "suncode hub submit-completion --best-effort",
     );
     expect(readHooks(tmp, "after_finish")).toEqual([]);
   });
@@ -383,7 +423,7 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
 
     expect(result.status).toBe(1);
     expect(fs.readFileSync(logPath, "utf-8")).toContain(
-      "hub preflight-start --task-json ",
+      "hub preflight-start",
     );
     expect(readTask(tmp, taskPath).status).toBe("planning");
   });
@@ -407,7 +447,33 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
 
     expect(result.status).toBe(0);
     expect(fs.readFileSync(logPath, "utf-8")).toContain(
-      "hub preflight-start --task-json ",
+      "hub preflight-start",
+    );
+    expect(readTask(tmp, taskPath).status).toBe("in_progress");
+  });
+
+  it("passes task.json to built-in Hub lifecycle hooks through TASK_JSON_PATH env", () => {
+    writeTeamHubConfig(tmp);
+    const { binDir, logPath } = installEnvTaskJsonRequiredSuncode(tmp);
+    const taskPath = runTaskCreate(tmp, [
+      "create",
+      "Hub task",
+      "--slug",
+      "hub-task",
+      "--hub-requirement-id",
+      "REQ-1001",
+    ]);
+    markTaskHubBound(tmp, taskPath);
+
+    const result = runTaskStart(tmp, taskPath, {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+    });
+
+    expect(result.status).toBe(0);
+    const log = fs.readFileSync(logPath, "utf-8");
+    expect(log).not.toContain("--task-json");
+    expect(log).toContain(
+      `TASK_JSON_PATH=${path.join(tmp, taskPath, "task.json")}`,
     );
     expect(readTask(tmp, taskPath).status).toBe("in_progress");
   });
@@ -451,8 +517,8 @@ describe.skipIf(!hasPython())("task.py create Hub metadata", () => {
       attempt: 1,
     });
     expect(afterStartEntries.map((entry) => String(entry.command))).toEqual([
-      'suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort',
-      'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
+      "suncode hub submit-subtasks --best-effort",
+      "suncode hub mark-started --best-effort",
     ]);
   });
 });

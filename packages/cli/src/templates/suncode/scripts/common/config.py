@@ -316,19 +316,13 @@ def _get_implicit_hub_hooks(config: dict, event: str) -> list[str]:
         return []
 
     commands = {
-        "before_start": [
-            'suncode hub preflight-start --task-json "$TASK_JSON_PATH"'
-        ],
-        "after_create": [
-            'suncode hub create-task --task-json "$TASK_JSON_PATH" --best-effort'
-        ],
+        "before_start": ["suncode hub preflight-start"],
+        "after_create": ["suncode hub create-task --best-effort"],
         "after_start": [
-            'suncode hub submit-subtasks --task-json "$TASK_JSON_PATH" --best-effort',
-            'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
+            "suncode hub submit-subtasks --best-effort",
+            "suncode hub mark-started --best-effort",
         ],
-        "after_archive": [
-            'suncode hub submit-completion --task-json "$TASK_JSON_PATH" --best-effort'
-        ],
+        "after_archive": ["suncode hub submit-completion --best-effort"],
     }
     return commands.get(event, [])
 

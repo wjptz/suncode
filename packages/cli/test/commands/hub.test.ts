@@ -1761,6 +1761,42 @@ describe("hub commands", () => {
     });
   });
 
+  it("sync-pending normalizes legacy Hub commands that used TASK_JSON_PATH shell expansion", () => {
+    const runtimeDir = path.join(tmpDir, ".suncode", ".runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runtimeDir, "hub-sync-queue.jsonl"),
+      [
+        JSON.stringify({
+          taskJsonPath: "/tmp/task-ok.json",
+          event: "after_start",
+          command:
+            'suncode hub mark-started --task-json "$TASK_JSON_PATH" --best-effort',
+          error: "failed",
+          attempt: 1,
+          firstFailedAt: "2026-07-03T00:00:00.000Z",
+          lastFailedAt: "2026-07-03T00:00:00.000Z",
+          nextRetryAt: "2026-07-03T00:00:00.000Z",
+        }),
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    const seen: string[] = [];
+
+    const result = syncPending({
+      cwd: tmpDir,
+      now: "2026-07-03T01:00:00.000Z",
+      runner: (entry) => {
+        seen.push(entry.command);
+        return { status: 0 };
+      },
+    });
+
+    expect(result.status).toBe("updated");
+    expect(seen).toEqual(["suncode hub mark-started --best-effort"]);
+  });
+
   it("skill-push uploads every local .agents skill file through presign, PUT, and finalize", async () => {
     const skillDir = path.join(tmpDir, ".agents", "skills", "code-review");
     fs.mkdirSync(path.join(skillDir, "references"), { recursive: true });

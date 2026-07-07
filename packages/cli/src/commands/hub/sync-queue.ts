@@ -52,14 +52,15 @@ export function syncPending(
       continue;
     }
     retried += 1;
-    const result = runner(entry);
+    const queuedEntry = normalizeLegacyHubCommand(entry);
+    const result = runner(queuedEntry);
     if (result.status === 0) {
       resolved += 1;
       continue;
     }
     remaining.push({
-      ...entry,
-      attempt: entry.attempt + 1,
+      ...queuedEntry,
+      attempt: queuedEntry.attempt + 1,
       error: result.error?.trim() ? result.error : `command exited ${result.status}`,
       lastFailedAt: now,
       nextRetryAt: now,
@@ -101,6 +102,21 @@ function writeSyncQueue(cwd: string, entries: readonly HubSyncQueueEntry[]): voi
     filePath,
     `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
     "utf-8",
+  );
+}
+
+function normalizeLegacyHubCommand(entry: HubSyncQueueEntry): HubSyncQueueEntry {
+  const command = normalizeLegacyTaskJsonShellArg(entry.command);
+  return command === entry.command ? entry : { ...entry, command };
+}
+
+function normalizeLegacyTaskJsonShellArg(command: string): string {
+  if (!command.trimStart().startsWith("suncode hub ")) {
+    return command;
+  }
+  return command.replace(
+    /\s+--task-json\s+(?:"\$TASK_JSON_PATH"|'\$TASK_JSON_PATH'|\$TASK_JSON_PATH)(?=\s|$)/g,
+    "",
   );
 }
 

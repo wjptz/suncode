@@ -226,7 +226,7 @@ suncode hub plan-ready --task current
 对 Hub-bound task，在状态翻到 `in_progress` 前运行：
 
 ```bash
-suncode hub preflight-start --task-json "$TASK_JSON_PATH"
+suncode hub preflight-start
 ```
 
 短期方案：在 `workflow.md` Phase 1.5 明确写：

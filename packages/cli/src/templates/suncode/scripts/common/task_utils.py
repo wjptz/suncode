@@ -217,7 +217,10 @@ def resolve_task_dir(target_dir: str, repo_root: Path) -> Path:
 # =============================================================================
 
 def _is_hub_preflight_command(command: str) -> bool:
-    return command.strip().startswith("suncode hub preflight-start ")
+    stripped = command.strip()
+    return stripped == "suncode hub preflight-start" or stripped.startswith(
+        "suncode hub preflight-start "
+    )
 
 
 def _is_hub_bound_task(task_json_path: Path) -> bool:
