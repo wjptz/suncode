@@ -4565,6 +4565,23 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     );
   });
 
+  it("[zcode] cli_adapter.py supports zcode platform without pretending it has a CLI runner", () => {
+    expect(commonCliAdapter).toContain('"zcode"');
+    expect(commonCliAdapter).toContain(".zcode");
+    expect(commonCliAdapter).toContain(
+      'return self.get_config_dir(project_root) / "cli" / "agents" / f"{mapped_name}.md"',
+    );
+    expect(commonCliAdapter).toContain(
+      'return f".zcode/commands/suncode/{name}.md"',
+    );
+    expect(commonCliAdapter).toContain(
+      "ZCode is a desktop ADE; CLI agent run is not supported.",
+    );
+    expect(commonCliAdapter).toContain(
+      "ZCode is a desktop ADE; CLI resume is not supported.",
+    );
+  });
+
   it("[droid] cli_adapter.py treats droid as commands-only (no CLI run/resume yet)", () => {
     expect(commonCliAdapter).toContain(
       "Factory Droid CLI agent run is not yet supported.",
@@ -4597,10 +4614,38 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     );
   });
 
+  it("[zcode] cli_adapter.py has explicit zcode branches in all platform-specific methods", () => {
+    expect(commonCliAdapter).toMatch(
+      /def get_agent_path[\s\S]*?elif self\.platform == "zcode":[\s\S]*?\/ "cli" \/ "agents"/,
+    );
+    expect(commonCliAdapter).toMatch(
+      /def get_suncode_command_path[\s\S]*?elif self\.platform == "zcode":[\s\S]*?\.zcode\/commands\/suncode\//,
+    );
+    expect(commonCliAdapter).toMatch(
+      /def get_non_interactive_env[\s\S]*?elif self\.platform == "zcode":[\s\S]*?return \{\}/,
+    );
+    expect(commonCliAdapter).toMatch(
+      /def build_run_command[\s\S]*?elif self\.platform == "zcode":[\s\S]*?CLI agent run is not supported/,
+    );
+    expect(commonCliAdapter).toMatch(
+      /def build_resume_command[\s\S]*?elif self\.platform == "zcode":[\s\S]*?CLI resume is not supported/,
+    );
+    expect(commonCliAdapter).toMatch(
+      /def cli_name[\s\S]*?elif self\.platform == "zcode":[\s\S]*?return "zcode"/,
+    );
+  });
+
   it("[droid] cli_adapter.py detect_platform handles .factory directory", () => {
     expect(commonCliAdapter).toContain('return "droid"');
     expect(commonCliAdapter).toMatch(
       /detect_platform[\s\S]*?\.factory[\s\S]*?return "droid"/,
+    );
+  });
+
+  it("[zcode] cli_adapter.py detect_platform handles .zcode directory", () => {
+    expect(commonCliAdapter).toContain('return "zcode"');
+    expect(commonCliAdapter).toMatch(
+      /detect_platform[\s\S]*?\.zcode[\s\S]*?return "zcode"/,
     );
   });
 
@@ -4640,7 +4685,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
   it("[migrate-flow-bugs] _ALL_PLATFORM_CONFIG_DIRS excludes .agents (shared layer, not platform-specific)", () => {
     expect(commonCliAdapter).toMatch(/_ALL_PLATFORM_CONFIG_DIRS\s*=\s*\(/);
     const tupleMatch = commonCliAdapter.match(
-      /_ALL_PLATFORM_CONFIG_DIRS\s*=\s*\(([\s\S]*?)\)/,
+      /_ALL_PLATFORM_CONFIG_DIRS\s*=\s*\(([\s\S]*?)\)\n"""Platform-specific/,
     );
     expect(tupleMatch).toBeTruthy();
     const tupleBody = (tupleMatch as RegExpMatchArray)[1];
@@ -4649,6 +4694,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(tupleBody).toContain('".claude"');
     expect(tupleBody).toContain('".codex"');
     expect(tupleBody).toContain('".kiro"');
+    expect(tupleBody).toContain('".zcode"');
   });
 
   it("[migrate-flow-bugs] detect_platform has codex shared-skills fallback guarded by no-other-platform-dir check", () => {
@@ -5351,6 +5397,15 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
       ],
       nonPreludeAgents: [".github/agents/suncode-research.agent.md"],
     },
+    {
+      id: "zcode" as const,
+      hooksDir: null,
+      preludeAgents: [
+        ".zcode/cli/agents/suncode-implement.md",
+        ".zcode/cli/agents/suncode-check.md",
+      ],
+      nonPreludeAgents: [".zcode/cli/agents/suncode-research.md"],
+    },
   ];
 
   for (const { id, hooksDir, preludeAgents, nonPreludeAgents } of class2) {
@@ -5368,6 +5423,12 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
       });
 
       it("does NOT install inject-subagent-context.py", () => {
+        if (hooksDir === null) {
+          expect(fs.existsSync(path.join(tmpDir, ".zcode", "hooks"))).toBe(
+            false,
+          );
+          return;
+        }
         const hooks = fs.readdirSync(path.join(tmpDir, hooksDir));
         expect(hooks).not.toContain("inject-subagent-context.py");
       });

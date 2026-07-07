@@ -1,7 +1,7 @@
 """
 CLI Adapter for Multi-Platform Support.
 
-Abstracts differences between Claude Code, OpenCode, Engineer, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, and Pi Agent interfaces.
+Abstracts differences between Claude Code, OpenCode, Engineer, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, Pi Agent, ZCode, and Trae interfaces.
 
 Supported platforms:
 - claude: Claude Code (default)
@@ -20,6 +20,7 @@ Supported platforms:
 - copilot: GitHub Copilot (VS Code)
 - droid: Factory Droid (commands-based)
 - pi: Pi Agent (extension-backed)
+- zcode: ZCode (desktop ADE, pull-based)
 - trae: Trae IDE (IDE-only, hooks-based)
 
 Usage:
@@ -56,6 +57,7 @@ Platform = Literal[
     "copilot",
     "droid",
     "pi",
+    "zcode",
     "trae",
 ]
 
@@ -104,7 +106,7 @@ class CLIAdapter:
         """Get platform-specific config directory name.
 
         Returns:
-            Directory name ('.claude', '.opencode', '.engineer', '.cursor', '.iflow', '.codex', '.kilocode', '.kiro', '.gemini', '.agent', '.devin', '.qoder', '.codebuddy', '.github/copilot', '.factory', '.pi', or '.trae')
+            Directory name ('.claude', '.opencode', '.engineer', '.cursor', '.iflow', '.codex', '.kilocode', '.kiro', '.gemini', '.agent', '.devin', '.qoder', '.codebuddy', '.github/copilot', '.factory', '.pi', '.zcode', or '.trae')
         """
         if self.platform == "opencode":
             return ".opencode"
@@ -136,6 +138,8 @@ class CLIAdapter:
             return ".factory"
         elif self.platform == "pi":
             return ".pi"
+        elif self.platform == "zcode":
+            return ".zcode"
         elif self.platform == "trae":
             return ".trae"
         else:
@@ -148,7 +152,7 @@ class CLIAdapter:
             project_root: Project root directory
 
         Returns:
-            Path to config directory (.claude, .opencode, .engineer, .cursor, .iflow, .codex, .kilocode, .kiro, .gemini, .agent, .devin, .qoder, .codebuddy, .github/copilot, .factory, .pi, or .trae)
+            Path to config directory (.claude, .opencode, .engineer, .cursor, .iflow, .codex, .kilocode, .kiro, .gemini, .agent, .devin, .qoder, .codebuddy, .github/copilot, .factory, .pi, .zcode, or .trae)
         """
         return project_root / self.config_dir_name
 
@@ -165,6 +169,8 @@ class CLIAdapter:
         mapped_name = self.get_agent_name(agent)
         if self.platform == "codex":
             return self.get_config_dir(project_root) / "agents" / f"{mapped_name}.toml"
+        elif self.platform == "zcode":
+            return self.get_config_dir(project_root) / "cli" / "agents" / f"{mapped_name}.md"
         return self.get_config_dir(project_root) / "agents" / f"{mapped_name}.md"
 
     def get_commands_path(self, project_root: Path, *parts: str) -> Path:
@@ -183,7 +189,7 @@ class CLIAdapter:
             Devin uses workflow directory: .devin/workflows/suncode-<name>.md
             Copilot uses prompt files: .github/prompts/<name>.prompt.md
             Pi uses prompt templates: .pi/prompts/suncode-<name>.md
-            Claude/OpenCode/Engineer use subdirectory: <config>/commands/suncode/<name>.md
+            Claude/OpenCode/Engineer/ZCode use subdirectory: <config>/commands/suncode/<name>.md
         """
         if self.platform == "pi":
             prompts_dir = self.get_config_dir(project_root) / "prompts"
@@ -255,6 +261,7 @@ class CLIAdapter:
             Antigravity: .agent/workflows/<name>.md
             Devin: .devin/workflows/suncode-<name>.md
             Pi: .pi/prompts/suncode-<name>.md
+            ZCode: .zcode/commands/suncode/<name>.md
             Others: .{platform}/commands/suncode/<name>.md
         """
         if self.platform == "cursor":
@@ -278,6 +285,8 @@ class CLIAdapter:
             return f".factory/commands/suncode/{name}.md"
         elif self.platform == "pi":
             return f".pi/prompts/suncode-{name}.md"
+        elif self.platform == "zcode":
+            return f".zcode/commands/suncode/{name}.md"
         else:
             return f"{self.config_dir_name}/commands/suncode/{name}.md"
 
@@ -314,6 +323,8 @@ class CLIAdapter:
         elif self.platform == "droid":
             return {}
         elif self.platform == "pi":
+            return {}
+        elif self.platform == "zcode":
             return {}
         elif self.platform == "trae":
             return {}
@@ -402,6 +413,10 @@ class CLIAdapter:
             )
         elif self.platform == "pi":
             cmd = ["pi", "-p", prompt]
+        elif self.platform == "zcode":
+            raise ValueError(
+                "ZCode is a desktop ADE; CLI agent run is not supported."
+            )
         elif self.platform == "trae":
             raise ValueError(
                 "Trae is IDE-only; CLI agent run is not supported."
@@ -472,6 +487,10 @@ class CLIAdapter:
             )
         elif self.platform == "pi":
             return ["pi", "-c", session_id]
+        elif self.platform == "zcode":
+            raise ValueError(
+                "ZCode is a desktop ADE; CLI resume is not supported."
+            )
         elif self.platform == "trae":
             raise ValueError(
                 "Trae is IDE-only; CLI resume is not supported."
@@ -552,6 +571,8 @@ class CLIAdapter:
             return "droid"
         elif self.platform == "pi":
             return "pi"
+        elif self.platform == "zcode":
+            return "zcode"
         elif self.platform == "trae":
             return "trae"
         else:
@@ -561,8 +582,8 @@ class CLIAdapter:
     def supports_cli_agents(self) -> bool:
         """Check if platform supports running agents via CLI.
 
-        Claude Code, OpenCode, iFlow, and Codex support CLI agent execution.
-        Cursor is IDE-only and doesn't support CLI agents.
+        Claude Code, OpenCode, iFlow, Codex, and Pi support CLI agent execution.
+        Cursor, ZCode, and other IDE/ADE integrations don't support CLI agents here.
         """
         return self.platform in (
             "claude",
@@ -625,7 +646,7 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
     """Get CLI adapter for the specified platform.
 
     Args:
-        platform: Platform name ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or 'trae')
+        platform: Platform name ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'zcode', or 'trae')
 
     Returns:
         CLIAdapter instance
@@ -657,10 +678,11 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
         "copilot",
         "droid",
         "pi",
+        "zcode",
         "trae",
     ):
         raise ValueError(
-            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or 'trae')"
+            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'zcode', or 'trae')"
         )
 
     return CLIAdapter(platform=platform)  # type: ignore
@@ -684,6 +706,7 @@ _ALL_PLATFORM_CONFIG_DIRS = (
     ".github/copilot",
     ".factory",
     ".pi",
+    ".zcode",
     ".trae",
 )
 """Platform-specific config directory names used by detect_platform exclusion
@@ -722,14 +745,15 @@ def detect_platform(project_root: Path) -> Platform:
     14. .github/copilot directory exists → copilot
     15. .factory directory exists → droid
     16. .pi directory exists → pi
-    17. .trae directory exists → trae
-    18. Default → claude
+    17. .zcode directory exists → zcode
+    18. .trae directory exists → trae
+    19. Default → claude
 
     Args:
         project_root: Project root directory
 
     Returns:
-        Detected platform ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'trae', or default 'claude')
+        Detected platform ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'zcode', 'trae', or default 'claude')
     """
     import os
 
@@ -755,6 +779,7 @@ def detect_platform(project_root: Path) -> Platform:
         "copilot",
         "droid",
         "pi",
+        "zcode",
         "trae",
     ):
         return env_platform  # type: ignore
@@ -835,6 +860,10 @@ def detect_platform(project_root: Path) -> Platform:
     # Check for .pi directory (Pi Agent-specific)
     if (project_root / ".pi").is_dir():
         return "pi"
+
+    # Check for .zcode directory (ZCode-specific)
+    if (project_root / ".zcode").is_dir():
+        return "zcode"
 
     # Check for .trae directory (Trae IDE-specific)
     if (project_root / ".trae").is_dir():

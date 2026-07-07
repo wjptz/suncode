@@ -708,6 +708,9 @@ describe("configurePlatform", () => {
       false,
     );
     expect(templates?.has(".agents/skills/suncode-check/SKILL.md")).toBe(true);
+    expect(templates?.has(".zcode/cli/agents/suncode-implement.md")).toBe(true);
+    expect(templates?.has(".zcode/cli/agents/suncode-check.md")).toBe(true);
+    expect(templates?.has(".zcode/cli/agents/suncode-research.md")).toBe(true);
   });
 
   it("configurePlatform('codebuddy') creates .codebuddy directory", async () => {

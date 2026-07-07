@@ -688,6 +688,16 @@ describe("init() integration", () => {
         path.join(tmpDir, ".zcode", "cli", "agents", "suncode-implement.md"),
       ),
     ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".zcode", "cli", "agents", "suncode-check.md"),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".zcode", "cli", "agents", "suncode-research.md"),
+      ),
+    ).toBe(true);
   });
 
   it("#3n opencode platform emits start slash command", async () => {

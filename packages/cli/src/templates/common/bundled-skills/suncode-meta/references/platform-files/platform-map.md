@@ -67,7 +67,7 @@ When changing behavior, inspect workflows and skills first. Do not assume Suncod
 
 ### Shared `.agents/skills/`
 
-Codex writes the shared `.agents/skills/` layer. Some tools that support agentskills.io can also read this directory. If the user wants multiple compatible tools to share one skill, consider `.agents/skills/` first, but do not assume every platform reads it.
+Codex, Gemini CLI, and ZCode write the shared `.agents/skills/` layer. Some tools that support agentskills.io can also read this directory. If the user wants multiple compatible tools to share one skill, consider `.agents/skills/` first, but do not assume every platform reads it.
 
 ## Decision Rules When Modifying Platform Files
 
