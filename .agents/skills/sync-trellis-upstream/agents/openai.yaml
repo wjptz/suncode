@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync Trellis Upstream"
+  short_description: "Resume safe Trellis-to-Suncode upstream adoption"
+  default_prompt: "Use $sync-trellis-upstream to inspect official Trellis releases after the recorded checkpoint and plan a safe semantic adoption."

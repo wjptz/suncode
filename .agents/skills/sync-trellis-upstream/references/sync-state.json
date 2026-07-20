@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "https://github.com/mindfold-ai/Trellis.git",
+    "remote": "upstream",
+    "release_ref_namespace": "refs/remotes/upstream/releases"
+  },
+  "fork_baseline": {
+    "version": "v0.6.5",
+    "commit": "01ec8d6503b2338194e9bd2e9dbbcf22054c1bba"
+  },
+  "last_reviewed": {
+    "version": "v0.6.7",
+    "commit": "e7c5ead4d0dfd717d11a40b6bc0c80d8af94c49a",
+    "date": "2026-07-20",
+    "ledger_entry": "2026-07-20-v0.6.6-v0.6.7",
+    "task": ".trellis/tasks/archive/2026-07/07-20-review-upstream-trellis-updates"
+  },
+  "latest_adoption": {
+    "from_upstream_exclusive": {
+      "version": "v0.6.5",
+      "commit": "01ec8d6503b2338194e9bd2e9dbbcf22054c1bba"
+    },
+    "through_upstream_inclusive": {
+      "version": "v0.6.7",
+      "commit": "e7c5ead4d0dfd717d11a40b6bc0c80d8af94c49a"
+    },
+    "local_commit": "842056c1bc9eae17cae85f3d81df0dceed01ee21",
+    "related_commits": [
+      {
+        "repository": "marketplace",
+        "commit": "3619bfedf1a96569db3fe95cc805af0424092007"
+      }
+    ],
+    "date": "2026-07-20",
+    "ledger_entry": "2026-07-20-v0.6.6-v0.6.7"
+  }
+}
