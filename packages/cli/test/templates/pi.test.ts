@@ -181,17 +181,19 @@ describe("pi templates", () => {
 
     // session_start: notify-only welcome
     expect(extension).toContain('pi.on?.("session_start"');
-    // input: per-turn model-visible workflow breadcrumb
-    expect(extension).toContain('pi.on?.("input"');
-    // before_agent_start: inject Suncode task context + per-turn breadcrumb
+    // input: not used; Suncode must not rewrite submitted user text
+    expect(extension).not.toContain('pi.on?.("input"');
+    // before_agent_start: stable system prompt + persisted hidden runtime context
     expect(extension).toContain('pi.on?.("before_agent_start"');
+    // context: preserves the existing context-key establishment behavior only
+    expect(extension).toContain('pi.on?.("context"');
     // tool_call: inject SUNCODE_CONTEXT_ID into bash commands
     expect(extension).toContain('pi.on?.("tool_call"');
     // tool_result: mark failed/cancelled subagent runs as errors
     expect(extension).toContain('pi.on?.("tool_result"');
   });
 
-  it("injects workflow state on input and startup context on first agent start", () => {
+  it("keeps user input clean while persisting hidden runtime context", () => {
     const root = createMinimalSuncodeRoot();
     const { suncodeExtension } = loadExtensionInternals(root);
     const handlers = new Map<
@@ -211,14 +213,7 @@ describe("pi templates", () => {
       sessionManager: { getSessionId: () => "pi-unit-355" },
       ui: { notify: vi.fn() },
     };
-    const inputResult = handlers.get("input")?.(
-      { type: "input", text: "Adjust service routing", source: "interactive" },
-      ctx,
-    ) as { action: string; text?: string };
-
-    expect(inputResult.action).toBe("transform");
-    expect(inputResult.text).toContain("<workflow-state>");
-    expect(inputResult.text).toContain("Status: no_task");
+    expect(handlers.has("input")).toBe(false);
 
     const beforeAgentStart = handlers.get("before_agent_start");
     const first = beforeAgentStart?.(
@@ -229,8 +224,12 @@ describe("pi templates", () => {
         systemPromptOptions: {},
       },
       ctx,
-    ) as { systemPrompt: string };
+    ) as {
+      systemPrompt: string;
+      message: { customType?: string; content?: string; display?: boolean };
+    };
 
+    expect(first.systemPrompt).toContain("BASE");
     expect(first.systemPrompt).toContain(
       "Suncode compact SessionStart context",
     );
@@ -238,6 +237,23 @@ describe("pi templates", () => {
     expect(first.systemPrompt).toContain("<suncode-workflow>");
     expect(first.systemPrompt).toContain("Phase 1: Plan");
     expect(first.systemPrompt).toContain("No active Suncode task found");
+    expect(first.systemPrompt).not.toContain("<workflow-state>");
+    expect(first.systemPrompt).toContain("<session-overview>");
+    expect(first.message).toEqual(
+      expect.objectContaining({
+        customType: "suncode-runtime-context",
+        display: false,
+      }),
+    );
+    expect("role" in first.message).toBe(false);
+    expect("timestamp" in first.message).toBe(false);
+    expect(first.message.content).not.toContain("BASE");
+    expect(first.message.content).not.toContain(
+      "Suncode compact SessionStart context",
+    );
+    expect(first.message.content).toContain("<workflow-state>");
+    expect(first.message.content).toContain("Status: no_task");
+    expect(first.message.content).toContain("<session-overview>");
 
     const second = beforeAgentStart?.(
       {
@@ -247,12 +263,84 @@ describe("pi templates", () => {
         systemPromptOptions: {},
       },
       ctx,
-    ) as { systemPrompt: string };
+    ) as {
+      systemPrompt: string;
+      message?: { customType?: string; content?: string; display?: boolean };
+    };
 
-    expect(second.systemPrompt).not.toContain(
-      "Suncode compact SessionStart context",
+    expect(second.systemPrompt).toBe(first.systemPrompt);
+    expect(second.message).toBeUndefined();
+    expect(handlers.has("context")).toBe(true);
+  });
+
+  it("delivers task context changes as persisted messages, not systemPrompt churn", () => {
+    const root = createMinimalSuncodeRoot();
+    const { suncodeExtension } = loadExtensionInternals(root);
+    const handlers = new Map<
+      string,
+      (event: unknown, ctx?: unknown) => unknown
+    >();
+
+    suncodeExtension({
+      registerTool: vi.fn(),
+      registerShortcut: vi.fn(),
+      on(event, handler) {
+        handlers.set(event, handler);
+      },
+    });
+
+    const ctx = {
+      sessionManager: { getSessionId: () => "pi-unit-task-update" },
+      ui: { notify: vi.fn() },
+    };
+    const beforeAgentStart = handlers.get("before_agent_start");
+    const fire = () =>
+      beforeAgentStart?.(
+        {
+          type: "before_agent_start",
+          prompt: "Continue",
+          systemPrompt: "BASE",
+          systemPromptOptions: {},
+        },
+        ctx,
+      ) as {
+        systemPrompt?: string;
+        message?: { customType?: string; content?: string; display?: boolean };
+      };
+
+    const first = fire();
+    expect(first.systemPrompt).toContain("No active Suncode task found");
+
+    const taskDir = join(root, ".suncode", "tasks", "07-07-cache-fix");
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(join(taskDir, "prd.md"), "# PRD\nStable prefix matters.");
+    writeFileSync(
+      join(taskDir, "task.json"),
+      JSON.stringify({ id: "07-07-cache-fix", status: "in_progress" }),
     );
-    expect(second.systemPrompt).toContain("<workflow-state>");
+    mkdirSync(join(root, ".suncode", ".runtime", "sessions"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(
+        root,
+        ".suncode",
+        ".runtime",
+        "sessions",
+        "pi_pi-unit-task-update.json",
+      ),
+      JSON.stringify({ current_task: "tasks/07-07-cache-fix" }),
+    );
+
+    const second = fire();
+    expect(second.systemPrompt).toBe(first.systemPrompt);
+    expect(second.message?.customType).toBe("suncode-runtime-context");
+    expect(second.message?.content).toContain("<suncode-task-context-update>");
+    expect(second.message?.content).toContain("Stable prefix matters.");
+
+    const third = fire();
+    expect(third.systemPrompt).toBe(first.systemPrompt);
+    expect(third.message).toBeUndefined();
   });
 
   it("extension bash tool_call handler prefixes SUNCODE_CONTEXT_ID", () => {

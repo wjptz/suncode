@@ -74,7 +74,12 @@ function setupRepo(tmp: string): void {
   }
 }
 
-function makeTask(repo: string, name: string, prdBody: string): void {
+function makeTask(
+  repo: string,
+  name: string,
+  prdBody: string,
+  branch?: string,
+): void {
   const dir = path.join(repo, ".suncode", "tasks", name);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "prd.md"), prdBody);
@@ -93,6 +98,7 @@ function makeTask(repo: string, name: string, prdBody: string): void {
       children: [],
       relatedFiles: [],
       meta: {},
+      branch: branch ?? null,
     }) + "\n",
   );
 }
@@ -220,5 +226,37 @@ describe.skipIf(!hasPython())("add_session.py auto-commit", () => {
     const status = git(tmp, "status", "--porcelain");
     expect(status).toMatch(/\.suncode\/tasks\/task-a\/prd\.md/);
     expect(status).toMatch(/\.suncode\/tasks\/task-b\/prd\.md/);
+  });
+
+  it("falls back to the current branch when task.json points to a stale branch", () => {
+    makeTask(tmp, "task-a", "task A prd\n", "feature/deleted");
+    setCurrentTask(tmp, "task-a");
+    git(tmp, "add", "-A");
+    git(tmp, "commit", "-q", "-m", "initial");
+
+    runAddSession(tmp, "stale branch work");
+
+    const journal = fs.readFileSync(
+      path.join(tmp, ".suncode", "workspace", DEVELOPER, "journal-1.md"),
+      "utf-8",
+    );
+    expect(journal).toContain("**Branch**: `main`");
+    expect(journal).not.toContain("feature/deleted");
+  });
+
+  it("keeps a task branch when its local ref still exists", () => {
+    makeTask(tmp, "task-a", "task A prd\n", "feature/existing");
+    setCurrentTask(tmp, "task-a");
+    git(tmp, "add", "-A");
+    git(tmp, "commit", "-q", "-m", "initial");
+    git(tmp, "branch", "feature/existing");
+
+    runAddSession(tmp, "existing branch work");
+
+    const journal = fs.readFileSync(
+      path.join(tmp, ".suncode", "workspace", DEVELOPER, "journal-1.md"),
+      "utf-8",
+    );
+    expect(journal).toContain("**Branch**: `feature/existing`");
   });
 });

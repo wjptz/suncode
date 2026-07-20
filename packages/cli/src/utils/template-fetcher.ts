@@ -904,9 +904,29 @@ export async function downloadWithStrategy(
     return false;
   }
 
-  // overwrite: Delete existing directory first
+  // Download first, then replace. A failed overwrite must leave the existing
+  // user spec intact instead of deleting it before the network operation.
   if (strategy === "overwrite" && exists) {
-    await fs.promises.rm(destDir, { recursive: true });
+    const tempDir = path.join(os.tmpdir(), `suncode-template-${Date.now()}`);
+    try {
+      await withTimeout(
+        downloadTemplate(gigetSource, {
+          dir: tempDir,
+          preferOffline: true,
+        }),
+        TIMEOUTS.DOWNLOAD_MS,
+        "Template download",
+      );
+      await fs.promises.rm(destDir, { recursive: true, force: true });
+      await copyMissing(tempDir, destDir);
+    } finally {
+      try {
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup must not replace the download result.
+      }
+    }
+    return true;
   }
 
   // append: Download to temp dir, then merge missing files
@@ -936,8 +956,11 @@ export async function downloadWithStrategy(
       }
       throw error;
     } finally {
-      // Clean up temp directory
-      await fs.promises.rm(tempDir, { recursive: true, force: true });
+      try {
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup must not replace the download result.
+      }
     }
     return true;
   }

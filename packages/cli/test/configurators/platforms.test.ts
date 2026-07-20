@@ -189,11 +189,42 @@ describe("getConfiguredPlatforms", () => {
     expect(result.has("pi")).toBe(true);
   });
 
+  it("does not claim a bare or Trellis-only .omp directory", () => {
+    fs.mkdirSync(path.join(tmpDir, ".omp", "extensions", "trellis"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, ".omp", "extensions", "trellis", "index.ts"),
+      "// Trellis-owned OMP extension\n",
+    );
+    expect(getConfiguredPlatforms(tmpDir).has("omp")).toBe(false);
+  });
+
+  it("detects OMP only from a Suncode ownership marker", () => {
+    const marker = path.join(
+      tmpDir,
+      ".omp",
+      "extensions",
+      "suncode",
+      "index.ts",
+    );
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, "// Suncode-owned OMP extension\n");
+    expect(getConfiguredPlatforms(tmpDir).has("omp")).toBe(true);
+  });
+
   it("detects multiple platforms simultaneously", () => {
     for (const id of PLATFORM_IDS) {
-      fs.mkdirSync(path.join(tmpDir, AI_TOOLS[id].configDir), {
-        recursive: true,
-      });
+      const config = AI_TOOLS[id];
+      if (config.ownershipMarkers?.length) {
+        const marker = path.join(tmpDir, config.ownershipMarkers[0]);
+        fs.mkdirSync(path.dirname(marker), { recursive: true });
+        fs.writeFileSync(marker, "owned\n");
+      } else {
+        fs.mkdirSync(path.join(tmpDir, config.configDir), {
+          recursive: true,
+        });
+      }
     }
     const result = getConfiguredPlatforms(tmpDir);
     expect(result.size).toBe(PLATFORM_IDS.length);
@@ -676,7 +707,7 @@ describe("configurePlatform", () => {
     }
   });
 
-  it("configurePlatform('zcode') keeps command fallbacks out of shared .agents skills", async () => {
+  it("configurePlatform('zcode') writes private skills, commands, and agents", async () => {
     await configurePlatform("zcode", tmpDir);
 
     expect(
@@ -686,14 +717,14 @@ describe("configurePlatform", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".agents", "skills", "suncode-start", "SKILL.md"),
+        path.join(tmpDir, ".zcode", "skills", "suncode-check", "SKILL.md"),
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       fs.existsSync(
         path.join(
           tmpDir,
-          ".agents",
+          ".zcode",
           "skills",
           "suncode-continue",
           "SKILL.md",
@@ -707,10 +738,10 @@ describe("configurePlatform", () => {
     expect(templates?.has(".agents/skills/suncode-continue/SKILL.md")).toBe(
       false,
     );
-    expect(templates?.has(".agents/skills/suncode-check/SKILL.md")).toBe(true);
-    expect(templates?.has(".zcode/cli/agents/suncode-implement.md")).toBe(true);
-    expect(templates?.has(".zcode/cli/agents/suncode-check.md")).toBe(true);
-    expect(templates?.has(".zcode/cli/agents/suncode-research.md")).toBe(true);
+    expect(templates?.has(".zcode/skills/suncode-check/SKILL.md")).toBe(true);
+    expect(templates?.has(".zcode/agents/suncode-implement.md")).toBe(true);
+    expect(templates?.has(".zcode/agents/suncode-check.md")).toBe(true);
+    expect(templates?.has(".zcode/agents/suncode-research.md")).toBe(true);
   });
 
   it("configurePlatform('codebuddy') creates .codebuddy directory", async () => {

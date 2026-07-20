@@ -26,8 +26,10 @@ import {
 import { DIR_NAMES } from "../../constants/paths.js";
 
 import {
+  channelDir,
   channelRoot,
   currentProjectKey,
+  isSafeName,
   projectDir,
   workerFile,
 } from "./store/paths.js";
@@ -308,6 +310,7 @@ export function scanLiveWorkers(
   const out: LiveWorker[] = [];
   for (const entry of entries) {
     if (entry.startsWith(".")) continue;
+    if (!isSafeName(entry)) continue;
     const dir = path.join(bucket, entry);
     try {
       if (!fs.statSync(dir).isDirectory()) continue;
@@ -378,7 +381,7 @@ function readReservationWorkers(
   channel: string,
   project: string,
 ): WorkerState[] {
-  const dir = path.join(projectDir(project), channel);
+  const dir = channelDir(channel, project);
   let files: string[];
   try {
     files = fs.readdirSync(dir);

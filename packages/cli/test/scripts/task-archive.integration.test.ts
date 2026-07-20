@@ -231,5 +231,29 @@ describe.skipIf(!hasPython())(
       expect(status).toContain(".suncode/tasks/tracked/");
       expect(status).toContain(".suncode/tasks/archive/");
     });
+
+    it("refuses to archive a mistyped name that resolves to a source dir", () => {
+      makeTask(tmp, "real-task", "# real task\n");
+      const srcDir = path.join(tmp, "src");
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, "index.ts"), "export const x = 1;\n");
+      git(tmp, "add", "-A");
+      git(tmp, "commit", "-q", "-m", "initial");
+
+      const result = spawnSync(
+        "python3",
+        [".suncode/scripts/task.py", "archive", "src"],
+        { cwd: tmp, encoding: "utf-8" },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("refusing to archive");
+      expect(fs.readFileSync(path.join(srcDir, "index.ts"), "utf-8")).toBe(
+        "export const x = 1;\n",
+      );
+      expect(
+        fs.existsSync(path.join(tmp, ".suncode", "tasks", "archive")),
+      ).toBe(false);
+    });
   },
 );

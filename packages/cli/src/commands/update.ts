@@ -94,8 +94,8 @@ interface ChangeAnalysis {
 type ConflictAction = "overwrite" | "skip" | "create-new";
 
 const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
-const SUNCODE_BLOCK_START = "<!-- SUNCODE:START -->";
-const SUNCODE_BLOCK_END = "<!-- SUNCODE:END -->";
+export const SUNCODE_BLOCK_START = "<!-- SUNCODE:START -->";
+export const SUNCODE_BLOCK_END = "<!-- SUNCODE:END -->";
 const LEGACY_UNTRACKED_AGENTS_MD_BLOCK_HASHES = new Set<string>([
   // v0.5.0-beta.17 and earlier wrote AGENTS.md but did not hash-track it.
   // This hash is the pristine Suncode-managed block before the Subagents
@@ -1336,7 +1336,20 @@ function isFileSafeToReplace(
 /**
  * Classify migrations based on file state and user modifications
  */
-function classifyMigrations(
+/** Whether the manifest records a file at or below the supplied path. */
+export function dirHasManifestEntries(
+  dirRelativePath: string,
+  hashes: TemplateHashes,
+): boolean {
+  const prefix = dirRelativePath.endsWith("/")
+    ? dirRelativePath
+    : dirRelativePath + "/";
+  return Object.keys(hashes).some(
+    (key) => key === dirRelativePath || key.startsWith(prefix),
+  );
+}
+
+export function classifyMigrations(
   migrations: MigrationItem[],
   cwd: string,
   hashes: TemplateHashes,
@@ -1412,9 +1425,13 @@ function classifyMigrations(
           // Target has user modifications - conflict
           result.conflict.push(item);
         }
-      } else {
-        // Directory rename - always auto (includes user files)
+      } else if (dirHasManifestEntries(item.from, hashes)) {
+        // Suncode created this directory, so the rename is ours to make.
         result.auto.push(item);
+      } else {
+        // An untracked source directory is user-owned even if it shares a
+        // retired Suncode platform path. Never auto-move it under --force.
+        result.skip.push(item);
       }
     } else if (item.type === "delete") {
       if (isTemplateModified(cwd, item.from, hashes)) {
@@ -1489,7 +1506,9 @@ function printMigrationSummary(classified: ClassifiedMigrations): void {
   }
 
   if (classified.skip.length > 0) {
-    console.log(chalk.gray("  ○ Skipping (old file not found):"));
+    console.log(
+      chalk.gray("  ○ Skipping (not found, protected, or not Suncode-owned):"),
+    );
     for (const item of classified.skip.slice(0, 3)) {
       console.log(chalk.gray(`    ${item.from}`));
     }
@@ -1835,6 +1854,42 @@ function printMigrationResult(result: MigrationResult): void {
   if (parts.length > 0) {
     console.log(chalk.cyan(`Migration complete: ${parts.join(", ")}`));
   }
+}
+
+/**
+ * Rename legacy traces files without overwriting an existing journal. A
+ * conflict keeps both files because workspace journals are user data and are
+ * intentionally excluded from update backups.
+ */
+export function renameTracesToJournal(workspaceDir: string): {
+  renamed: number;
+  skipped: string[];
+} {
+  const skipped: string[] = [];
+  let renamed = 0;
+  if (!fs.existsSync(workspaceDir)) return { renamed, skipped };
+
+  for (const developer of fs.readdirSync(workspaceDir)) {
+    const developerPath = path.join(workspaceDir, developer);
+    if (!fs.statSync(developerPath).isDirectory()) continue;
+
+    for (const file of fs.readdirSync(developerPath)) {
+      if (!(file.startsWith("traces-") && file.endsWith(".md"))) continue;
+      const oldPath = path.join(developerPath, file);
+      const newPath = path.join(
+        developerPath,
+        file.replace("traces-", "journal-"),
+      );
+      if (fs.existsSync(newPath)) {
+        skipped.push(oldPath);
+        continue;
+      }
+      fs.renameSync(oldPath, newPath);
+      renamed += 1;
+    }
+  }
+
+  return { renamed, skipped };
 }
 
 /**
@@ -2307,29 +2362,19 @@ export async function update(options: UpdateOptions): Promise<void> {
     // and variable file numbers (traces-1.md, traces-2.md, etc.), so we can't enumerate them
     // in the migration manifest. This is a one-time migration for the 0.2.0 naming redesign.
     const workspaceDir = path.join(cwd, PATHS.WORKSPACE);
-    if (fs.existsSync(workspaceDir)) {
-      let journalRenamed = 0;
-      const devDirs = fs.readdirSync(workspaceDir);
-      for (const dev of devDirs) {
-        const devPath = path.join(workspaceDir, dev);
-        if (!fs.statSync(devPath).isDirectory()) continue;
-
-        const files = fs.readdirSync(devPath);
-        for (const file of files) {
-          if (file.startsWith("traces-") && file.endsWith(".md")) {
-            const oldPath = path.join(devPath, file);
-            const newFile = file.replace("traces-", "journal-");
-            const newPath = path.join(devPath, newFile);
-            fs.renameSync(oldPath, newPath);
-            journalRenamed++;
-          }
-        }
-      }
-      if (journalRenamed > 0) {
-        console.log(
-          chalk.cyan(`Renamed ${journalRenamed} traces file(s) to journal`),
-        );
-      }
+    const { renamed: journalRenamed, skipped: journalSkipped } =
+      renameTracesToJournal(workspaceDir);
+    if (journalRenamed > 0) {
+      console.log(
+        chalk.cyan(`Renamed ${journalRenamed} traces file(s) to journal`),
+      );
+    }
+    for (const oldPath of journalSkipped) {
+      console.warn(
+        chalk.yellow(
+          `Kept ${path.relative(cwd, oldPath)}: its journal target already exists`,
+        ),
+      );
     }
   }
 

@@ -240,7 +240,7 @@ describe("update() integration", () => {
     expect(entries.filter((e) => e.startsWith(".backup-")).length).toBe(0);
   });
 
-  it("[issue-zcode-codex-upgrade] zcode .agents skills do not trigger legacy Codex backfill", async () => {
+  it("[issue-zcode-codex-upgrade] zcode private skills do not trigger legacy Codex backfill", async () => {
     await init({ yes: true, force: true, zcode: true });
 
     expect(
@@ -252,6 +252,9 @@ describe("update() integration", () => {
     expect(
       fs.existsSync(projectFile(".agents/skills/suncode-continue/SKILL.md")),
     ).toBe(false);
+    expect(
+      fs.existsSync(projectFile(".zcode/skills/suncode-check/SKILL.md")),
+    ).toBe(true);
 
     await update({});
 
@@ -1276,7 +1279,7 @@ describe("update() integration", () => {
       "[codex-sub-agent, Gemini, Qoder, Copilot, ZCode, Reasonix, Trae]",
     );
     expect(updated).toContain(
-      "[/Claude Code, Cursor, OpenCode, CodeBuddy, Droid, Pi]",
+      "[/Claude Code, Cursor, OpenCode, CodeBuddy, Droid, Pi, Oh My Pi]",
     );
     expect(updated).toContain("[codex-inline, Kilo, Antigravity, Devin]");
     expect(updated).not.toContain("[Codex]");

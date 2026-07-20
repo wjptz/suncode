@@ -75,32 +75,58 @@ type Child = ChildProcessByStdio<Writable, Readable, Readable>;
 
 const SHUTDOWN_GRACE_MS = 3000;
 
+interface ResolvedProviderPath {
+  command: string;
+  prefixArgs: string[];
+}
+
 /**
  * On Windows, npm installs CLI tools as `.cmd` shims where the real `.exe`
  * lives in `node_modules/`.  Node.js ≥18.20.2 (CVE-2024-27980) blocks
  * implicit `.cmd` execution via `spawn()` without `shell: true`.  Resolve
  * the real `.exe` path so we can spawn it directly — no shell, no injection.
  */
-function resolveProviderPath(provider: string): string {
-  if (process.platform !== "win32") return provider;
+export function resolveProviderPath(
+  provider: string,
+  cwd?: string,
+): ResolvedProviderPath {
+  const fallback = { command: provider, prefixArgs: [] };
+  if (process.platform !== "win32") return fallback;
   try {
     const cmdName = `${provider}.cmd`;
-    const dirs = (process.env.PATH ?? "").split(path.delimiter);
+    const dirs = [
+      ...(cwd ? [path.join(cwd, "node_modules", ".bin")] : []),
+      ...(process.env.PATH ?? "").split(path.delimiter),
+    ].filter(Boolean);
     for (const dir of dirs) {
       const cmdFile = path.join(dir, cmdName);
       if (!fs.existsSync(cmdFile)) continue;
       const content = fs.readFileSync(cmdFile, "utf8");
       // npm-generated cmd shim format:  "%dp0%\node_modules\pkg\bin\name.exe" %*
-      const m = content.match(/"%dp0%\\(.+\.exe)"/i);
+      const m = content.match(/"%dp0%\\([^"\n]+?\.exe)"/i);
       if (m) {
         const exePath = path.join(dir, m[1]);
-        if (fs.existsSync(exePath)) return exePath;
+        if (
+          path.basename(exePath).toLowerCase() !== "node.exe" &&
+          fs.existsSync(exePath)
+        ) {
+          return { command: exePath, prefixArgs: [] };
+        }
+      }
+      const script = content.match(
+        /"%dp0%\\([^"\n]+?\.(?:js|cjs|mjs))"/i,
+      );
+      if (script) {
+        const scriptPath = path.join(dir, script[1]);
+        if (fs.existsSync(scriptPath)) {
+          return { command: process.execPath, prefixArgs: [scriptPath] };
+        }
       }
     }
   } catch {
     // resolve failure is non-fatal — fall back to bare name
   }
-  return provider;
+  return fallback;
 }
 
 /**
@@ -141,16 +167,24 @@ export async function runSupervisor(
 
   const logPath = workerFile(channelName, workerName, "log", project);
   const log = fs.createWriteStream(logPath);
-  const providerPath = resolveProviderPath(adapter.provider);
+  const resolvedProvider = resolveProviderPath(adapter.provider, config.cwd);
+  const resolvedProviderDisplay = [
+    resolvedProvider.command,
+    ...resolvedProvider.prefixArgs,
+  ].join(" ");
   log.write(
-    `[supervisor] starting ${adapter.provider} (resolved: ${providerPath}) ${args.join(" ")}\n`,
+    `[supervisor] starting ${adapter.provider} (resolved: ${resolvedProviderDisplay}) ${args.join(" ")}\n`,
   );
 
-  const child = spawn(providerPath, args, {
-    cwd: config.cwd,
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-  }) as Child;
+  const child = spawn(
+    resolvedProvider.command,
+    [...resolvedProvider.prefixArgs, ...args],
+    {
+      cwd: config.cwd,
+      env,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  ) as Child;
 
   // ── shutdown controller declared before listener attachment ──
   // Node fires `error` on next tick when spawn fails (ENOENT / EACCES);

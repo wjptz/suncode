@@ -23,6 +23,7 @@ export type AITool =
   | "copilot"
   | "droid"
   | "pi"
+  | "omp"
   | "reasonix"
   | "zcode"
   | "trae";
@@ -47,6 +48,7 @@ export type TemplateDir =
   | "copilot"
   | "droid"
   | "pi"
+  | "omp"
   | "reasonix"
   | "zcode"
   | "trae";
@@ -71,6 +73,7 @@ export type CliFlag =
   | "copilot"
   | "droid"
   | "pi"
+  | "omp"
   | "reasonix"
   | "zcode"
   | "trae";
@@ -128,6 +131,11 @@ export interface AIToolConfig {
   supportsAgentSkills?: boolean;
   /** Additional managed paths beyond configDir (e.g., .github/hooks for Copilot) */
   extraManagedPaths?: string[];
+  /**
+   * Paths relative to the project root that prove this product owns a shared
+   * config directory. When present, any marker must exist for detection.
+   */
+  ownershipMarkers?: string[];
   /** CLI flag name for --flag options (e.g., "claude" for --claude) */
   cliFlag: CliFlag;
   /** Whether this tool is checked by default in interactive init prompt */
@@ -401,6 +409,28 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       cliFlag: "pi",
     },
   },
+  omp: {
+    name: "Oh My Pi",
+    templateDirs: ["common", "omp"],
+    configDir: ".omp",
+    ownershipMarkers: [
+      ".omp/extensions/suncode/index.ts",
+      ".omp/commands/suncode-continue.md",
+      ".omp/agents/suncode-implement.md",
+      ".omp/skills/suncode-before-dev/SKILL.md",
+    ],
+    cliFlag: "omp",
+    defaultChecked: false,
+    hasPythonHooks: false,
+    templateContext: {
+      cmdRefPrefix: "/suncode:",
+      executorAI: "Bash scripts or Task calls",
+      userActionLabel: "Slash commands",
+      agentCapable: true,
+      hasHooks: true,
+      cliFlag: "omp",
+    },
+  },
   reasonix: {
     name: "Reasonix",
     templateDirs: ["common", "reasonix"],
@@ -421,8 +451,15 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     name: "ZCode",
     templateDirs: ["common", "zcode"],
     configDir: ".zcode",
-    supportsAgentSkills: true,
-    extraManagedPaths: [".zcode/cli/agents", ".zcode/commands"],
+    // Keep the legacy pre-ZCode-update path managed during migration so
+    // update/uninstall can remove empty parent directories without touching
+    // user-authored files.
+    extraManagedPaths: [
+      ".zcode/cli/agents",
+      ".zcode/agents",
+      ".zcode/commands",
+      ".zcode/skills",
+    ],
     cliFlag: "zcode",
     defaultChecked: false,
     hasPythonHooks: false,

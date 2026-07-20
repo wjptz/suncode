@@ -50,6 +50,10 @@ suncode init -u your-name
 suncode init --cursor --opencode --engineer --codex -u your-name
 ```
 
+Oh My Pi 可通过 `suncode init --omp -u your-name` 初始化。已有的 `.omp/`
+目录只有在包含 Suncode 所有权标记时才会被视为 Suncode 管理范围，不会误处理无关的
+OMP 资产。
+
 随后按目标仓库中生成的工作流文件和命令使用。
 
 ## 常用命令

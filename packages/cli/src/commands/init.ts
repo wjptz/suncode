@@ -1023,6 +1023,7 @@ interface InitOptions {
   copilot?: boolean;
   droid?: boolean;
   pi?: boolean;
+  omp?: boolean;
   reasonix?: boolean;
   zcode?: boolean;
   trae?: boolean;

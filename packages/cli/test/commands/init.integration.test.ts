@@ -685,19 +685,47 @@ describe("init() integration", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".zcode", "cli", "agents", "suncode-implement.md"),
+        path.join(tmpDir, ".zcode", "agents", "suncode-implement.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".zcode", "cli", "agents", "suncode-check.md"),
+        path.join(tmpDir, ".zcode", "agents", "suncode-check.md"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".zcode", "cli", "agents", "suncode-research.md"),
+        path.join(tmpDir, ".zcode", "agents", "suncode-research.md"),
       ),
     ).toBe(true);
+  });
+
+  it("initializes the complete Suncode-owned OMP surface", async () => {
+    await init({ yes: true, omp: true });
+
+    const expected = [
+      ".omp/commands/suncode-continue.md",
+      ".omp/commands/suncode-finish-work.md",
+      ".omp/skills/suncode-before-dev/SKILL.md",
+      ".omp/agents/suncode-implement.md",
+      ".omp/agents/suncode-check.md",
+      ".omp/agents/suncode-research.md",
+      ".omp/extensions/suncode/index.ts",
+    ];
+    for (const relativePath of expected) {
+      expect(fs.existsSync(path.join(tmpDir, relativePath))).toBe(true);
+    }
+    expect(
+      fs.existsSync(path.join(tmpDir, ".omp", "commands", "suncode-start.md")),
+    ).toBe(false);
+
+    const extension = fs.readFileSync(
+      path.join(tmpDir, ".omp", "extensions", "suncode", "index.ts"),
+      "utf-8",
+    );
+    expect(extension).toContain("SUNCODE_CONTEXT_ID");
+    expect(extension).toContain(".suncode");
+    expect(extension).not.toMatch(/TRELLIS|Trellis|\.trellis/);
   });
 
   it("#3n opencode platform emits start slash command", async () => {

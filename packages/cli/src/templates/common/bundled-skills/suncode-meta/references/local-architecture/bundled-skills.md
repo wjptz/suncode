@@ -48,7 +48,7 @@ Each platform configurator calls `writeSkills(<root>, <workflowSkills>, resolveB
 | Devin | `.devin/skills/<skill>/` | `configureDevin` |
 | Kilo | `.kilocode/skills/<skill>/` | `configureKilo` |
 | OpenCode | (handled by `collectOpenCodeTemplates`) | Uses the same `resolveBundledSkills(ctx)` output |
-| Pi, Reasonix | (their own collectors) | Same `resolveBundledSkills(ctx)` output |
+| Pi, OMP, Reasonix, ZCode | (their own collectors) | Same `resolveBundledSkills(ctx)` output, written to private platform roots |
 
 Two paths exercise the same data:
 
@@ -69,7 +69,7 @@ The mechanism that auto-dispatches bundled skills to platform skill roots lives 
    - `writeSkills(skillsRoot, workflowSkills, bundledSkills)` writes both workflow skills and bundled skill files under `skillsRoot`.
    - `collectSkillTemplates(skillsRoot, workflowSkills, bundledSkills)` returns the same shape as a `Map<filePath, content>` for the update / hash pipeline.
 
-Every platform configurator that supports skills imports both helpers (see `claude.ts`, `cursor.ts`, `codex.ts`, `gemini.ts`, `kiro.ts`, `qoder.ts`, `codebuddy.ts`, `copilot.ts`, `droid.ts`, `antigravity.ts`, `devin.ts`, `kilo.ts`). The `index.ts` `PLATFORM_FUNCTIONS` registry also calls `resolveBundledSkills(ctx)` inside each `collectTemplates` closure so `suncode update` tracking stays consistent.
+Every platform configurator that supports skills imports both helpers (including the dedicated Pi, OMP, Reasonix, and ZCode collectors). The `index.ts` `PLATFORM_FUNCTIONS` registry also calls the matching collector inside each `collectTemplates` closure so `suncode update` tracking stays consistent.
 
 ## Adding a New Bundled Skill
 

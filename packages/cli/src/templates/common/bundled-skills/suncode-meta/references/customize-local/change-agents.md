@@ -24,8 +24,9 @@ When the user wants to change `suncode-research`, `suncode-implement`, or `sunco
 | CodeBuddy | `.codebuddy/agents/suncode-*.md` |
 | Factory Droid | `.factory/droids/suncode-*.md` |
 | Pi Agent | `.pi/agents/suncode-*.md` |
+| Oh My Pi | `.omp/agents/suncode-*.md` |
 | Reasonix | `.reasonix/skills/suncode-*/SKILL.md` (subagent frontmatter) |
-| ZCode | `.zcode/cli/agents/suncode-*.md` |
+| ZCode | `.zcode/agents/suncode-*.md` |
 
 Use the actual paths in the user project as authoritative.
 

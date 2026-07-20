@@ -406,6 +406,11 @@ ${separator}
       taskBranch: "task/from-task",
       taskBaseBranch: "main",
     });
+    execSync("git config user.email test@example.com", { cwd: tmpDir });
+    execSync("git config user.name Test", { cwd: tmpDir });
+    execSync("git add .", { cwd: tmpDir });
+    execSync("git commit -q -m initial", { cwd: tmpDir });
+    execSync("git branch task/from-task", { cwd: tmpDir });
 
     runAddSession("Task branch wins");
 
@@ -1355,6 +1360,171 @@ describe("regression: current-task path normalization", () => {
     expect(content, `${label} template should exist`).toBeTruthy();
     return content ?? "";
   }
+
+  it("[upstream-task-hygiene] Codex inline skips JSONL while sub-agent mode seeds it", () => {
+    setupTaskRepo();
+    fs.mkdirSync(path.join(tmpDir, ".codex"), { recursive: true });
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+
+    const inline = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "codex inline task",
+        "--slug",
+        "codex-inline-task",
+        "--assignee",
+        "test-dev",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+    expect(inline.status).toBe(0);
+    const tasksDir = path.join(tmpDir, ".suncode", "tasks");
+    const inlineDir = fs
+      .readdirSync(tasksDir)
+      .find((entry) => entry.endsWith("codex-inline-task"));
+    expect(inlineDir).toBeDefined();
+    expect(
+      fs.existsSync(path.join(tasksDir, inlineDir as string, "implement.jsonl")),
+    ).toBe(false);
+
+    writeProjectFile(
+      path.join(".suncode", "config.yaml"),
+      "codex:\n  dispatch_mode: sub-agent\n",
+    );
+    const subagent = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "codex subagent task",
+        "--slug",
+        "codex-subagent-task",
+        "--assignee",
+        "test-dev",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+    expect(subagent.status).toBe(0);
+    const subagentDir = fs
+      .readdirSync(tasksDir)
+      .find((entry) => entry.endsWith("codex-subagent-task"));
+    expect(subagentDir).toBeDefined();
+    for (const name of ["implement.jsonl", "check.jsonl"]) {
+      const row = JSON.parse(
+        fs
+          .readFileSync(path.join(tasksDir, subagentDir as string, name), "utf-8")
+          .trim(),
+      ) as Record<string, unknown>;
+      expect(row._example).toBeDefined();
+      expect(row.file).toBeUndefined();
+    }
+  });
+
+  it("[upstream-task-hygiene] normalizes today's date prefix and rejects a different valid date", () => {
+    setupTaskRepo();
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    const now = new Date();
+    const todayPrefix = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const tasksDir = path.join(tmpDir, ".suncode", "tasks");
+
+    const normalized = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "Example Task",
+        "--slug",
+        `${todayPrefix}-example-task`,
+        "--assignee",
+        "test-dev",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+    expect(normalized.status).toBe(0);
+    expect(normalized.stderr).toContain("normalized to");
+    expect(fs.existsSync(path.join(tasksDir, `${todayPrefix}-example-task`))).toBe(
+      true,
+    );
+    expect(
+      fs.existsSync(
+        path.join(tasksDir, `${todayPrefix}-${todayPrefix}-example-task`),
+      ),
+    ).toBe(false);
+
+    const otherPrefix = todayPrefix === "01-01" ? "02-02" : "01-01";
+    const rejected = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "Other Task",
+        "--slug",
+        `${otherPrefix}-other-task`,
+        "--assignee",
+        "test-dev",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+    expect(rejected.status).toBe(1);
+    expect(rejected.stderr).toContain("date prefix");
+    expect(rejected.stderr).toContain("--slug other-task");
+  });
+
+  it("[upstream-task-hygiene] --no-start preserves the current pointer and trims description", () => {
+    setupTaskRepo();
+    writeSessionContext("batch-session", ".suncode/tasks/issue-106");
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    const result = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "batch backlog task",
+        "--slug",
+        "batch-backlog",
+        "--assignee",
+        "test-dev",
+        "--description",
+        "   ",
+        "--no-start",
+      ],
+      {
+        cwd: tmpDir,
+        encoding: "utf-8",
+        env: sessionEnv({ SUNCODE_CONTEXT_ID: "batch-session" }),
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("task description is empty");
+    expect(result.stderr).toContain("Skipped session activation (--no-start)");
+    const pointer = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          tmpDir,
+          ".suncode",
+          ".runtime",
+          "sessions",
+          "batch-session.json",
+        ),
+        "utf-8",
+      ),
+    ) as { current_task: string };
+    expect(pointer.current_task).toBe(".suncode/tasks/issue-106");
+
+    const taskDir = fs
+      .readdirSync(path.join(tmpDir, ".suncode", "tasks"))
+      .find((entry) => entry.endsWith("batch-backlog"));
+    const taskJson = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", "tasks", taskDir as string, "task.json"),
+        "utf-8",
+      ),
+    ) as { description: string };
+    expect(taskJson.description).toBe("");
+  });
 
   it("[session-current-task] task.py start without context key enters degraded mode (returns 0, no pointer)", () => {
     // 0.5.3 hotfix: task.py start no longer hard-fails when no session identity
@@ -4565,11 +4735,20 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     );
   });
 
+  it("[omp] cli_adapter.py supports OMP without a CLI sub-agent runner", () => {
+    expect(commonCliAdapter).toContain('"omp"');
+    expect(commonCliAdapter).toContain(".omp");
+    expect(commonCliAdapter).toContain(
+      "OMP uses its native task tool for agent runs",
+    );
+    expect(commonCliAdapter).toContain("def _has_suncode_omp_assets");
+  });
+
   it("[zcode] cli_adapter.py supports zcode platform without pretending it has a CLI runner", () => {
     expect(commonCliAdapter).toContain('"zcode"');
     expect(commonCliAdapter).toContain(".zcode");
     expect(commonCliAdapter).toContain(
-      'return self.get_config_dir(project_root) / "cli" / "agents" / f"{mapped_name}.md"',
+      'return self.get_config_dir(project_root) / "agents" / f"{mapped_name}.md"',
     );
     expect(commonCliAdapter).toContain(
       'return f".zcode/commands/suncode/{name}.md"',
@@ -4616,7 +4795,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
 
   it("[zcode] cli_adapter.py has explicit zcode branches in all platform-specific methods", () => {
     expect(commonCliAdapter).toMatch(
-      /def get_agent_path[\s\S]*?elif self\.platform == "zcode":[\s\S]*?\/ "cli" \/ "agents"/,
+      /def get_agent_path[\s\S]*?elif self\.platform == "zcode":[\s\S]*?\/ "agents"/,
     );
     expect(commonCliAdapter).toMatch(
       /def get_suncode_command_path[\s\S]*?elif self\.platform == "zcode":[\s\S]*?\.zcode\/commands\/suncode\//,
@@ -4646,6 +4825,15 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(commonCliAdapter).toContain('return "zcode"');
     expect(commonCliAdapter).toMatch(
       /detect_platform[\s\S]*?\.zcode[\s\S]*?return "zcode"/,
+    );
+  });
+
+  it("[omp] cli_adapter.py detects only Suncode-owned OMP assets", () => {
+    expect(commonCliAdapter).toMatch(
+      /detect_platform[\s\S]*?_has_suncode_omp_assets\(project_root\)[\s\S]*?return "omp"/,
+    );
+    expect(commonCliAdapter).not.toMatch(
+      /if \(project_root \/ "\.omp"\)\.is_dir\(\):\s*return "omp"/,
     );
   });
 
@@ -4756,9 +4944,14 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     // Sub-agent platform probe.
     expect(taskStore as string).toMatch(/_SUBAGENT_CONFIG_DIRS/);
     expect(taskStore as string).toContain('".claude"');
-    expect(taskStore as string).toContain('".codex"');
     expect(taskStore as string).toContain('".github/copilot"');
     expect(taskStore as string).toContain('".pi"');
+    expect(taskStore as string).toContain('".omp"');
+    expect(taskStore as string).toContain('_CODEX_CONFIG_DIR = ".codex"');
+    expect(taskStore as string).toContain(
+      'get_codex_dispatch_mode(repo_root) == "sub-agent"',
+    );
+    expect(commonConfig).toContain("def get_codex_dispatch_mode");
     // Seed row is self-describing and has no `file` field (so consumers skip
     // it naturally).
     expect(taskStore as string).toMatch(/_write_seed_jsonl/);
@@ -5401,10 +5594,10 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
       id: "zcode" as const,
       hooksDir: null,
       preludeAgents: [
-        ".zcode/cli/agents/suncode-implement.md",
-        ".zcode/cli/agents/suncode-check.md",
+        ".zcode/agents/suncode-implement.md",
+        ".zcode/agents/suncode-check.md",
       ],
-      nonPreludeAgents: [".zcode/cli/agents/suncode-research.md"],
+      nonPreludeAgents: [".zcode/agents/suncode-research.md"],
     },
   ];
 

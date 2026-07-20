@@ -493,6 +493,90 @@ For extension-backed platforms like Pi Agent, add explicit regression coverage t
 
 ---
 
+## Scenario: OMP 共享目录的所有权识别
+
+### 1. 范围 / 触发条件
+
+当平台根目录可能同时包含 Suncode、Trellis 或用户自建资产时，不能用“目录存在”推断 Suncode 已配置该平台。Oh My Pi（OMP）的 `.omp/` 是当前基准场景；新增其他共享根平台时也必须复用此契约。
+
+### 2. 签名
+
+```typescript
+interface AIToolConfig {
+  configDir: string;
+  ownershipMarkers?: string[];
+}
+
+function getConfiguredPlatforms(cwd: string): AITool[];
+```
+
+OMP 的平台注册必须提供 Suncode 唯一标记：
+
+```typescript
+ownershipMarkers: [
+  ".omp/extensions/suncode/index.ts",
+  ".omp/commands/suncode-continue.md",
+  ".omp/agents/suncode-implement.md",
+  ".omp/skills/suncode-before-dev/SKILL.md",
+]
+```
+
+### 3. 契约
+
+- 未配置 `ownershipMarkers` 的平台保持原行为：`<cwd>/<configDir>` 存在即视为已配置。
+- 配置了 `ownershipMarkers` 的平台必须至少存在一个 marker 才视为已配置；仅存在共享根目录不成立。
+- `suncode init --omp` 可以显式创建 Suncode OMP 资产；自动检测不得因为 Trellis-only 或用户-only `.omp/` 而触发 update。
+- `configureOmp()` 写出的每个模板路径必须由 `collectOmpTemplates()` 返回相同字节，供 manifest/hash 跟踪。
+- update/uninstall 只能处理 Suncode manifest 记录或 Suncode 唯一命名的文件；不得删除 `.omp/` 根、`trellis-*` 文件或用户文件。
+- OMP 是独立平台标识 `omp`，不得复用 `pi` 的配置根、会话身份或 mem reader。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 预期行为 |
+|---|---|
+| `.omp/` 不存在 | OMP 不在 configured platforms 中 |
+| `.omp/` 只有 `trellis-*` 或用户文件 | OMP 不在 configured platforms 中，update 不写 Suncode OMP 资产 |
+| 任一 Suncode marker 存在 | OMP 被识别，update 收集 Suncode OMP 模板 |
+| Suncode 与 Trellis/用户文件混合存在 | 只更新/卸载 Suncode-owned 文件，其他文件字节不变 |
+| marker 已删除但 manifest 仍有历史 Suncode 路径 | orphan pruning 按 manifest/hash 安全处理，不因共享根存在而重新接管平台 |
+| OMP extension 模板语法无效 | `templates/omp.test.ts` 的 TypeScript transpile 检查失败 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`.omp/extensions/suncode/index.ts` 与 `.omp/agents/suncode-implement.md` 存在，平台被识别，update 只追踪 Suncode namespaced 资产。
+- Base：仓库只有 `.omp/agents/trellis-implement.md`，Suncode OMP 不被识别，也不产生任何写入。
+- Bad：`fs.existsSync(path.join(cwd, ".omp"))` 直接返回已配置；这会让 Suncode 接管第三方共享目录。
+
+### 6. 必需测试
+
+- `getConfiguredPlatforms()`：覆盖无目录、空 `.omp/`、Trellis-only、Suncode marker 和混合目录。
+- configurator parity：`configurePlatform("omp")` 的生成文件与 `collectPlatformTemplates("omp")` 路径和字节完全一致。
+- init integration：`--omp` 生成 commands、skills、三类 agents 和 extension，并写入模板 hash。
+- update/uninstall integration：混合 `.omp/` 中 Suncode 文件可更新/删除，Trellis 与用户文件保留。
+- extension template：TypeScript 语法有效，并包含 `session_start`、`input`、`before_agent_start`、`context`、`session_before_compact` 的最终生命周期面。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+if (fs.existsSync(path.join(cwd, config.configDir))) {
+  configured.push("omp");
+}
+```
+
+#### Correct
+
+```typescript
+const configured = config.ownershipMarkers
+  ? config.ownershipMarkers.some((marker) => fs.existsSync(path.join(cwd, marker)))
+  : fs.existsSync(path.join(cwd, config.configDir));
+```
+
+共享根目录只证明宿主平台存在，不证明 Suncode 拥有其中资产；所有权必须由唯一 marker 与 manifest 共同约束。
+
+---
+
 ## Scenario: Extension-Backed Platform Support
 
 ### 1. Scope / Trigger

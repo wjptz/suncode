@@ -20,6 +20,7 @@ vi.mock("inquirer", () => ({
 }));
 
 vi.mock("node:child_process", () => ({
+  execFileSync: vi.fn().mockReturnValue(""),
   execSync: vi.fn().mockImplementation((cmd: string) => {
     const py = process.platform === "win32" ? "python" : "python3";
     return cmd === `${py} --version` ? "Python 3.11.12" : "";

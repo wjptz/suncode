@@ -85,6 +85,7 @@ program
   .option("--copilot", "Include GitHub Copilot hooks")
   .option("--droid", "Include Factory Droid commands")
   .option("--pi", "Include Pi Agent extension assets")
+  .option("--omp", "Include Oh My Pi commands, skills, agents, and extension")
   .option("--reasonix", "Include Reasonix skills")
   .option("--zcode", "Include ZCode commands")
   .option("--trae", "Include Trae IDE commands")

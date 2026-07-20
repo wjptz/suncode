@@ -11,11 +11,15 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  classifyMigrations,
   cleanupEmptyDirs,
+  dirHasManifestEntries,
   loadUpdateSkipPaths,
+  renameTracesToJournal,
   shouldExcludeFromBackup,
   sortMigrationsForExecution,
 } from "../../src/commands/update.js";
+import type { MigrationItem } from "../../src/types/migration.js";
 
 // =============================================================================
 // cleanupEmptyDirs
@@ -278,5 +282,106 @@ describe("shouldExcludeFromBackup", () => {
     ".opencode\\node_modules\\zod\\index.js",
   ])("excludes Windows-style backslash path %s", (p) => {
     expect(shouldExcludeFromBackup(p)).toBe(true);
+  });
+});
+
+describe("renameTracesToJournal", () => {
+  let tmpDir: string;
+  let workspaceDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-traces-"));
+    workspaceDir = path.join(tmpDir, "workspace");
+    fs.mkdirSync(path.join(workspaceDir, "alice"), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames a trace when no journal target exists", () => {
+    const developerDir = path.join(workspaceDir, "alice");
+    fs.writeFileSync(path.join(developerDir, "traces-1.md"), "trace one");
+
+    expect(renameTracesToJournal(workspaceDir)).toEqual({
+      renamed: 1,
+      skipped: [],
+    });
+    expect(
+      fs.readFileSync(path.join(developerDir, "journal-1.md"), "utf-8"),
+    ).toBe("trace one");
+  });
+
+  it("keeps both files when the journal target already exists", () => {
+    const developerDir = path.join(workspaceDir, "alice");
+    fs.writeFileSync(path.join(developerDir, "traces-1.md"), "old trace");
+    fs.writeFileSync(
+      path.join(developerDir, "journal-1.md"),
+      "REAL SESSION HISTORY",
+    );
+
+    expect(renameTracesToJournal(workspaceDir)).toEqual({
+      renamed: 0,
+      skipped: [path.join(developerDir, "traces-1.md")],
+    });
+    expect(
+      fs.readFileSync(path.join(developerDir, "journal-1.md"), "utf-8"),
+    ).toBe("REAL SESSION HISTORY");
+    expect(
+      fs.readFileSync(path.join(developerDir, "traces-1.md"), "utf-8"),
+    ).toBe("old trace");
+  });
+
+  it("returns zero counts when the workspace does not exist", () => {
+    expect(renameTracesToJournal(path.join(tmpDir, "missing"))).toEqual({
+      renamed: 0,
+      skipped: [],
+    });
+  });
+});
+
+describe("rename-dir migration ownership", () => {
+  const migration: MigrationItem[] = [
+    { type: "rename-dir", from: ".windsurf/workflows", to: ".devin/workflows" },
+  ];
+
+  it("matches exact entries and descendants but not sibling prefixes", () => {
+    expect(dirHasManifestEntries("AGENTS.md", { "AGENTS.md": "h" })).toBe(true);
+    expect(
+      dirHasManifestEntries(".windsurf/workflows", {
+        ".windsurf/workflows/a.md": "h",
+      }),
+    ).toBe(true);
+    expect(
+      dirHasManifestEntries(".devin", { ".devinX/a.md": "h" }),
+    ).toBe(false);
+  });
+
+  it("skips an unowned source directory and auto-migrates an owned one", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-renamedir-"));
+    try {
+      fs.mkdirSync(path.join(tmpDir, ".windsurf", "workflows"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(tmpDir, ".windsurf", "workflows", "user.md"),
+        "user workflow",
+      );
+
+      const unowned = classifyMigrations(migration, tmpDir, {}, new Map());
+      expect(unowned.auto).toEqual([]);
+      expect(unowned.skip).toEqual(migration);
+
+      const owned = classifyMigrations(
+        migration,
+        tmpDir,
+        { ".windsurf/workflows/user.md": "hash" },
+        new Map(),
+      );
+      expect(owned.skip).toEqual([]);
+      expect(owned.auto).toEqual(migration);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

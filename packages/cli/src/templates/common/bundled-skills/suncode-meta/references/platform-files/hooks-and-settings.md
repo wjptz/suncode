@@ -27,9 +27,10 @@ Common files:
 | GitHub Copilot | `.github/copilot/hooks.json` |
 | Factory Droid | `.factory/settings.json` |
 | Pi Agent | `.pi/settings.json`, `.pi/extensions/suncode/` |
+| Oh My Pi | `.omp/extensions/suncode/` (auto-discovered; no settings file) |
 | Trae IDE | `.trae/hooks.json` |
 
-Reasonix and ZCode are pull-based platforms that do not use hooks or settings files; their agent files contain prelude instructions to read context after startup.
+Reasonix and ZCode are pull-based platforms that do not use hooks or settings files. OMP has no settings file, but its auto-discovered TypeScript extension injects context through native lifecycle events.
 
 Whether these files exist in a project depends on which `suncode init --<platform>` flags the user ran.
 

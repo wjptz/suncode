@@ -25,6 +25,7 @@ vi.mock("inquirer", () => ({
 }));
 
 vi.mock("node:child_process", () => ({
+  execFileSync: vi.fn().mockReturnValue(""),
   execSync: vi.fn().mockImplementation((cmd: string) => {
     const py = process.platform === "win32" ? "python" : "python3";
     return cmd === `${py} --version` ? "Python 3.11.12" : "";
@@ -151,6 +152,37 @@ describe("init + uninstall: manifest accuracy + homedir guard", () => {
     expect(fs.readFileSync(userSession, "utf-8")).toBe("user-chat-data\n");
   });
 
+  it("#R1.4b OMP init → uninstall preserves Trellis and user assets in the shared root", async () => {
+    const trellisAgent = path.join(
+      tmpDir,
+      ".omp",
+      "agents",
+      "trellis-implement.md",
+    );
+    const userAsset = path.join(tmpDir, ".omp", "extensions", "user.ts");
+    fs.mkdirSync(path.dirname(trellisAgent), { recursive: true });
+    fs.mkdirSync(path.dirname(userAsset), { recursive: true });
+    fs.writeFileSync(trellisAgent, "# Trellis agent\n");
+    fs.writeFileSync(userAsset, "// user extension\n");
+
+    await init({ yes: true, omp: true, force: true });
+    const suncodeExtension = path.join(
+      tmpDir,
+      ".omp",
+      "extensions",
+      "suncode",
+      "index.ts",
+    );
+    expect(fs.existsSync(suncodeExtension)).toBe(true);
+
+    await uninstall({ yes: true });
+
+    expect(fs.existsSync(suncodeExtension)).toBe(false);
+    expect(fs.readFileSync(trellisAgent, "utf-8")).toBe("# Trellis agent\n");
+    expect(fs.readFileSync(userAsset, "utf-8")).toBe("// user extension\n");
+    expect(fs.existsSync(path.join(tmpDir, ".omp"))).toBe(true);
+  });
+
   it("#R1.5 init --skip-existing → uninstall preserves user's AGENTS.md", async () => {
     fs.writeFileSync(path.join(tmpDir, "AGENTS.md"), "my own AGENTS.md\n");
 
@@ -161,6 +193,37 @@ describe("init + uninstall: manifest accuracy + homedir guard", () => {
     expect(fs.readFileSync(path.join(tmpDir, "AGENTS.md"), "utf-8")).toBe(
       "my own AGENTS.md\n",
     );
+  });
+
+  it("#R1.6 uninstall strips only the Suncode block from tracked AGENTS.md", async () => {
+    await init({ yes: true, claude: true, force: true });
+    const agentsPath = path.join(tmpDir, "AGENTS.md");
+    expect(loadHashes(tmpDir)).toHaveProperty("AGENTS.md");
+    const written = fs.readFileSync(agentsPath, "utf-8");
+    expect(written).toContain("<!-- SUNCODE:START -->");
+
+    fs.writeFileSync(
+      agentsPath,
+      written + "\n## My project rules\n\nAlways rebase.\n",
+    );
+    await uninstall({ yes: true });
+
+    expect(fs.existsSync(agentsPath)).toBe(true);
+    const after = fs.readFileSync(agentsPath, "utf-8");
+    expect(after).not.toContain("<!-- SUNCODE:START -->");
+    expect(after).not.toContain("<!-- SUNCODE:END -->");
+    expect(after).toContain("## My project rules");
+    expect(after).toContain("Always rebase.");
+  });
+
+  it("#R1.7 deletes tracked AGENTS.md when only the Suncode block remains", async () => {
+    await init({ yes: true, claude: true, force: true });
+    const agentsPath = path.join(tmpDir, "AGENTS.md");
+    expect(fs.existsSync(agentsPath)).toBe(true);
+
+    await uninstall({ yes: true });
+
+    expect(fs.existsSync(agentsPath)).toBe(false);
   });
 
   // ----- R3: poisoned-manifest self-heal -----

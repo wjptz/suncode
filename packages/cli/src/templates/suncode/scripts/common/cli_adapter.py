@@ -1,7 +1,7 @@
 """
 CLI Adapter for Multi-Platform Support.
 
-Abstracts differences between Claude Code, OpenCode, Engineer, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, Pi Agent, ZCode, and Trae interfaces.
+Abstracts differences between Claude Code, OpenCode, Engineer, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, Pi Agent, Oh My Pi, ZCode, and Trae interfaces.
 
 Supported platforms:
 - claude: Claude Code (default)
@@ -20,6 +20,7 @@ Supported platforms:
 - copilot: GitHub Copilot (VS Code)
 - droid: Factory Droid (commands-based)
 - pi: Pi Agent (extension-backed)
+- omp: Oh My Pi (extension-backed, native task tool)
 - zcode: ZCode (desktop ADE, pull-based)
 - trae: Trae IDE (IDE-only, hooks-based)
 
@@ -57,6 +58,7 @@ Platform = Literal[
     "copilot",
     "droid",
     "pi",
+    "omp",
     "zcode",
     "trae",
 ]
@@ -138,6 +140,8 @@ class CLIAdapter:
             return ".factory"
         elif self.platform == "pi":
             return ".pi"
+        elif self.platform == "omp":
+            return ".omp"
         elif self.platform == "zcode":
             return ".zcode"
         elif self.platform == "trae":
@@ -170,7 +174,7 @@ class CLIAdapter:
         if self.platform == "codex":
             return self.get_config_dir(project_root) / "agents" / f"{mapped_name}.toml"
         elif self.platform == "zcode":
-            return self.get_config_dir(project_root) / "cli" / "agents" / f"{mapped_name}.md"
+            return self.get_config_dir(project_root) / "agents" / f"{mapped_name}.md"
         return self.get_config_dir(project_root) / "agents" / f"{mapped_name}.md"
 
     def get_commands_path(self, project_root: Path, *parts: str) -> Path:
@@ -191,6 +195,17 @@ class CLIAdapter:
             Pi uses prompt templates: .pi/prompts/suncode-<name>.md
             Claude/OpenCode/Engineer/ZCode use subdirectory: <config>/commands/suncode/<name>.md
         """
+        if self.platform == "omp":
+            commands_dir = self.get_config_dir(project_root) / "commands"
+            if not parts:
+                return commands_dir
+            if len(parts) >= 2 and parts[0] == "suncode":
+                filename = parts[-1]
+                if filename.endswith(".md"):
+                    filename = filename[:-3]
+                return commands_dir / f"suncode-{filename}.md"
+            return commands_dir / Path(*parts)
+
         if self.platform == "pi":
             prompts_dir = self.get_config_dir(project_root) / "prompts"
             if not parts:
@@ -285,6 +300,8 @@ class CLIAdapter:
             return f".factory/commands/suncode/{name}.md"
         elif self.platform == "pi":
             return f".pi/prompts/suncode-{name}.md"
+        elif self.platform == "omp":
+            return f".omp/commands/suncode-{name}.md"
         elif self.platform == "zcode":
             return f".zcode/commands/suncode/{name}.md"
         else:
@@ -323,6 +340,8 @@ class CLIAdapter:
         elif self.platform == "droid":
             return {}
         elif self.platform == "pi":
+            return {}
+        elif self.platform == "omp":
             return {}
         elif self.platform == "zcode":
             return {}
@@ -421,6 +440,10 @@ class CLIAdapter:
             raise ValueError(
                 "Trae is IDE-only; CLI agent run is not supported."
             )
+        elif self.platform == "omp":
+            raise ValueError(
+                "OMP uses its native task tool for agent runs; CLI agent run is not supported."
+            )
 
         else:  # claude
             cmd = ["claude", "-p"]
@@ -494,6 +517,10 @@ class CLIAdapter:
         elif self.platform == "trae":
             raise ValueError(
                 "Trae is IDE-only; CLI resume is not supported."
+            )
+        elif self.platform == "omp":
+            raise ValueError(
+                "OMP uses its native task tool for agent runs; CLI resume is not supported."
             )
         else:
             return ["claude", "--resume", session_id]
@@ -571,6 +598,8 @@ class CLIAdapter:
             return "droid"
         elif self.platform == "pi":
             return "pi"
+        elif self.platform == "omp":
+            return "omp"
         elif self.platform == "zcode":
             return "zcode"
         elif self.platform == "trae":
@@ -646,7 +675,7 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
     """Get CLI adapter for the specified platform.
 
     Args:
-        platform: Platform name ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'zcode', or 'trae')
+        platform: Platform name ('claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'omp', 'zcode', or 'trae')
 
     Returns:
         CLIAdapter instance
@@ -678,11 +707,12 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
         "copilot",
         "droid",
         "pi",
+        "omp",
         "zcode",
         "trae",
     ):
         raise ValueError(
-            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'zcode', or 'trae')"
+            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'engineer', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'omp', 'zcode', or 'trae')"
         )
 
     return CLIAdapter(platform=platform)  # type: ignore
@@ -706,6 +736,7 @@ _ALL_PLATFORM_CONFIG_DIRS = (
     ".github/copilot",
     ".factory",
     ".pi",
+    ".omp",
     ".zcode",
     ".trae",
 )
@@ -723,6 +754,17 @@ def _has_other_platform_dir(project_root: Path, exclude: set[str]) -> bool:
         for d in _ALL_PLATFORM_CONFIG_DIRS
         if d not in exclude
     )
+
+
+def _has_suncode_omp_assets(project_root: Path) -> bool:
+    """Return True only when shared .omp contains Suncode-owned assets."""
+    markers = (
+        ".omp/extensions/suncode/index.ts",
+        ".omp/commands/suncode-continue.md",
+        ".omp/agents/suncode-implement.md",
+        ".omp/skills/suncode-before-dev/SKILL.md",
+    )
+    return any((project_root / marker).is_file() for marker in markers)
 
 
 def detect_platform(project_root: Path) -> Platform:
@@ -745,9 +787,10 @@ def detect_platform(project_root: Path) -> Platform:
     14. .github/copilot directory exists → copilot
     15. .factory directory exists → droid
     16. .pi directory exists → pi
-    17. .zcode directory exists → zcode
-    18. .trae directory exists → trae
-    19. Default → claude
+    17. Suncode-owned files exist under .omp → omp
+    18. .zcode directory exists → zcode
+    19. .trae directory exists → trae
+    20. Default → claude
 
     Args:
         project_root: Project root directory
@@ -779,6 +822,7 @@ def detect_platform(project_root: Path) -> Platform:
         "copilot",
         "droid",
         "pi",
+        "omp",
         "zcode",
         "trae",
     ):
@@ -860,6 +904,11 @@ def detect_platform(project_root: Path) -> Platform:
     # Check for .pi directory (Pi Agent-specific)
     if (project_root / ".pi").is_dir():
         return "pi"
+
+    # `.omp` is shared by Trellis and Suncode. A bare directory or Trellis-only
+    # assets must not make Suncode claim ownership of the platform.
+    if _has_suncode_omp_assets(project_root):
+        return "omp"
 
     # Check for .zcode directory (ZCode-specific)
     if (project_root / ".zcode").is_dir():

@@ -50,6 +50,10 @@ Initialize only the platforms you use:
 suncode init --cursor --opencode --engineer --codex -u your-name
 ```
 
+Oh My Pi is supported through `suncode init --omp -u your-name`. A pre-existing
+`.omp/` directory is only treated as Suncode-managed when it contains a
+Suncode ownership marker, so unrelated OMP assets remain untouched.
+
 Then follow the generated workflow files and commands in the target repository.
 
 ## Common Commands

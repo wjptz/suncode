@@ -24,17 +24,57 @@ import type { TurnOutcome, TurnTracker } from "./turns.js";
 type Child = ChildProcessByStdio<Writable, Readable, Readable>;
 
 /**
- * Line-buffered stdout pump. Yields each non-empty line to `onLine` as
- * soon as a newline arrives, wraps the handler in a `.catch` so a thrown
- * await doesn't escape as `unhandledRejection`, and reports the failure
- * through `onError` for observability.
+ * Line-buffered stdout pump. Non-empty lines are handled serially in input
+ * order, with the stream paused while the queue drains. Handler failures are
+ * also serialized through `onError` and never become unhandled rejections.
  */
 export function pumpStdout(
   stream: Readable,
   onLine: (line: string) => Promise<void> | void,
-  onError?: (err: Error) => void,
+  onError?: (err: Error) => Promise<void> | void,
 ): void {
   let buf = "";
+  let queue: Promise<void> = Promise.resolve();
+  let pending = 0;
+  let paused = false;
+
+  const pauseForBackpressure = (): void => {
+    if (paused) return;
+    stream.pause();
+    paused = true;
+  };
+
+  const resumeIfDrained = (): void => {
+    if (!paused || pending !== 0) return;
+    paused = false;
+    stream.resume();
+  };
+
+  const enqueue = (line: string): void => {
+    pending += 1;
+    pauseForBackpressure();
+    queue = queue
+      .then(async () => {
+        try {
+          await onLine(line);
+        } catch (error) {
+          if (onError) {
+            try {
+              await onError(
+                error instanceof Error ? error : new Error(String(error)),
+              );
+            } catch {
+              // The error observer must not break the stdout queue.
+            }
+          }
+        } finally {
+          pending -= 1;
+          resumeIfDrained();
+        }
+      })
+      .catch(() => undefined);
+  };
+
   stream.on("data", (chunk: Buffer) => {
     buf += chunk.toString("utf-8");
     let nl: number;
@@ -42,17 +82,7 @@ export function pumpStdout(
       const line = buf.slice(0, nl);
       buf = buf.slice(nl + 1);
       if (line.trim()) {
-        Promise.resolve()
-          .then(() => onLine(line))
-          .catch((err) => {
-            if (onError) {
-              try {
-                onError(err instanceof Error ? err : new Error(String(err)));
-              } catch {
-                // swallow handler-of-handler errors
-              }
-            }
-          });
+        enqueue(line);
       }
     }
   });
@@ -165,13 +195,13 @@ export function startStdoutPump(args: {
         turnTracker,
       );
     },
-    (err) => {
+    async (err) => {
       log.write(`[supervisor] stdout line handler failed: ${err.message}\n`);
-      void appendEvent(channelName, {
+      await appendEvent(channelName, {
         kind: "error",
         by: `supervisor:${workerName}`,
         message: `stdout pipeline error: ${err.message}`,
-      }).catch(() => undefined);
+      });
     },
   );
 }

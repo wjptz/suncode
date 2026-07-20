@@ -37,6 +37,7 @@ import { configureCodebuddy } from "./codebuddy.js";
 import { configureCopilot } from "./copilot.js";
 import { configureDroid } from "./droid.js";
 import { configurePi, collectPiTemplates } from "./pi.js";
+import { configureOmp, collectOmpTemplates } from "./omp.js";
 import { configureReasonix, collectReasonixTemplates } from "./reasonix.js";
 import { configureZcode, collectZcodeTemplates } from "./zcode.js";
 import { configureTrae } from "./trae.js";
@@ -462,6 +463,10 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configurePi,
     collectTemplates: () => collectPiTemplates(),
   },
+  omp: {
+    configure: configureOmp,
+    collectTemplates: () => collectOmpTemplates(),
+  },
   reasonix: {
     configure: configureReasonix,
     collectTemplates: () => collectReasonixTemplates(),
@@ -526,7 +531,13 @@ export const ALL_MANAGED_DIRS = [".suncode", ...new Set(PLATFORM_MANAGED_DIRS)];
 export function getConfiguredPlatforms(cwd: string): Set<AITool> {
   const platforms = new Set<AITool>();
   for (const id of PLATFORM_IDS) {
-    if (fs.existsSync(path.join(cwd, AI_TOOLS[id].configDir))) {
+    const config = AI_TOOLS[id];
+    const configured = config.ownershipMarkers?.length
+      ? config.ownershipMarkers.some((marker) =>
+          fs.existsSync(path.join(cwd, marker)),
+        )
+      : fs.existsSync(path.join(cwd, config.configDir));
+    if (configured) {
       platforms.add(id);
     }
   }

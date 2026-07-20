@@ -88,8 +88,9 @@ If a command only repeats workflow rules, prefer making it reference/read `.sunc
 | GitHub Copilot | `.github/skills/`, `.github/prompts/` |
 | Factory Droid | `.factory/skills/`, `.factory/commands/` |
 | Pi Agent | `.pi/skills/` |
+| Oh My Pi | `.omp/skills/`, `.omp/commands/` |
 | Reasonix | `.reasonix/skills/` (no separate commands dir; slash commands built into the platform) |
-| ZCode | `.agents/skills/`, `.zcode/commands/` |
+| ZCode | `.zcode/skills/`, `.zcode/commands/` |
 | Kilo / Antigravity / Devin | workflows + skills |
 
 Every directory above is a deploy target for the four bundled skills. Each platform receives a full copy on `suncode init` and refresh on `suncode update`; nothing has to be wired by hand.

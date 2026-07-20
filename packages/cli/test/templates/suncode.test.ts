@@ -219,7 +219,7 @@ describe("suncode template constants", () => {
     const implement = stepSection("2.1");
     const hookAutoBlock = platformBlock(
       implement,
-      "[Claude Code, Cursor, OpenCode, CodeBuddy, Droid, Pi]",
+      "[Claude Code, Cursor, OpenCode, CodeBuddy, Droid, Pi, Oh My Pi]",
     );
     const pullBasedMarker =
       "[codex-sub-agent, Gemini, Qoder, Copilot, ZCode, Reasonix, Trae]";

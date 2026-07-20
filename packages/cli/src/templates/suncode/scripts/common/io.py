@@ -8,6 +8,8 @@ for JSON file operations across all Suncode scripts.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
 
@@ -23,15 +25,28 @@ def read_json(path: Path) -> dict | None:
 
 
 def write_json(path: Path, data: dict) -> bool:
-    """Write dict to JSON file with pretty formatting.
+    """Write dict to JSON file atomically with pretty formatting.
+
+    Content is written to a sibling temp file and then renamed over the
+    target. An interrupted write therefore leaves the previous JSON intact.
 
     Returns True on success, False on error.
     """
+    payload = json.dumps(data, indent=2, ensure_ascii=False)
     try:
-        path.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        fd, tmp = tempfile.mkstemp(
+            dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
         )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
         return True
     except (OSError, IOError):
         return False

@@ -70,6 +70,23 @@ def is_safe_task_path(task_path: str, repo_root: Path | None = None) -> bool:
     return True
 
 
+def is_within_tasks_dir(task_dir_abs: Path, repo_root: Path | None = None) -> bool:
+    """Return whether a resolved task is an immediate child of ``tasks/``.
+
+    ``resolve_task_dir`` intentionally falls back to ``repo_root/<name>`` for
+    unknown names. Archive callers must therefore validate the resolved path
+    before moving it, or a typo such as ``archive src`` could move source code.
+    """
+    if repo_root is None:
+        repo_root = get_repo_root()
+    try:
+        resolved = task_dir_abs.resolve()
+        tasks_resolved = get_tasks_dir(repo_root).resolve()
+    except (OSError, RuntimeError):
+        return False
+    return resolved.parent == tasks_resolved
+
+
 # =============================================================================
 # Task Lookup
 # =============================================================================

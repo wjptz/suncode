@@ -17,15 +17,20 @@
  * (per the PRD: "全删"). The `.suncode/` tree is removed unconditionally.
  */
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import chalk from "chalk";
 import inquirer from "inquirer";
 
-import { DIR_NAMES } from "../constants/paths.js";
+import { DIR_NAMES, FILE_NAMES } from "../constants/paths.js";
 import { loadHashes } from "../utils/template-hash.js";
-import { cleanupEmptyDirs } from "./update.js";
+import {
+  cleanupEmptyDirs,
+  SUNCODE_BLOCK_END,
+  SUNCODE_BLOCK_START,
+} from "./update.js";
 import {
   ALL_MANAGED_DIRS,
   getConfiguredPlatforms,
@@ -41,6 +46,7 @@ import {
   scrubOpencodePackageJson,
   scrubPiSettings,
   scrubCodexConfigToml,
+  scrubManagedMarkdownBlock,
   type ScrubResult,
 } from "../utils/uninstall-scrubbers.js";
 
@@ -113,6 +119,16 @@ function buildStructuredFileSpecs(): Map<string, StructuredFileSpec> {
       posixPath: ".codex/config.toml",
       reason: "Remove suncode project_doc_fallback_filenames and notes",
       scrub: (content) => scrubCodexConfigToml(content),
+    },
+    {
+      posixPath: FILE_NAMES.AGENTS,
+      reason: "Strip Suncode managed block; preserve user instructions",
+      scrub: (content) =>
+        scrubManagedMarkdownBlock(
+          content,
+          SUNCODE_BLOCK_START,
+          SUNCODE_BLOCK_END,
+        ),
     },
   ];
   const map = new Map<string, StructuredFileSpec>();
@@ -223,7 +239,7 @@ function renderPlan(cwd: string, plan: UninstallPlan): void {
   if (plan.removeSuncodeDir && fs.existsSync(suncodeDir)) {
     console.log(
       `  ${chalk.red("-")} ${DIR_NAMES.WORKFLOW}/  ${chalk.gray(
-        "(entire directory, including tasks/runtime/config)",
+        "(entire directory — including your specs, task PRDs, journals, and memory)",
       )}`,
     );
   }
@@ -369,6 +385,38 @@ function executePlan(
 }
 
 /**
+ * List uncommitted user-authored data that uninstall would remove together
+ * with `.suncode/`. Git failures and non-git directories degrade to no result.
+ */
+export function collectUncommittedSuncodeData(cwd: string): string[] {
+  const workflow = DIR_NAMES.WORKFLOW;
+  const userDataDirs = [
+    `${workflow}/${DIR_NAMES.SPEC}`,
+    `${workflow}/${DIR_NAMES.TASKS}`,
+    `${workflow}/${DIR_NAMES.WORKSPACE}`,
+  ];
+
+  try {
+    const output = execFileSync(
+      "git",
+      ["-C", cwd, "status", "--porcelain", "--", ...userDataDirs],
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
+    );
+    return output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^\S+\s+/, "").replace(/^.*\s->\s/, ""));
+  } catch {
+    return [];
+  }
+}
+
+function dirtyUninstallBypassEnabled(): boolean {
+  return process.env.SUNCODE_ALLOW_DIRTY_UNINSTALL === "1";
+}
+
+/**
  * Entry point.
  */
 export async function uninstall(options: UninstallOptions = {}): Promise<void> {
@@ -436,9 +484,39 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   const plan = buildPlan(cwd, prunedHashes);
   renderPlan(cwd, plan);
 
+  const uncommitted = collectUncommittedSuncodeData(cwd);
+  if (uncommitted.length > 0) {
+    console.warn(
+      chalk.red.bold(
+        `\n⚠ ${uncommitted.length} uncommitted file(s) under .suncode/ ` +
+          "(spec/tasks/workspace) will be permanently deleted with no backup:",
+      ),
+    );
+    for (const filePath of uncommitted.slice(0, 20)) {
+      console.warn(chalk.red(`    ${filePath}`));
+    }
+    if (uncommitted.length > 20) {
+      console.warn(chalk.red(`    … and ${uncommitted.length - 20} more`));
+    }
+    console.warn(
+      chalk.yellow("Commit or stash them first if you want to keep them.\n"),
+    );
+  }
+
   if (options.dryRun) {
     console.log(chalk.gray("Dry run — no files were modified."));
     return;
+  }
+
+  if (uncommitted.length > 0 && options.yes && !dirtyUninstallBypassEnabled()) {
+    console.error(
+      chalk.red(
+        "Refusing to uninstall with --yes while .suncode/ has uncommitted user data " +
+          "(spec/tasks/workspace). Commit or stash it, re-run without --yes to confirm " +
+          "interactively, or set SUNCODE_ALLOW_DIRTY_UNINSTALL=1 to override.",
+      ),
+    );
+    process.exit(1);
   }
 
   if (!options.yes) {

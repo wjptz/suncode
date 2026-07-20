@@ -20,9 +20,10 @@ This page lists common Suncode file locations in a user project by platform. Whe
 | GitHub Copilot | `--copilot` | `.github/` | `.github/skills/` | `.github/agents/` | `.github/copilot/hooks/` + prompts |
 | Factory Droid | `--droid` | `.factory/` | `.factory/skills/` | `.factory/droids/` | `.factory/hooks/` + settings |
 | Pi Agent | `--pi` | `.pi/` | `.pi/skills/` | `.pi/agents/` | `.pi/extensions/suncode/` (native `suncode_subagent` tool) + `.pi/settings.json` |
+| Oh My Pi | `--omp` | `.omp/` | `.omp/skills/` | `.omp/agents/` | `.omp/extensions/suncode/` (session/task/context/compaction injection; host-native `task` tool) |
 | Trae IDE | `--trae` | `.trae/` | `.trae/skills/` | `.trae/agents/` | `.trae/hooks/` + `.trae/hooks.json` |
 | Reasonix | `--reasonix` | `.reasonix/` | `.reasonix/skills/` | None — sub-agents are skills with `runAs: subagent` frontmatter | None |
-| ZCode | `--zcode` | `.zcode/` | `.agents/skills/` | `.zcode/cli/agents/` | pull-based prelude (no hooks) |
+| ZCode | `--zcode` | `.zcode/` | `.zcode/skills/` | `.zcode/agents/` | pull-based prelude (no hooks) |
 
 ## Capability Groups
 
@@ -41,6 +42,7 @@ These platforms usually have `suncode-research`, `suncode-implement`, and `sunco
 - GitHub Copilot
 - Factory Droid
 - Pi Agent
+- Oh My Pi
 - Trae IDE
 - Reasonix (delivered as skills with `runAs: subagent` under `.reasonix/skills/`, not as a separate `agents/` directory)
 - ZCode
@@ -52,6 +54,8 @@ When changing implementation/check/research behavior, look for the corresponding
 Some platforms expose a first-class tool that the host runtime understands. The model calls it like any other tool and the host renders progress cards, validates the agent name against `.<platform>/agents/`, and enforces dispatch modes.
 
 - Pi Agent — `suncode_subagent` tool, defined in `.pi/extensions/suncode/index.ts`. Supports `single` / `parallel` / `chain` dispatch modes and emits live `suncode-subagent-progress` events.
+
+Oh My Pi uses the host's native `task` tool rather than registering another dispatch tool. `.omp/extensions/suncode/index.ts` supplies session/task/workflow context and re-injects workflow state after compaction.
 
 When changing sub-agent dispatch behavior on these platforms, edit the extension file, **not** the agent markdown — the agent markdown defines responsibilities, but the host extension owns dispatch, validation, and progress rendering.
 
@@ -67,7 +71,7 @@ When changing behavior, inspect workflows and skills first. Do not assume Suncod
 
 ### Shared `.agents/skills/`
 
-Codex, Gemini CLI, and ZCode write the shared `.agents/skills/` layer. Some tools that support agentskills.io can also read this directory. If the user wants multiple compatible tools to share one skill, consider `.agents/skills/` first, but do not assume every platform reads it.
+Codex and Gemini CLI write the shared `.agents/skills/` layer. ZCode and OMP use private skill roots. If the user wants multiple compatible tools to share one skill, consider `.agents/skills/` first, but do not assume every platform reads it.
 
 ## Decision Rules When Modifying Platform Files
 

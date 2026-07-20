@@ -12,7 +12,7 @@ Suncode v0.6 adds three architectural surfaces on top of the pre-v0.6 workflow /
 The default operating scope is local files in the user project:
 
 - `.suncode/`: workflow, config, tasks, spec, workspace, scripts, bundled runtime agents, and runtime state.
-- Platform directories: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`, `.kiro/`, `.gemini/`, `.qoder/`, `.codebuddy/`, `.github/`, `.factory/`, `.pi/`, `.reasonix/`, `.zcode/`, `.trae/`, `.kilocode/`, `.agent/`, `.devin/`, and similar directories. Pi additionally exposes a native `suncode_subagent` tool with `single` / `parallel` / `chain` dispatch modes, throttled progress cards, and `isSuncodeAgent()` validation on top of the file layout. Reasonix stores both workflow skills and subagent skills as `.reasonix/skills/<name>/SKILL.md`; subagent skills carry `runAs: subagent` frontmatter. ZCode stores commands under `.zcode/commands/suncode/` and pull-based sub-agent files under `.zcode/cli/agents/`; it has no Suncode-supported hooks or settings file.
+- Platform directories: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`, `.kiro/`, `.gemini/`, `.qoder/`, `.codebuddy/`, `.github/`, `.factory/`, `.pi/`, `.omp/`, `.reasonix/`, `.zcode/`, `.trae/`, `.kilocode/`, `.agent/`, `.devin/`, and similar directories. Pi exposes a native `suncode_subagent` tool with `single` / `parallel` / `chain` dispatch modes. Oh My Pi uses its host-native `task` tool plus `.omp/extensions/suncode/` for session, task, workflow-state, and compaction-aware context injection. Because `.omp/` may also contain another product's assets, Suncode ownership is proved by `suncode-*` files or `.omp/extensions/suncode/index.ts`, not by the directory alone. Reasonix stores workflow and subagent skills under `.reasonix/skills/`. ZCode stores private skills under `.zcode/skills/`, commands under `.zcode/commands/suncode/`, and pull-based agents under `.zcode/agents/`.
 - Shared skill layer: `.agents/skills/`.
 - User-owned channel store outside the project tree: `~/.suncode/channels/<project>/<channel>/events.jsonl`.
 - Raw platform conversation logs queryable via `suncode mem`: `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.pi/agent/sessions/` (OpenCode adapter degraded for the v0.6 line).
@@ -44,7 +44,7 @@ Do not assume the user has the Suncode source repository. Do not default to modi
 ### Platform Files
 
 - `references/platform-files/overview.md`: How shared `.suncode/` files relate to platform directories and the four platform integration modes (hook-driven, agent prelude, main-session workflow, channel runtime).
-- `references/platform-files/platform-map.md`: Platform directories and paths for skills, agents, hooks, and extensions across supported platforms including Reasonix, ZCode, and Pi's native `suncode_subagent` extension.
+- `references/platform-files/platform-map.md`: Platform directories and paths for skills, agents, hooks, and extensions across supported platforms including OMP, Reasonix, ZCode, and Pi's native `suncode_subagent` extension.
 - `references/platform-files/hooks-and-settings.md`: How settings/config files, hooks, plugins, and extensions connect to Suncode; covers `channel.worker_guard.*` and `codex.dispatch_mode`.
 - `references/platform-files/agents.md`: Per-platform `suncode-research` / `suncode-implement` / `suncode-check` sub-agent files plus bundled `.suncode/agents/{check,implement}.md` for the channel runtime.
 - `references/platform-files/skills-and-commands.md`: Differences between skills, commands, prompts, and workflows, plus how to change them.
@@ -71,7 +71,7 @@ Do not assume the user has the Suncode source repository. Do not default to modi
 - `.suncode/agents/{check,implement}.md` are bundled, platform-agnostic channel runtime agent definitions loaded by `suncode channel spawn --agent <name>`. Editable; `suncode update` backfills missing ones. Editing the per-platform `suncode-implement.md` / `suncode-check.md` does **not** change channel-runtime worker behavior.
 - `~/.suncode/channels/<project>/<channel>/events.jsonl` is the channel runtime event log per project per channel. User-owned, file-locked sequence numbering, durable `idempotencyKey` support; never under `.suncode/`.
 - Bundled multi-file skills (`suncode-meta`, `suncode-spec-bootstrap`, `suncode-session-insight`, `suncode-channel`) are auto-dispatched to every platform skill root by `getBundledSkillTemplates()` in `packages/cli/src/templates/common/index.ts`. Dropping a new directory under `packages/cli/src/templates/common/bundled-skills/` (upstream) ships it to every platform on the next `suncode update`.
-- Platform settings/config files decide which hooks, agents, skills, commands, prompts, and workflows actually run. Reasonix has no settings file — behavior is encoded inside skill frontmatter. ZCode also has no Suncode-supported hooks/settings path; commands and sub-agent files are pull-based.
+- Platform settings/config files decide which hooks, agents, skills, commands, prompts, and workflows actually run. OMP and Pi use TypeScript extensions; Reasonix has no settings file; ZCode has no Suncode-supported hooks/settings path and uses pull-based agent files.
 - `.suncode/.template-hashes.json` and `.suncode/.runtime/` are management/runtime state files. Confirm necessity before editing them.
 
 ## Do Not

@@ -42,10 +42,28 @@ export function projectDir(project: string = currentProjectKey()): string {
 
 const BUCKET_MARKER = ".bucket";
 
+const SAFE_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+
+/** Whether a channel or worker name is safe as one filesystem segment. */
+export function isSafeName(name: string): boolean {
+  return name !== "." && name !== ".." && SAFE_SEGMENT_RE.test(name);
+}
+
+/** Reject channel/worker names that could escape the channel store. */
+export function assertSafeName(name: string, kind = "channel"): void {
+  if (!isSafeName(name)) {
+    throw new Error(
+      `Invalid ${kind} name: ${JSON.stringify(name)}. ` +
+        "Names may only contain letters, digits, '.', '_' and '-'.",
+    );
+  }
+}
+
 export function channelDir(
   name: string,
   project: string = currentProjectKey(),
 ): string {
+  assertSafeName(name);
   return path.join(projectDir(project), name);
 }
 
@@ -76,6 +94,7 @@ export function workerFile(
   suffix: string,
   project: string = currentProjectKey(),
 ): string {
+  assertSafeName(worker, "worker");
   return path.join(channelDir(name, project), `${worker}.${suffix}`);
 }
 
@@ -84,6 +103,7 @@ export function workerLockPath(
   worker: string,
   project: string = currentProjectKey(),
 ): string {
+  assertSafeName(worker, "worker");
   return path.join(channelDir(name, project), `${worker}.spawnlock`);
 }
 
@@ -186,6 +206,7 @@ export function listChannelNamesInProject(project: string): string[] {
   }
   for (const entry of entries) {
     if (entry.startsWith(".")) continue;
+    if (!isSafeName(entry)) continue;
     const channelEvents = path.join(dir, entry, "events.jsonl");
     if (fs.existsSync(channelEvents)) out.push(entry);
   }

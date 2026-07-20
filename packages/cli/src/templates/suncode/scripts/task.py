@@ -4,7 +4,7 @@
 Task Management Script.
 
 Usage:
-    python3 task.py create "<title>" [--slug <name>] [--assignee <dev>] [--priority P0|P1|P2|P3] [--parent <dir>] [--package <pkg>]
+    python3 task.py create "<title>" [--slug <name>] [--assignee <dev>] [--priority P0|P1|P2|P3] [--parent <dir>] [--package <pkg>] [--no-start]
     python3 task.py add-context <dir> <file> <path> [reason] # Add jsonl entry
     python3 task.py validate <dir>              # Validate jsonl files
     python3 task.py list-context <dir>          # List jsonl entries
@@ -401,12 +401,17 @@ def main() -> int:
     # create
     p_create = subparsers.add_parser("create", help="Create new task")
     p_create.add_argument("title", help="Task title")
-    p_create.add_argument("--slug", "-s", help="Task slug")
+    p_create.add_argument("--slug", "-s", help="Task slug without the MM-DD date prefix")
     p_create.add_argument("--assignee", "-a", help="Assignee developer")
     p_create.add_argument("--priority", "-p", default="P2", help="Priority (P0-P3)")
     p_create.add_argument("--description", "-d", help="Task description")
     p_create.add_argument("--parent", help="Parent task directory (establishes subtask link)")
     p_create.add_argument("--package", help="Package name for monorepo projects")
+    p_create.add_argument(
+        "--no-start",
+        action="store_true",
+        help="Create the task without making it active in this session",
+    )
     p_create.add_argument("--hub-project-id", help="Hub project ID to store in task metadata")
     p_create.add_argument("--hub-developer-id", help="Hub developer ID to store in task metadata")
     p_create.add_argument("--hub-requirement-id", help="Hub requirement ID to store in task metadata")

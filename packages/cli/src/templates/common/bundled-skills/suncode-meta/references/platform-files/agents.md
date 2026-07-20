@@ -32,8 +32,9 @@ Agent files should not become generic chat prompts. They should define input sou
 | CodeBuddy | `.codebuddy/agents/suncode-*.md` |
 | Factory Droid | `.factory/droids/suncode-*.md` |
 | Pi Agent | `.pi/agents/suncode-*.md` |
+| Oh My Pi | `.omp/agents/suncode-*.md` |
 | Reasonix | `.reasonix/skills/suncode-*/SKILL.md` (subagent frontmatter) |
-| ZCode | `.zcode/cli/agents/suncode-*.md` |
+| ZCode | `.zcode/agents/suncode-*.md` |
 
 GitHub Copilot agent/prompt support is provided by a combination of directories such as `.github/agents/`, `.github/prompts/`, and `.github/skills/`; inspect the files actually generated in the user project.
 
