@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 17
-- **Last Active**: 2026-07-04
+- **Total Sessions**: 18
+- **Last Active**: 2026-07-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~597 | Active |
+| `journal-1.md` | ~631 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 18 | 2026-07-20 | 采纳 Trellis v0.6.6/v0.6.7 上游更新 | `842056c` | `main` |
 | 17 | 2026-07-04 | Hub task type routing | `83a7b8e` | `main` |
 | 16 | 2026-07-04 | Hub skill 与 agent pack 上传下载接口 | `cea5314` | `main` |
 | 15 | 2026-07-04 | Hub workflow 减负第二轮收口 | `7bbe112` | `main` |

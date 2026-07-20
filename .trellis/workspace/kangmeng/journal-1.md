@@ -595,3 +595,37 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: 采纳 Trellis v0.6.6/v0.6.7 上游更新
+
+**Date**: 2026-07-20
+**Task**: 采纳 Trellis v0.6.6/v0.6.7 上游更新
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+完成 14 项上游变更的 Suncode 语义移植：完整接入 OMP，共享目录所有权隔离，原子写与卸载/迁移安全，Channel 顺序与路径防护，以及 Pi、ZCode、Codex、task、journal 修复；全量 1770 项测试、lint、typecheck、build 均通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `842056c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
