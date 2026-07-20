@@ -629,3 +629,37 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 建立 Trellis 上游持续同步 Skill
+
+**Date**: 2026-07-20
+**Task**: 建立 Trellis 上游持续同步 Skill
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+新增项目级 sync-trellis-upstream skill，记录官方 v0.6.7 同步检查点与首次同步账本，并提供经 11 个无网络 Git 场景验证的 show、validate、advance 原子检查点工具。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b4d62c4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
