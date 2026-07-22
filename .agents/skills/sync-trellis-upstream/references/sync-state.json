@@ -14,7 +14,7 @@
     "commit": "dc68f5a92a68489b681c511f4a784e413d724e85",
     "date": "2026-07-22",
     "ledger_entry": "2026-07-22-v0.6.8",
-    "task": ".trellis/tasks/07-22-sync-trellis-v0-6-8"
+    "task": ".trellis/tasks/archive/2026-07/07-22-sync-trellis-v0-6-8"
   },
   "latest_adoption": {
     "from_upstream_exclusive": {

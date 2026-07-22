@@ -87,14 +87,14 @@ rejections, and one identity/bookkeeping exclusion class.
 
 ### Detailed Sources
 
-- Task: `.trellis/tasks/07-22-sync-trellis-v0-6-8/`
+- Task: `.trellis/tasks/archive/2026-07/07-22-sync-trellis-v0-6-8/`
 - Complete 41-commit classification:
-  `.trellis/tasks/07-22-sync-trellis-v0-6-8/research/upstream-v0.6.8-adoption.md`
+  `.trellis/tasks/archive/2026-07/07-22-sync-trellis-v0-6-8/research/upstream-v0.6.8-adoption.md`
 - Requirements and design:
-  `.trellis/tasks/07-22-sync-trellis-v0-6-8/prd.md` and
-  `.trellis/tasks/07-22-sync-trellis-v0-6-8/design.md`
+  `.trellis/tasks/archive/2026-07/07-22-sync-trellis-v0-6-8/prd.md` and
+  `.trellis/tasks/archive/2026-07/07-22-sync-trellis-v0-6-8/design.md`
 - Implementation and verification:
-  `.trellis/tasks/07-22-sync-trellis-v0-6-8/implement.md`
+  `.trellis/tasks/archive/2026-07/07-22-sync-trellis-v0-6-8/implement.md`
 
 ### Next Review
 
