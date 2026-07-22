@@ -23,7 +23,7 @@
 - [x] [P1] 收紧 planning 与 SessionStart 合同: 将 requirement convergence/final-summary approval gate 和语言策略同步到所有 Suncode skill/prompt/hook canonical templates；material plan change 触发重审；保持中文规划文档和 workflow-state 注入。
 - [x] [P1] 同步 specs、README、marketplace、docs-site 与 CI: 按实际最终行为更新 Suncode specs/README；在 marketplace 提交 native workflow mirror，在 docs-site 提交双语平台/命令文档；主仓 CI/publish build-before-test；确认 `.husky/pre-commit` 未修改。
 - [x] [P0] 执行全量质量门与影响复核: 运行定向/全量 CLI/core tests、lint、typecheck、build、basedpyright、template parity、`git diff --check`；运行 GitNexus `detect_changes(scope="compare", base_ref="main")` 并复核所有 changed symbols/processes。
-- [ ] [P0] 提交实现并推进同步记录: 先提交 docs-site、marketplace 和主仓已验证实现；追加唯一 ledger marker，记录 41 commit matrix、adoption/exclusion、local/related commits、验证与任务路径；运行 checkpoint advance/validate；以独立 commit 提交 ledger+JSON cursor；不 push。
+- [x] [P0] 提交实现并推进同步记录: 先提交 docs-site、marketplace 和主仓已验证实现；追加唯一 ledger marker，记录 41 commit matrix、adoption/exclusion、local/related commits、验证与任务路径；运行 checkpoint advance/validate；以独立 commit 提交 ledger+JSON cursor；不 push。
 
 ## 分批验证
 
@@ -121,4 +121,4 @@ git diff --check
 - [x] `task.py start` 已运行，任务状态为 `in_progress`。
 - [x] marketplace commit：`62f7bf94df10557936b01708f431013c66538d22`。
 - [x] docs-site commit：`129339dad5b0ed03546258985771d6ade1c54888`。
-- [x] 全量质量门与 GitNexus compare 审计已完成；主仓实现 commit 与 checkpoint commit 待执行。
+- [x] 全量质量门与 GitNexus compare 审计已完成；主仓实现 commit `a7b2ff82e83ed024230428684b9ee1dd48b45cfc` 与 checkpoint commit `4c0571777b065ebab7a92b071d115f4e5838961f` 已完成。
