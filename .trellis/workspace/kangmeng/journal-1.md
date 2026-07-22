@@ -663,3 +663,39 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Align with Trellis v0.6.8
+
+**Date**: 2026-07-23
+**Task**: Align with Trellis v0.6.8
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+语义采纳官方 Trellis v0.6.8 的 41 个提交：新增 Grok/Kimi、ZCode readonly mem、平台和 task JSON、Codex native context/channel sandbox，收紧 update/规划安全合同，同步 CI、规范、README、docs-site 与 marketplace，并推进验证同步检查点。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a7b2ff82e83ed024230428684b9ee1dd48b45cfc` | (see git log) |
+| `4c0571777b065ebab7a92b071d115f4e5838961f` | (see git log) |
+| `0a9164501cbb87624b9e7a0edd80b1ce3ec5257c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
