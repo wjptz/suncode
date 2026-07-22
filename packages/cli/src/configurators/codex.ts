@@ -12,7 +12,6 @@ import {
   resolvePlaceholders,
   resolveAllAsSkillsNeutral,
   resolveBundledSkills,
-  applyPullBasedPreludeToml,
   writeSkills,
   writeSharedHooks,
   replacePythonCommandLiterals,
@@ -57,10 +56,9 @@ export async function configureCodex(cwd: string): Promise<void> {
   const codexAgentsRoot = path.join(codexRoot, "agents");
   ensureDir(codexAgentsRoot);
 
-  // Codex is a class-2 (pull-based) platform: PreToolUse only fires for Bash
-  // and CollabAgentSpawn hook is not implemented (#15486). Sub-agents must
-  // load Suncode context themselves via the prelude injected here.
-  for (const agent of applyPullBasedPreludeToml(getAllAgents())) {
+  // Native Codex SubagentStart hooks push role-specific context. Each source
+  // profile also contains a marker-gated pull fallback for unavailable hooks.
+  for (const agent of getAllAgents()) {
     await writeFile(
       path.join(codexAgentsRoot, `${agent.name}.toml`),
       replacePythonCommandLiterals(agent.content),
@@ -71,9 +69,8 @@ export async function configureCodex(cwd: string): Promise<void> {
   const hooksDir = path.join(codexRoot, "hooks");
   ensureDir(hooksDir);
 
-  // Codex-specific hook files. hooks.json currently registers only
-  // UserPromptSubmit; session-start.py is retained as a compact compatibility
-  // template and regression surface.
+  // Codex-specific hook files. hooks.json registers UserPromptSubmit for the
+  // main session and SubagentStart for role-specific shared context.
   for (const hook of getAllHooks()) {
     await writeFile(
       path.join(hooksDir, hook.name),
@@ -81,8 +78,7 @@ export async function configureCodex(cwd: string): Promise<void> {
     );
   }
 
-  // Shared hooks (inject-workflow-state.py only). Sub-agent context is
-  // pull-based (class-2).
+  // Shared main-session workflow state plus native SubagentStart context.
   await writeSharedHooks(hooksDir, "codex");
 
   // Hooks config → .codex/hooks.json
@@ -105,8 +101,9 @@ export async function configureCodex(cwd: string): Promise<void> {
       "⚠️  Codex hooks require `features.hooks = true` in your " +
         "~/.codex/config.toml (Codex 0.129+; older versions: `codex_hooks = true`). " +
         "On Codex 0.129+ also run `/hooks` once to approve the Suncode " +
-        "UserPromptSubmit hook. Without these the Suncode workflow breadcrumb " +
-        "won't auto-inject. See Suncode docs for details.\n",
+        "hooks. Without these the Suncode workflow breadcrumb and native " +
+        "sub-agent context won't auto-inject (agents retain a pull fallback). " +
+        "See Suncode docs for details.\n",
     );
   }
 

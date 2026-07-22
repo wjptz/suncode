@@ -13,13 +13,20 @@ import path from "node:path";
 import {
   classifyMigrations,
   cleanupEmptyDirs,
+  collectSafeFileDeletes,
   dirHasManifestEntries,
+  executeMigrations,
   loadUpdateSkipPaths,
   renameTracesToJournal,
   shouldExcludeFromBackup,
   sortMigrationsForExecution,
 } from "../../src/commands/update.js";
 import type { MigrationItem } from "../../src/types/migration.js";
+import {
+  computeHash,
+  loadHashes,
+  saveHashes,
+} from "../../src/utils/template-hash.js";
 
 // =============================================================================
 // cleanupEmptyDirs
@@ -380,6 +387,96 @@ describe("rename-dir migration ownership", () => {
       );
       expect(owned.skip).toEqual([]);
       expect(owned.auto).toEqual(migration);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves a canonical target and retires the stale source", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-renamedir-"));
+    const sourceFile = ".pi/skills/example/SKILL.md";
+    const targetFile = ".agents/skills/example/SKILL.md";
+    const sourceContent = "legacy platform-specific content";
+    const targetContent = "canonical shared content";
+    const migrationItem: MigrationItem = {
+      type: "rename-dir",
+      from: ".pi/skills",
+      to: ".agents/skills",
+    };
+
+    try {
+      for (const [relativePath, content] of [
+        [sourceFile, sourceContent],
+        [targetFile, targetContent],
+      ] as const) {
+        const fullPath = path.join(tmpDir, relativePath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content);
+      }
+      fs.mkdirSync(path.join(tmpDir, ".suncode"), { recursive: true });
+      saveHashes(tmpDir, {
+        [sourceFile]: computeHash(sourceContent),
+        [targetFile]: computeHash(targetContent),
+      });
+
+      const templates = new Map([[targetFile, targetContent]]);
+      const classified = classifyMigrations(
+        [migrationItem],
+        tmpDir,
+        loadHashes(tmpDir),
+        templates,
+      );
+      expect(classified.auto).toEqual([migrationItem]);
+
+      await expect(
+        executeMigrations(classified, tmpDir, { force: true }, templates),
+      ).resolves.toEqual({
+        renamed: 0,
+        deleted: 1,
+        skipped: 0,
+        conflicts: 0,
+      });
+
+      expect(fs.existsSync(path.join(tmpDir, ".pi/skills"))).toBe(false);
+      expect(fs.readFileSync(path.join(tmpDir, targetFile), "utf-8")).toBe(
+        targetContent,
+      );
+      expect(loadHashes(tmpDir)).toEqual({
+        [targetFile]: computeHash(targetContent),
+      });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("safe-file-delete current template ownership", () => {
+  it("does not classify a current template path as deprecated", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-safe-delete-"));
+    const relativePath = ".opencode/commands/suncode/start.md";
+    const content = "current template";
+    const migrationItem: MigrationItem = {
+      type: "safe-file-delete",
+      from: relativePath,
+      allowed_hashes: [computeHash(content)],
+    };
+
+    try {
+      const fullPath = path.join(tmpDir, relativePath);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, content);
+
+      expect(
+        collectSafeFileDeletes(
+          [migrationItem],
+          tmpDir,
+          [],
+          new Set([relativePath]),
+        ),
+      ).toEqual([]);
+      expect(
+        collectSafeFileDeletes([migrationItem], tmpDir, [], new Set()),
+      ).toEqual([{ item: migrationItem, action: "delete" }]);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

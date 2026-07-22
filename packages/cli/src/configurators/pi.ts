@@ -8,7 +8,7 @@ import {
   resolveCommands,
   resolveBundledSkills,
   resolvePlaceholders,
-  resolveSkills,
+  resolveSkillsNeutral,
   writeAgents,
   writeSkills,
 } from "./shared.js";
@@ -40,13 +40,12 @@ export function collectPiTemplates(): Map<string, string> {
     files.set(`.pi/prompts/suncode-${command.name}.md`, command.content);
   }
 
-  // Skills written under `.pi/skills/` (Pi-owned skill root). Pi can also
-  // discover `.agents/skills/` shared with Codex/Gemini; switching is
-  // intentionally deferred to a follow-up because Pi has its own skill
-  // discovery semantics that aren't covered by this task.
+  // Pi discovers the shared Agent Skills workspace alias natively. Neutral
+  // rendering keeps these bytes identical to Codex/Gemini writes and avoids
+  // duplicate skill discovery when multiple platforms are configured.
   for (const [filePath, content] of collectSkillTemplates(
-    ".pi/skills",
-    resolveSkills(ctx),
+    ".agents/skills",
+    resolveSkillsNeutral(ctx),
     resolveBundledSkills(ctx),
   )) {
     files.set(filePath, content);
@@ -80,11 +79,11 @@ export async function configurePi(cwd: string): Promise<void> {
     );
   }
 
-  // See collectPiTemplates(): Pi keeps a private `.pi/skills/` root for now.
-  // Cross-platform `.agents/skills/` adoption is a separate decision.
+  // See collectPiTemplates(): Pi shares `.agents/skills/` with other native
+  // Agent Skills consumers instead of installing a private duplicate.
   await writeSkills(
-    path.join(configRoot, "skills"),
-    resolveSkills(ctx),
+    path.join(cwd, ".agents", "skills"),
+    resolveSkillsNeutral(ctx),
     resolveBundledSkills(ctx),
   );
   await writeAgents(

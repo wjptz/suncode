@@ -126,7 +126,7 @@ describe("pi templates", () => {
     }
   });
 
-  it("settings keep Pi-owned skills until shared Agent Skills are platform-neutral", () => {
+  it("settings rely on Pi's native shared Agent Skills discovery", () => {
     const settings = JSON.parse(getSettingsTemplate().content) as {
       enableSkillCommands?: boolean;
       extensions?: string[];
@@ -137,9 +137,20 @@ describe("pi templates", () => {
 
     expect(settings.enableSkillCommands).toBe(true);
     expect(settings.extensions).toEqual(["./extensions/suncode/index.ts"]);
-    expect(settings.skills).toEqual(["./skills"]);
+    expect(settings.skills).toBeUndefined();
     expect(settings.prompts).toEqual(["./prompts"]);
     expect(settings.packages).toBeUndefined();
+  });
+
+  it("writes shared skills to .agents/skills instead of .pi/skills", () => {
+    const templates = collectPiTemplates();
+
+    expect(
+      templates.get(".agents/skills/suncode-check/SKILL.md"),
+    ).toBeDefined();
+    for (const key of templates.keys()) {
+      expect(key.startsWith(".pi/skills/")).toBe(false);
+    }
   });
 
   it("collects a manual suncode-start prompt for Pi fallback bootstrap", () => {
@@ -234,6 +245,15 @@ describe("pi templates", () => {
       "Suncode compact SessionStart context",
     );
     expect(first.systemPrompt).toContain("<first-reply-notice>");
+    expect(first.systemPrompt).toContain("the user's current request");
+    expect(first.systemPrompt).toContain(
+      "explicitly established project communication language",
+    );
+    expect(first.systemPrompt).toContain("Suncode SessionStart ✓");
+    expect(first.systemPrompt).toContain(
+      "must not alter the language used for the remainder of the response",
+    );
+    expect(first.systemPrompt).toContain("This notice is one-shot");
     expect(first.systemPrompt).toContain("<suncode-workflow>");
     expect(first.systemPrompt).toContain("Phase 1: Plan");
     expect(first.systemPrompt).toContain("No active Suncode task found");

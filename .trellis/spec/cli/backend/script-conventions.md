@@ -290,12 +290,25 @@ All `log_*` functions print to **stdout** (not stderr). Use `print(..., file=sys
 
 ```python
 def run_git(args: list[str], cwd: Path | None = None) -> tuple[int, str, str]
+def resolve_default_branch(repo_root: Path) -> str | None
+def branch_exists_locally(branch: str, repo_root: Path) -> bool
 ```
 
 - Prepends `git -c i18n.logOutputEncoding=UTF-8` to all commands (cross-platform UTF-8)
 - Uses `encoding="utf-8", errors="replace"` for subprocess output
 - Returns `(1, "", error_message)` on exception (never raises)
 - Backward-compatible alias in `git_context.py`: `_run_git_command = run_git`
+- `resolve_default_branch()` first reads the local
+  `refs/remotes/origin/HEAD` symbolic ref, then falls back to
+  `git remote show origin`. It returns `None` when neither source can resolve a
+  default branch.
+- `task_store.py:cmd_create` records `base_branch` from an explicit
+  `--base-branch` override first, otherwise from `resolve_default_branch()`.
+  If resolution fails it warns on stderr and falls back to the checked-out
+  branch (or `main` when detached).
+- `branch_exists_locally()` verifies `refs/heads/<branch>`. Task validation and
+  archive warn, but do not fail, when a recorded task branch has already been
+  deleted locally.
 
 ### `common/active_task.py` — Active Task Resolver
 
@@ -367,9 +380,10 @@ a `.current-task` fallback or a Python hook directory.
 
 ##### 2. Signatures
 
-- `python3 .trellis/scripts/task.py create "<title>" [--slug <slug>]`
+- `python3 .trellis/scripts/task.py create "<title>" [--slug <slug>] [--base-branch <branch>]`
 - `python3 .trellis/scripts/task.py start <task-dir>`
-- `python3 .trellis/scripts/task.py current [--source]`
+- `python3 .trellis/scripts/task.py current [--source] [--json]`
+- `python3 .trellis/scripts/task.py list [--mine] [--status <status>] [--json]`
 - `python3 .trellis/scripts/task.py finish`
 - `resolve_active_task(repo_root, platform_input=None, platform=None) -> ActiveTask`
 - `set_active_task(task_path, repo_root, platform_input=None, platform=None) -> ActiveTask | None`
@@ -401,6 +415,22 @@ a `.current-task` fallback or a Python hook directory.
   `.trellis/.current-task`.
 - `task.py archive <task>` deletes every runtime session file whose
   `current_task` points at the archived task before moving the task directory.
+- `task.py current --json` prints `{current_task, source, stale}` on one line
+  with `ensure_ascii=False`. `current_task` is `null` when no task is active;
+  otherwise it contains `{dir, id, title, status, parent, children, branch,
+  base_branch}`. Exit 0 with a task and exit 1 with `null`. Human output is
+  unchanged.
+- `task.py list --json` prints `{tasks: [...]}` after the same `--mine` and
+  `--status` filtering used by human output. Each task contains `{dir, id,
+  title, status, display_status, priority, assignee, parent, children,
+  package}`. `--mine --json` without a developer prints
+  `{"error":"No developer set"}` to stderr and exits 1.
+- `_display_status()` may show a stored `planning` parent as `active` when any
+  child has progressed past planning. This is display-only in both human and
+  JSON list output; it must never rewrite `task.json.status`.
+- Suncode keeps Codex dispatch inline by default. Missing or invalid
+  `codex.dispatch_mode` resolves to `inline`; explicit `auto` and legacy
+  `sub-agent` enable native dispatch and therefore JSONL seeding.
 
 ##### 4. Validation & Error Matrix
 
@@ -411,6 +441,12 @@ a `.current-task` fallback or a Python hook directory.
 | `start` with `TRELLIS_CONTEXT_ID` | Writes `.runtime/sessions/<key>.json`; does not require `.current-task` |
 | `current --source` with same context key | Prints `Source: session:<key>` |
 | `current --source` without context | Prints `(none)` and `Source: none` |
+| `current --json` with active task | `{current_task: {...}, source, stale}`; exit 0 |
+| `current --json` with no active task | `{current_task: null, source, stale}`; exit 1 |
+| `list --json --mine` with no developer | JSON error on stderr; exit 1 |
+| parent stored as `planning` with a child past planning | Human label and `display_status` are `active`; stored status remains `planning` |
+| default branch cannot be resolved during create | Warn and use checked-out branch; explicit `--base-branch` always wins |
+| recorded task branch no longer exists locally | Validate/archive warn without blocking |
 | stale session task + stale `.current-task` exists | Returns stale session state; no `.current-task` fallback |
 | `finish` with context key and active task | Deletes `.runtime/sessions/<key>.json` |
 | `finish` without context key | Returns no current task; does not delete `.current-task` |
@@ -432,6 +468,10 @@ a `.current-task` fallback or a Python hook directory.
 - Regression tests for `start` without a context key failing without creating
   `.current-task`.
 - Regression tests for `TRELLIS_CONTEXT_ID` and platform-native env keys.
+- Regression tests for `current/list --json`, null/exit behavior, filters, and
+  parent display status without persistence mutation.
+- Default-branch tests for `origin/HEAD`, remote fallback, explicit override,
+  detached/no-remote behavior, and stale local branch warnings.
 - Hook/statusline/plugin tests proving the resolver source is surfaced.
 - Stale session tests proving no `.current-task` fallback occurs when the session task
   path is stale.

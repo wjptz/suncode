@@ -1027,6 +1027,8 @@ interface InitOptions {
   reasonix?: boolean;
   zcode?: boolean;
   trae?: boolean;
+  grok?: boolean;
+  kimi?: boolean;
   yes?: boolean;
   user?: string;
   force?: boolean;

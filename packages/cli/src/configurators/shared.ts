@@ -297,7 +297,9 @@ export function wrapWithCommandFrontmatter(
       `Missing command description for "${baseName}". Add it to COMMAND_DESCRIPTIONS in shared.ts.`,
     );
   }
-  return `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`;
+  // JSON.stringify produces a double-quoted YAML scalar, which remains valid
+  // when a description contains YAML-significant text such as ": ".
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\n${content}`;
 }
 
 /** Argument hints for OMP commands that accept positional arguments. */
@@ -319,9 +321,10 @@ export function wrapWithOmpFrontmatter(name: string, content: string): string {
   }
   const body = content.replace(/^# [^\n]+\n\n/, "");
   const hint = COMMAND_ARGUMENT_HINTS[baseName];
+  const quotedDescription = JSON.stringify(description);
   const frontmatter = hint
-    ? `---\ndescription: ${description}\nargument-hint: ${hint}\n---`
-    : `---\ndescription: ${description}\n---`;
+    ? `---\ndescription: ${quotedDescription}\nargument-hint: ${JSON.stringify(hint)}\n---`
+    : `---\ndescription: ${quotedDescription}\n---`;
   return `${frontmatter}\n\n${body}`;
 }
 

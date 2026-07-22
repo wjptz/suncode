@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCodexThreadStartParams,
   createCodexCtx,
   parseCodexLine,
+  parseCodexSandboxMode,
 } from "../../src/commands/channel/adapters/codex.js";
 
 function parse(line: Record<string, unknown>, ctx = createCodexCtx()) {
@@ -191,5 +193,39 @@ describe("Codex channel adapter", () => {
 
     const completed = parse({ method: "turn/completed", params: {} }, ctx);
     expect(completed.events).toEqual([{ kind: "done", payload: {} }]);
+  });
+
+  describe("sandbox override", () => {
+    it("defaults to workspace-write when no sandbox is given", () => {
+      const params = buildCodexThreadStartParams("/tmp/proj");
+      expect(params.sandbox).toBe("workspace-write");
+    });
+
+    it.each(["read-only", "workspace-write", "danger-full-access"] as const)(
+      "passes %s through to thread/start",
+      (sandbox) => {
+        const params = buildCodexThreadStartParams(
+          "/tmp/proj",
+          undefined,
+          sandbox,
+        );
+        expect(params.sandbox).toBe(sandbox);
+        expect(params.approvalPolicy).toBe("never");
+      },
+    );
+
+    it("accepts only the documented modes", () => {
+      expect(parseCodexSandboxMode(undefined)).toBeUndefined();
+      expect(parseCodexSandboxMode("read-only")).toBe("read-only");
+      expect(parseCodexSandboxMode("workspace-write")).toBe(
+        "workspace-write",
+      );
+      expect(parseCodexSandboxMode("danger-full-access")).toBe(
+        "danger-full-access",
+      );
+      expect(() => parseCodexSandboxMode("yolo")).toThrow(
+        /Invalid --sandbox 'yolo'/,
+      );
+    });
   });
 });

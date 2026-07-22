@@ -145,15 +145,15 @@ def resolve_effective_platform(platform: str, config: dict) -> str:
     """Map ``codex`` to a dispatch-mode-namespaced virtual platform name.
 
     When ``--platform codex`` is passed, return ``"codex-inline"`` (default)
-    or ``"codex-sub-agent"`` based on ``.trellis/config.yaml`` ``codex.dispatch_mode``.
+    or ``"codex-sub-agent"`` when ``.trellis/config.yaml`` explicitly sets
+    ``codex.dispatch_mode`` to ``auto`` or the legacy ``sub-agent`` alias.
     ``filter_platform`` then surfaces blocks whose marker lists include the
     namespaced name (e.g. ``[codex-sub-agent, ...]`` or ``[codex-inline, Kilo,
     Antigravity, Devin]``).
 
-    Default is ``inline`` because Codex sub-agents run with ``fork_turns="none"``
-    isolation and can't inherit the parent session's task context — inline
-    keeps the main agent in charge so context isn't lost. Invalid / missing
-    values also fall back to inline.
+    Default, invalid, and missing values all remain ``inline``. Native Codex
+    context injection makes explicit ``auto`` safe without changing the local
+    project default.
 
     Other platforms are returned unchanged.
     """
@@ -161,10 +161,14 @@ def resolve_effective_platform(platform: str, config: dict) -> str:
         mode = "inline"
         codex_cfg = config.get("codex") if isinstance(config, dict) else None
         if isinstance(codex_cfg, dict):
-            cfg_mode = codex_cfg.get("dispatch_mode")
-            if cfg_mode in ("inline", "sub-agent"):
-                mode = cfg_mode
-        return f"codex-{mode}"
+            cfg_mode = str(codex_cfg.get("dispatch_mode", mode)).strip().lower()
+            if cfg_mode in ("auto", "sub-agent"):
+                mode = "auto"
+            elif cfg_mode == "inline":
+                mode = "inline"
+            else:
+                mode = "inline"
+        return "codex-sub-agent" if mode == "auto" else "codex-inline"
     return platform
 
 

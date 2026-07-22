@@ -30,7 +30,7 @@ from .config import (
     resolve_package,
     validate_package,
 )
-from .git import run_git
+from .git import branch_exists_locally, resolve_default_branch, run_git
 from .io import read_json, write_json
 from .log import Colors, colored
 from .paths import (
@@ -148,14 +148,15 @@ def _has_subagent_platform(repo_root: Path) -> bool:
     """Return True if any sub-agent-capable platform is configured.
 
     Detected by probing well-known config directories at the repo root. Codex
-    only counts when ``codex.dispatch_mode`` explicitly opts into
-    ``sub-agent``; inline mode loads context through skills, not JSONL.
+    only counts when ``codex.dispatch_mode`` explicitly opts into ``auto``
+    (including the legacy ``sub-agent`` alias); inline mode loads context
+    through skills, not JSONL.
     """
     for config_dir in _SUBAGENT_CONFIG_DIRS:
         if (repo_root / config_dir).is_dir():
             return True
     if (repo_root / _CODEX_CONFIG_DIR).is_dir():
-        return get_codex_dispatch_mode(repo_root) == "sub-agent"
+        return get_codex_dispatch_mode(repo_root) == "auto"
     return False
 
 
@@ -362,9 +363,28 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # Record current branch as base_branch (PR target)
+    # Record the PR target branch. An explicit override wins; otherwise use
+    # origin/HEAD and retain the checked-out branch as the offline fallback.
     _, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
     current_branch = branch_out.strip() or "main"
+    explicit_base_branch: str | None = getattr(args, "base_branch", None)
+    if explicit_base_branch:
+        base_branch = explicit_base_branch
+    else:
+        resolved_base_branch = resolve_default_branch(repo_root)
+        if resolved_base_branch:
+            base_branch = resolved_base_branch
+        else:
+            base_branch = current_branch
+            print(
+                colored(
+                    f"warning: could not resolve the repository's default branch "
+                    f"(no remote configured, offline, etc.); stamping base_branch as "
+                    f"the checked-out branch '{base_branch}'. Pass --base-branch to override.",
+                    Colors.YELLOW,
+                ),
+                file=sys.stderr,
+            )
 
     description = (args.description or "").strip()
     if not description:
@@ -392,7 +412,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "createdAt": today,
         "completedAt": None,
         "branch": None,
-        "base_branch": current_branch,
+        "base_branch": base_branch,
         "worktree_path": None,
         "commit": None,
         "pr_url": None,
@@ -549,6 +569,17 @@ def cmd_archive(args: argparse.Namespace) -> int:
     if task_json_path.is_file():
         data = read_json(task_json_path)
         if data:
+            stored_branch = data.get("branch")
+            if stored_branch and not branch_exists_locally(stored_branch, repo_root):
+                print(
+                    colored(
+                        f"Warning: recorded branch '{stored_branch}' no longer exists locally "
+                        "(likely merged and deleted).",
+                        Colors.YELLOW,
+                    ),
+                    file=sys.stderr,
+                )
+
             data["status"] = "completed"
             data["completedAt"] = today
             write_json(task_json_path, data)

@@ -262,8 +262,9 @@ def get_session_auto_commit(repo_root: Path | None = None) -> bool:
 def get_codex_dispatch_mode(repo_root: Path | None = None) -> str:
     """Return Codex dispatch mode.
 
-    Default is ``inline``. ``sub-agent`` is an explicit opt-in because Codex
-    sub-agents do not inherit the parent session context.
+    Default is ``inline``. Explicit ``auto`` enables native Codex sub-agent
+    context injection; ``sub-agent`` remains a backwards-compatible alias for
+    ``auto``. Invalid values fail closed to ``inline``.
     """
     config = _load_config(repo_root)
     codex = config.get("codex")
@@ -278,13 +279,15 @@ def get_codex_dispatch_mode(repo_root: Path | None = None) -> str:
 
     raw = codex.get("dispatch_mode", DEFAULT_CODEX_DISPATCH_MODE)
     mode = str(raw).strip().lower()
-    if mode in ("inline", "sub-agent"):
+    if mode in ("auto", "inline"):
         return mode
+    if mode == "sub-agent":
+        return "auto"
     print(
-        f"[WARN] invalid codex.dispatch_mode value: {raw!r}; using {DEFAULT_CODEX_DISPATCH_MODE}",
+        f"[WARN] invalid codex.dispatch_mode value: {raw!r}; using inline",
         file=sys.stderr,
     )
-    return DEFAULT_CODEX_DISPATCH_MODE
+    return "inline"
 
 
 def get_hooks(event: str, repo_root: Path | None = None) -> list[str]:

@@ -49,11 +49,13 @@ jobs:
       - name: Typecheck (core + cli)
         run: pnpm typecheck
 
-      - name: Test (core + cli)
-        run: pnpm test
-
+      # Integration tests spawn the real CLI through packages/cli/bin/suncode.js,
+      # which imports dist/ and therefore requires build output first.
       - name: Build (core then cli)
         run: pnpm build
+
+      - name: Test (core + cli)
+        run: pnpm test
 
       - name: Verify packed CLI pins core to exact version
         run: node packages/cli/scripts/release-preflight.js verify-packed-cli

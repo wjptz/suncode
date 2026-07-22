@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { InboxPolicy } from "@wjptz/suncode-core/channel";
 
 import { loadAgent } from "./agent-loader.js";
+import type { CodexSandboxMode } from "./adapters/codex.js";
 import type { Provider } from "./adapters/index.js";
 import { assembleContext } from "./context-loader.js";
 import {
@@ -31,6 +32,8 @@ export interface SpawnOptions {
   cwd?: string;
   model?: string;
   resume?: string;
+  /** Codex-only: overrides thread/start sandbox (default workspace-write). */
+  sandbox?: CodexSandboxMode;
   /** Auto-kill the worker after this many milliseconds (anti-zombie). */
   timeoutMs?: number;
   /** Emit supervisor_warning this many milliseconds before timeout. */
@@ -260,6 +263,7 @@ async function spawnLocked(
       systemPrompt: resolved.systemPrompt,
       model: resolved.model,
       resume: opts.resume,
+      sandbox: opts.sandbox,
       timeoutMs: opts.timeoutMs,
       warnBeforeMs: opts.warnBeforeMs,
       idleTimeoutMs,

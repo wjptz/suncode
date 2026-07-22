@@ -107,12 +107,10 @@ channel:
 #-------------------------------------------------------------------------------
 # Codex (dispatch behavior)
 #-------------------------------------------------------------------------------
-# Codex-only knob; other platforms ignore it. Default ("inline") makes the
-# main Codex agent edit code directly because Codex sub-agents run with
-# `fork_turns="none"` isolation and can't inherit the parent session's
-# task context. Set to "sub-agent" to opt into the legacy dispatch model
-# (main agent spawns trellis-implement / trellis-check / trellis-research
-# sub-agents).
+# Codex-only knob; other platforms ignore it. Default ("inline") keeps
+# implementation and checking in the main Codex session. Set to "auto" to
+# opt into native SubagentStart context injection; legacy "sub-agent" remains
+# an alias for "auto".
 #
 # codex:
-#   dispatch_mode: inline  # or "sub-agent" to dispatch trellis-* sub-agents
+#   dispatch_mode: inline  # or "auto" to dispatch trellis-* sub-agents

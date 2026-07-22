@@ -26,7 +26,9 @@ export type AITool =
   | "omp"
   | "reasonix"
   | "zcode"
-  | "trae";
+  | "trae"
+  | "grok"
+  | "kimi";
 
 /**
  * Template directory categories
@@ -51,7 +53,9 @@ export type TemplateDir =
   | "omp"
   | "reasonix"
   | "zcode"
-  | "trae";
+  | "trae"
+  | "grok"
+  | "kimi";
 
 /**
  * CLI flag names for platform selection (e.g., --claude, --cursor, --kilo, --kiro, --gemini, --antigravity)
@@ -76,7 +80,9 @@ export type CliFlag =
   | "omp"
   | "reasonix"
   | "zcode"
-  | "trae";
+  | "trae"
+  | "grok"
+  | "kimi";
 
 /**
  * Template context for placeholder resolution.
@@ -84,7 +90,13 @@ export type CliFlag =
  */
 export interface TemplateContext {
   /** Prefix for cross-referencing other commands/skills */
-  cmdRefPrefix: "/suncode:" | "/suncode-" | "$" | "/" | "/skill suncode-";
+  cmdRefPrefix:
+    | "/suncode:"
+    | "/suncode-"
+    | "$"
+    | "/"
+    | "/skill suncode-"
+    | "/skill:suncode-";
   /** Description of AI executor actions shown in role tables */
   executorAI:
     | "Bash scripts or Task calls"
@@ -397,6 +409,7 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
     name: "Pi Agent",
     templateDirs: ["common", "pi"],
     configDir: ".pi",
+    supportsAgentSkills: true,
     cliFlag: "pi",
     defaultChecked: false,
     hasPythonHooks: false,
@@ -486,6 +499,40 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       agentCapable: true,
       hasHooks: true,
       cliFlag: "trae",
+    },
+  },
+  grok: {
+    name: "Grok Build",
+    templateDirs: ["common", "grok"],
+    configDir: ".grok",
+    extraManagedPaths: [".grok/skills", ".grok/commands", ".grok/agents"],
+    cliFlag: "grok",
+    defaultChecked: false,
+    hasPythonHooks: false,
+    templateContext: {
+      cmdRefPrefix: "/suncode-",
+      executorAI: "Bash scripts or Agent calls",
+      userActionLabel: "Skills",
+      agentCapable: true,
+      hasHooks: false,
+      cliFlag: "grok",
+    },
+  },
+  kimi: {
+    name: "Kimi Code",
+    templateDirs: ["common", "kimi"],
+    configDir: ".kimi-code",
+    supportsAgentSkills: true,
+    cliFlag: "kimi",
+    defaultChecked: false,
+    hasPythonHooks: false,
+    templateContext: {
+      cmdRefPrefix: "/skill:suncode-",
+      executorAI: "Bash scripts or Agent calls",
+      userActionLabel: "Slash commands",
+      agentCapable: true,
+      hasHooks: false,
+      cliFlag: "kimi",
     },
   },
 };

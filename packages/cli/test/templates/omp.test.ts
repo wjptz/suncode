@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 import ts from "typescript";
 import {
   getAllAgents,
@@ -11,6 +13,47 @@ import { collectOmpTemplates } from "../../src/configurators/omp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templateDir = path.resolve(__dirname, "../../src/templates/omp");
+
+type OmpEventHandler = (event: unknown, ctx?: unknown) => unknown;
+type OmpExtension = (pi: {
+  on: (event: string, handler: OmpEventHandler) => void;
+}) => void;
+
+function loadOmpExtension(): OmpExtension {
+  const compiled = ts.transpileModule(getExtensionTemplate(), {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  const require = createRequire(import.meta.url);
+  const moduleObject: { exports: { default?: OmpExtension } } = { exports: {} };
+  const sandboxProcess = Object.create(process) as NodeJS.Process;
+  const sandboxEnv = { ...process.env };
+  delete sandboxEnv.SUNCODE_CONTEXT_ID;
+  Object.defineProperty(sandboxProcess, "env", { value: sandboxEnv });
+  const sandbox = vm.createContext({
+    Buffer,
+    console,
+    exports: moduleObject.exports,
+    module: moduleObject,
+    process: sandboxProcess,
+    require,
+  });
+  vm.runInContext(compiled, sandbox);
+  const extension = moduleObject.exports.default;
+  if (!extension) throw new Error("OMP extension template has no default export");
+  return extension;
+}
+
+function captureOmpHandlers(): Map<string, OmpEventHandler> {
+  const handlers = new Map<string, OmpEventHandler>();
+  loadOmpExtension()({
+    on: (event, handler) => handlers.set(event, handler),
+  });
+  return handlers;
+}
 
 describe("omp templates", () => {
   it("provides the three Suncode sub-agent definitions", () => {
@@ -83,6 +126,61 @@ describe("omp templates", () => {
     expect(extension).not.toContain("currentContextKey");
   });
 
+  it("injects the derived context key into the original Bash params", () => {
+    const handler = captureOmpHandlers().get("tool_call");
+    if (!handler) throw new Error("OMP extension did not register tool_call");
+    const params: { command: string; env?: Record<string, string> } = {
+      command: "python3 ./.suncode/scripts/task.py current",
+      env: { EXISTING: "kept" },
+    };
+
+    handler(
+      { type: "tool_call", toolName: "bash", toolCallId: "call-1", input: params },
+      { sessionManager: { getSessionId: () => "session/a" } },
+    );
+
+    expect(params.env?.SUNCODE_CONTEXT_ID).toBe("omp_session_a");
+    expect(params.env?.EXISTING).toBe("kept");
+  });
+
+  it("preserves explicit Bash env and inline command assignments", () => {
+    const handler = captureOmpHandlers().get("tool_call");
+    if (!handler) throw new Error("OMP extension did not register tool_call");
+    const command =
+      "SUNCODE_CONTEXT_ID=inline python3 ./.suncode/scripts/task.py current";
+    const params: { command: string; env?: Record<string, string> } = {
+      command,
+      env: { SUNCODE_CONTEXT_ID: "explicit" },
+    };
+
+    handler(
+      { type: "tool_call", toolName: "bash", toolCallId: "call-2", input: params },
+      { sessionManager: { getSessionId: () => "session/b" } },
+    );
+
+    expect(params.command).toBe(command);
+    expect(params.env?.SUNCODE_CONTEXT_ID).toBe("explicit");
+  });
+
+  it("does not mutate non-Bash tool params or Bash calls without a key", () => {
+    const handler = captureOmpHandlers().get("tool_call");
+    if (!handler) throw new Error("OMP extension did not register tool_call");
+    const readParams: Record<string, unknown> = { path: "README.md" };
+    const bashParams: Record<string, unknown> = { command: "pwd" };
+
+    handler(
+      { type: "tool_call", toolName: "read", toolCallId: "call-3", input: readParams },
+      { sessionManager: { getSessionId: () => "session/c" } },
+    );
+    handler(
+      { type: "tool_call", toolName: "bash", toolCallId: "call-4", input: bashParams },
+      { sessionManager: { getSessionId: () => undefined } },
+    );
+
+    expect(readParams).toEqual({ path: "README.md" });
+    expect(bashParams).toEqual({ command: "pwd" });
+  });
+
   it("extension template contains session context injection markers", () => {
     const extension = getExtensionTemplate();
     // R1: Session start rich injection via get_context.py
@@ -132,6 +230,10 @@ describe("omp command frontmatter", () => {
     expect(finishCmd).toMatch(
       /^---\ndescription: .+\nargument-hint: .+\n---\n\n/,
     );
+    expect(finishCmd).toContain(
+      'description: "Wrap up the current session: quality gate, commit reminder, archive, journal."',
+    );
+    expect(finishCmd).toContain('argument-hint: "[task-name]"');
 
     // Neither should retain the H1 heading from the source template
     expect(continueCmd).not.toMatch(/^---[\s\S]*?---\n\n# /);

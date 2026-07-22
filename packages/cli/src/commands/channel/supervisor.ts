@@ -22,6 +22,7 @@ import {
   type InboxPolicy,
 } from "@wjptz/suncode-core/channel";
 
+import type { CodexSandboxMode } from "./adapters/codex.js";
 import { getAdapter, type Provider } from "./adapters/index.js";
 import { appendEvent } from "./store/events.js";
 import { workerFile } from "./store/paths.js";
@@ -46,6 +47,8 @@ export interface SupervisorConfig {
   model?: string;
   /** Resume an existing session/thread if id is provided. */
   resume?: string;
+  /** Codex-only: overrides thread/start sandbox (default workspace-write). */
+  sandbox?: CodexSandboxMode;
   /** Auto-kill worker after this many ms (anti-zombie). */
   timeoutMs?: number;
   /** Emit supervisor_warning this many ms before timeout. `<=0` disables it. */
@@ -154,6 +157,7 @@ export async function runSupervisor(
     model: config.model,
     systemPrompt: config.systemPrompt,
     cwd: config.cwd,
+    sandbox: config.sandbox,
   };
   const args = adapter.buildArgs(view);
 

@@ -85,9 +85,24 @@ describe("opencode session-start history detection", () => {
     });
 
     expect(context).toContain("<first-reply-notice>");
-    expect(context).toContain("First visible reply");
-    expect(context).toContain("Suncode SessionStart context is loaded");
+    expect(context).toContain("the user's current request");
+    expect(context).toContain("the user message that triggered this reply");
+    expect(context).toContain("has no clear natural language");
+    expect(context).toContain(
+      "explicitly established project communication language",
+    );
+    expect(context).toContain("Suncode SessionStart ✓");
+    expect(context).toContain("Continue directly with the user's request");
+    expect(context).toContain(
+      "must not alter the language used for the remainder of the response",
+    );
     expect(context).toContain("This notice is one-shot");
+    expect(context.indexOf("the user's current request")).toBeLessThan(
+      context.indexOf("explicitly established project communication language"),
+    );
+    expect(
+      context.indexOf("explicitly established project communication language"),
+    ).toBeLessThan(context.indexOf("Suncode SessionStart ✓"));
     expect(context.indexOf("<first-reply-notice>")).toBeLessThan(
       context.indexOf("<guidelines>"),
     );

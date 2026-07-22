@@ -1,0 +1,31 @@
+{
+  "id": "sync-trellis-v0-6-8",
+  "name": "sync-trellis-v0-6-8",
+  "title": "对齐 Trellis v0.6.8",
+  "description": "从官方 v0.6.7 检查点逐提交审查并语义采纳 Trellis v0.6.8，保留 Suncode 身份、所有权与平台扩展。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "trellis-upstream-sync",
+  "package": "cli",
+  "priority": "P1",
+  "creator": "kangmeng",
+  "assignee": "kangmeng",
+  "createdAt": "2026-07-22",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/07-22-sync-trellis-v0-6-8/research/upstream-v0.6.8-adoption.md",
+    ".agents/skills/sync-trellis-upstream/references/fork-boundaries.md",
+    ".agents/skills/sync-trellis-upstream/references/sync-state.json",
+    ".agents/skills/sync-trellis-upstream/references/sync-ledger.md"
+  ],
+  "notes": "",
+  "meta": {}
+}

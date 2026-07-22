@@ -6,6 +6,7 @@ import {
   getAllAgents,
   getAllCodexSkills,
   getConfigTemplate,
+  getHooksConfig,
 } from "../../src/templates/codex/index.js";
 import { resolveAllAsSkills } from "../../src/configurators/shared.js";
 import { AI_TOOLS } from "../../src/types/ai-tools.js";
@@ -58,6 +59,36 @@ describe("codex getAllAgents", () => {
   });
 });
 
+describe("codex native sub-agent hooks", () => {
+  it("preserves main-session workflow injection and scopes SubagentStart to Suncode roles", () => {
+    const config = JSON.parse(getHooksConfig()) as {
+      hooks: Record<
+        string,
+        { matcher?: string; hooks: { command: string }[] }[]
+      >;
+    };
+
+    expect(config.hooks.UserPromptSubmit).toHaveLength(1);
+    expect(config.hooks.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain(
+      ".codex/hooks/inject-workflow-state.py",
+    );
+
+    expect(config.hooks.SubagentStart).toHaveLength(1);
+    const subagentStart = config.hooks.SubagentStart?.[0];
+    expect(subagentStart?.matcher).toBe(
+      "^(?:suncode-implement|suncode-check|suncode-research)$",
+    );
+    const matcher = new RegExp(subagentStart?.matcher ?? "");
+    expect(matcher.test("suncode-implement")).toBe(true);
+    expect(matcher.test("suncode-check")).toBe(true);
+    expect(matcher.test("suncode-research")).toBe(true);
+    expect(matcher.test("suncode-implement-extra")).toBe(false);
+    expect(subagentStart?.hooks[0]?.command).toContain(
+      ".codex/hooks/inject-subagent-context.py",
+    );
+  });
+});
+
 describe("codex getAllCodexSkills (platform-specific)", () => {
   it("returns empty after parallel removal", () => {
     const skills = getAllCodexSkills();
@@ -81,6 +112,11 @@ describe("codex getConfigTemplate", () => {
   it("does not write a [features.multi_agent_v2] block (Codex 0.130 compat)", () => {
     const config = getConfigTemplate();
     expect(config.content).not.toMatch(/^\[features\.multi_agent_v2\]/m);
+  });
+
+  it("pins agents.max_depth = 1 to keep native dispatch non-recursive", () => {
+    const config = getConfigTemplate();
+    expect(config.content).toMatch(/^\[agents\]\s*\nmax_depth = 1/m);
   });
 });
 
@@ -111,6 +147,36 @@ describe("codex sub-agent recursion guard (issue #234)", () => {
       expect(content).toMatch(/SessionStart|dispatch.*main session|breadcrumb/i);
     });
   }
+});
+
+describe("codex two-channel sub-agent context (native SubagentStart)", () => {
+  for (const name of EXPECTED_AGENT_NAMES) {
+    it(`${name}.toml uses a marker-gated active-task fallback`, () => {
+      const tomlPath = path.join(
+        repoRoot,
+        "packages/cli/src/templates/codex/agents",
+        `${name}.toml`,
+      );
+      const content = fs.readFileSync(tomlPath, "utf-8");
+
+      expect(content).toContain("<!-- suncode-hook-injected -->");
+      expect(content).toContain("Active task: <path>");
+      expect(content).toContain("multi_agent = false");
+    });
+  }
+
+  it("keeps research task resolution isolated from implement/check manifests", () => {
+    const researchPath = path.join(
+      repoRoot,
+      "packages/cli/src/templates/codex/agents/suncode-research.toml",
+    );
+    const content = fs.readFileSync(researchPath, "utf-8");
+
+    expect(content).toContain("Do not load `implement.jsonl` or `check.jsonl`");
+    expect(content).not.toContain(
+      "Run `python3 ./.suncode/scripts/task.py current --source`",
+    );
+  });
 });
 
 describe("codex session-start.py compact SessionStart context", () => {

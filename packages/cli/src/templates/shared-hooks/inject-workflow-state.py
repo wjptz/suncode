@@ -227,28 +227,42 @@ def _read_suncode_config(root: Path) -> dict:
         return {}
 
 
-def _codex_mode_banner(config: dict) -> str:
-    """Emit a `<codex-mode>` banner for the additionalContext payload.
+def _resolve_codex_dispatch_mode(config: dict) -> str:
+    """Normalize ``codex.dispatch_mode`` to ``inline`` or ``auto``.
 
-    Reads `codex.dispatch_mode` from .suncode/config.yaml; defaults to
-    `inline` when missing or invalid because Codex sub-agents run with
-    `fork_turns="none"` isolation and can't inherit the parent session's
-    task context. The banner makes the active mode explicit to Codex AI
-    per turn, complementing the workflow-state body which is per-status.
-    Mode tells AI which dispatch protocol to follow; workflow-state tells
-    AI what step it's at.
+    Suncode keeps ``inline`` as the product default. The legacy ``sub-agent``
+    value is an alias for ``auto``; invalid explicit values fail closed to
+    ``inline`` without producing per-turn warning noise. Both the banner and
+    breadcrumb routing use this helper so their behavior cannot drift.
     """
     mode = "inline"
     if isinstance(config, dict):
         codex_cfg = config.get("codex")
         if isinstance(codex_cfg, dict):
-            cfg_mode = codex_cfg.get("dispatch_mode")
-            if cfg_mode in ("inline", "sub-agent"):
-                mode = cfg_mode
-    if mode == "sub-agent":
+            cfg_mode = str(codex_cfg.get("dispatch_mode", mode)).strip().lower()
+            if cfg_mode in ("auto", "sub-agent"):
+                mode = "auto"
+            elif cfg_mode == "inline":
+                mode = "inline"
+            else:
+                mode = "inline"
+    return mode
+
+
+def _codex_mode_banner(config: dict) -> str:
+    """Emit a `<codex-mode>` banner for the additionalContext payload.
+
+    Reads `codex.dispatch_mode` from .suncode/config.yaml. Missing or invalid
+    configuration remains `inline`; explicit `auto` or the legacy
+    `sub-agent` alias enables native Codex context injection with a child-side
+    fallback. The banner complements the per-status workflow-state body.
+    """
+    mode = _resolve_codex_dispatch_mode(config)
+    if mode == "auto":
         meaning = (
-            "sub-agent: implement/check work defaults to Suncode sub-agents; "
-            "the main session still coordinates, clarifies, updates specs, commits, and finishes."
+            "auto: implement/check work defaults to Suncode sub-agents; native Codex "
+            "context injection is preferred and child-side loading is the fallback. "
+            "The main session still coordinates, clarifies, updates specs, commits, and finishes."
         )
     else:
         meaning = (
@@ -263,22 +277,15 @@ def resolve_breadcrumb_key(
 ) -> str:
     """Pick the breadcrumb tag key based on Codex dispatch_mode.
 
-    Codex defaults to ``inline`` because sub-agents run with ``fork_turns="none"``
-    isolation and can't inherit the parent session's task context. Users can
-    opt into ``codex.dispatch_mode: sub-agent`` in ``.suncode/config.yaml``
-    to use the parallel ``<status>-inline`` tag → ``<status>`` flip. Invalid
-    or missing values fall back to inline.
+    Codex defaults to ``inline``. Explicit ``auto`` uses the ordinary status
+    breadcrumb for native SubagentStart dispatch with child-side fallback;
+    ``sub-agent`` remains an alias for ``auto``. Invalid or missing values
+    fall back to inline.
 
     Non-codex platforms return the plain status unchanged.
     """
     if platform == "codex":
-        mode = "inline"
-        if isinstance(config, dict):
-            codex_cfg = config.get("codex")
-            if isinstance(codex_cfg, dict):
-                cfg_mode = codex_cfg.get("dispatch_mode")
-                if cfg_mode in ("inline", "sub-agent"):
-                    mode = cfg_mode
+        mode = _resolve_codex_dispatch_mode(config)
         return f"{status}-inline" if mode == "inline" else status
     return status
 

@@ -575,9 +575,10 @@ describe("init() integration", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(tmpDir, ".pi", "skills", "suncode-check", "SKILL.md"),
+        path.join(tmpDir, ".agents", "skills", "suncode-check", "SKILL.md"),
       ),
     ).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".pi", "skills"))).toBe(false);
     expect(
       fs.existsSync(path.join(tmpDir, ".pi", "agents", "suncode-implement.md")),
     ).toBe(true);
@@ -791,6 +792,54 @@ describe("init() integration", () => {
     expect(fs.readFileSync(startSkill, "utf-8")).not.toContain(
       "runAs: subagent",
     );
+  });
+
+  it("#3p grok platform writes private skills, flat commands, and agents", async () => {
+    await init({ yes: true, grok: true });
+
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".grok", "skills", "suncode-check", "SKILL.md"),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".grok", "commands", "suncode-start.md")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".grok", "agents", "suncode-implement.md")),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, ".grok", "hooks"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
+  });
+
+  it("#3q kimi platform writes neutral shared and private command/agent skills", async () => {
+    await init({ yes: true, kimi: true });
+
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".agents", "skills", "suncode-check", "SKILL.md"),
+      ),
+    ).toBe(true);
+    for (const skill of [
+      "suncode-start",
+      "suncode-continue",
+      "suncode-finish-work",
+      "suncode-implement",
+      "suncode-check",
+      "suncode-research",
+    ]) {
+      expect(
+        fs.existsSync(
+          path.join(tmpDir, ".kimi-code", "skills", skill, "SKILL.md"),
+        ),
+      ).toBe(true);
+    }
+    expect(fs.existsSync(path.join(tmpDir, ".kimi-code", "hooks"))).toBe(
+      false,
+    );
+    expect(
+      fs.existsSync(path.join(tmpDir, ".kimi-code", "config.toml")),
+    ).toBe(false);
   });
 
   it("#4 force mode overwrites previously modified files", async () => {

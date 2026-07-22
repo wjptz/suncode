@@ -322,7 +322,8 @@ describe("collectPlatformTemplates", () => {
     codebuddy: ".codebuddy/skills",
     copilot: ".github/skills",
     droid: ".factory/skills",
-    pi: ".pi/skills",
+    // Pi discovers the same workspace Agent Skills root as Codex/Gemini.
+    pi: ".agents/skills",
   };
 
   it("does not throw for any platform", () => {
@@ -420,5 +421,17 @@ describe("collectPlatformTemplates", () => {
     expect(result?.has(".pi/agents/suncode-implement.md")).toBe(true);
     expect(result?.has(".pi/extensions/suncode/index.ts")).toBe(true);
     expect(result?.has(".pi/settings.json")).toBe(true);
+  });
+
+  it("grok and kimi collectors expose their complete owned surfaces", () => {
+    const grok = collectPlatformTemplates("grok");
+    expect(grok?.has(".grok/commands/suncode-start.md")).toBe(true);
+    expect(grok?.has(".grok/agents/suncode-implement.md")).toBe(true);
+
+    const kimi = collectPlatformTemplates("kimi");
+    expect(kimi?.has(".agents/skills/suncode-check/SKILL.md")).toBe(true);
+    expect(
+      kimi?.has(".kimi-code/skills/suncode-implement/SKILL.md"),
+    ).toBe(true);
   });
 });

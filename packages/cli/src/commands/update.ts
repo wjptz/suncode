@@ -225,11 +225,14 @@ interface SafeFileDeleteClassified {
  * - File exists
  * - Content hash matches allowed_hashes
  * - Path is not protected or in update.skip
+ * - Path is not owned by the current template set
  */
-function collectSafeFileDeletes(
+/** @internal Exported for testing only */
+export function collectSafeFileDeletes(
   migrations: MigrationItem[],
   cwd: string,
   skipPaths: string[],
+  currentTemplatePaths: ReadonlySet<string>,
   /**
    * Bypass `update.skip` for safe-file-delete. Enable this for breaking releases
    * where honoring skip would leave the project half-migrated (old files at
@@ -239,7 +242,11 @@ function collectSafeFileDeletes(
    */
   bypassUpdateSkip = false,
 ): SafeFileDeleteClassified[] {
-  const safeDeletes = migrations.filter((m) => m.type === "safe-file-delete");
+  // Historical migrations are loaded forever, so current template ownership
+  // must win when a later release intentionally restores a retired path.
+  const safeDeletes = migrations.filter(
+    (m) => m.type === "safe-file-delete" && !currentTemplatePaths.has(m.from),
+  );
   const results: SafeFileDeleteClassified[] = [];
 
   for (const item of safeDeletes) {
@@ -1308,6 +1315,36 @@ function isDirectorySafeToReplace(
 }
 
 /**
+ * Whether every file under `dirRelativePath` byte-matches the current template
+ * content for its path. This is intentionally stricter than
+ * `isDirectorySafeToReplace`, which also accepts stale-but-unmodified files.
+ *
+ * When both sides of a rename-dir migration exist, a canonical target must win
+ * over a legacy source so old platform-specific bytes cannot clobber current
+ * shared templates.
+ */
+function dirMatchesCurrentTemplates(
+  cwd: string,
+  dirRelativePath: string,
+  templates: Map<string, string>,
+): boolean {
+  const dirFullPath = path.join(cwd, dirRelativePath);
+  if (!fs.existsSync(dirFullPath)) return false;
+
+  const files = collectAllFiles(dirFullPath, cwd);
+  if (files.length === 0) return false;
+
+  for (const fullPath of files) {
+    const relativePath = toPosix(path.relative(cwd, fullPath));
+    const templateContent = templates.get(relativePath);
+    if (templateContent === undefined) return false;
+    if (fs.readFileSync(fullPath, "utf-8") !== templateContent) return false;
+  }
+
+  return true;
+}
+
+/**
  * Recursively delete a directory
  */
 function removeDirectoryRecursive(dirPath: string): void {
@@ -1666,10 +1703,11 @@ export function sortMigrationsForExecution(
  * @param options.skipAll - Skip all modified files without asking
  * If neither is set, prompts interactively for modified files
  */
-async function executeMigrations(
+export async function executeMigrations(
   classified: ClassifiedMigrations,
   cwd: string,
   options: { force?: boolean; skipAll?: boolean },
+  templates: Map<string, string>,
 ): Promise<MigrationResult> {
   const result: MigrationResult = {
     renamed: 0,
@@ -1706,6 +1744,28 @@ async function executeMigrations(
     } else if (item.type === "rename-dir" && item.to) {
       const oldPath = path.join(cwd, item.from);
       const newPath = path.join(cwd, item.to);
+      const oldPrefix = item.from.endsWith("/") ? item.from : item.from + "/";
+      const newPrefix = item.to.endsWith("/") ? item.to : item.to + "/";
+
+      // If the target already contains canonical current-version bytes, retire
+      // the redundant legacy source instead of overwriting the good target.
+      if (
+        fs.existsSync(newPath) &&
+        dirMatchesCurrentTemplates(cwd, item.to, templates)
+      ) {
+        removeDirectoryRecursive(oldPath);
+
+        const hashes = loadHashes(cwd);
+        const updatedHashes: TemplateHashes = {};
+        for (const [hashPath, hashValue] of Object.entries(hashes)) {
+          if (hashPath.startsWith(oldPrefix)) continue;
+          updatedHashes[hashPath] = hashValue;
+        }
+        saveHashes(cwd, updatedHashes);
+
+        result.deleted++;
+        continue;
+      }
 
       // If target exists (safe to replace, already checked in classification)
       // delete it first before renaming
@@ -1721,8 +1781,6 @@ async function executeMigrations(
 
       // Batch update hash tracking for all files in the directory
       const hashes = loadHashes(cwd);
-      const oldPrefix = item.from.endsWith("/") ? item.from : item.from + "/";
-      const newPrefix = item.to.endsWith("/") ? item.to : item.to + "/";
 
       const updatedHashes: TemplateHashes = {};
       for (const [hashPath, hashValue] of Object.entries(hashes)) {
@@ -2058,6 +2116,7 @@ export async function update(options: UpdateOptions): Promise<void> {
     allMigrations,
     cwd,
     skipPaths,
+    new Set(templates.keys()),
     breakingBypass,
   );
   const hasSafeDeletes =
@@ -2350,10 +2409,15 @@ export async function update(options: UpdateOptions): Promise<void> {
 
   // Execute migrations if --migrate flag is set
   if (options.migrate && classifiedMigrations) {
-    const migrationResult = await executeMigrations(classifiedMigrations, cwd, {
-      force: options.force,
-      skipAll: options.skipAll,
-    });
+    const migrationResult = await executeMigrations(
+      classifiedMigrations,
+      cwd,
+      {
+        force: options.force,
+        skipAll: options.skipAll,
+      },
+      templates,
+    );
     printMigrationResult(migrationResult);
 
     // Hardcoded: Rename traces-*.md to journal-*.md in workspace directories

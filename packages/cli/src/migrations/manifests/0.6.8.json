@@ -1,9 +1,17 @@
 {
   "version": "0.6.8",
-  "description": "Patch release: adds Hub code review workflow, Hub skill package synchronization, Hub knowledge search, latest-review inspection, and refreshed Chinese-first project guidance.",
+  "description": "Patch release: adds Hub workflows and knowledge search, refreshes Chinese-first project guidance, and moves Pi Agent skills to the shared `.agents/skills/` root.",
   "breaking": false,
   "recommendMigrate": false,
-  "changelog": "**Features:**\n- feat(hub): add `suncode hub review`, review artifact submission, latest-review inspection, review gating for completion, and Hub task review status synchronization.\n- feat(hub): add Hub skill package and agent package push/pull commands for synchronizing local `.agents/skills` and `.suncode/agents` packages through Hub.\n- feat(hub): add compact Hub knowledge-base search with project-scoped results for agent-facing workflows.\n- feat(init): refresh default generated specs with Chinese-first writing guidance and Git workflow guardrails.\n\n**Fixes:**\n- fix(hub): tune Hub knowledge search defaults and compact output for lower-context agent consumption.\n\n**Internal:**\n- test: extend Hub review, package sync, knowledge search, and initialization template coverage.",
-  "migrations": [],
-  "notes": "No `--migrate` required.\n\nRun `suncode update` after upgrading to receive refreshed Hub review skills, Hub synchronization commands, knowledge search support, and generated spec guidance.\n\nInstall: `npm install -g @wjptz/suncode`"
+  "changelog": "**Features:**\n- feat(hub): add `suncode hub review`, review artifact submission, latest-review inspection, review gating for completion, and Hub task review status synchronization.\n- feat(hub): add Hub skill package and agent package push/pull commands for synchronizing local `.agents/skills` and `.suncode/agents` packages through Hub.\n- feat(hub): add compact Hub knowledge-base search with project-scoped results for agent-facing workflows.\n- feat(init): refresh default generated specs with Chinese-first writing guidance and Git workflow guardrails.\n\n**Fixes:**\n- fix(hub): tune Hub knowledge search defaults and compact output for lower-context agent consumption.\n- fix(pi): install Suncode skills once under the shared `.agents/skills/` root instead of duplicating them under `.pi/skills/`.\n\n**Internal:**\n- test: extend Hub review, package sync, knowledge search, initialization template coverage, and Pi shared-skill migration safety.",
+  "migrations": [
+    {
+      "type": "rename-dir",
+      "from": ".pi/skills",
+      "to": ".agents/skills",
+      "description": "Pi Agent: move installed Suncode skills from the private `.pi/skills/` root to the shared `.agents/skills/` root.",
+      "reason": "Pi discovers `.agents/skills/` natively. Keeping a second `.pi/skills/` copy makes Pi see duplicate Suncode skills when Codex, Gemini CLI, or another Agent Skills consumer is also configured."
+    }
+  ],
+  "notes": "Run `suncode update --migrate` after upgrading if Pi Agent was already configured; this retires the legacy `.pi/skills/` copy while preserving canonical shared templates and user-modified content through the normal migration safeguards.\n\nA fresh init needs no migration. The update also delivers refreshed Hub review skills, Hub synchronization commands, knowledge search support, and generated spec guidance.\n\nInstall: `npm install -g @wjptz/suncode`"
 }

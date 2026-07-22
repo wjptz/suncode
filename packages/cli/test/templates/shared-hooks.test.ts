@@ -54,20 +54,23 @@ describe("shared-hooks capability table", () => {
     }
   });
 
-  it("inject-subagent-context.py is restricted to class-1 push-based platforms", () => {
-    // Class-2 (pull-based) platforms load context via agent-definition prelude,
-    // not a hook-mutated prompt.
-    const class2 = new Set(["codex", "copilot", "gemini", "qoder", "trae"]);
+  it("inject-subagent-context.py is restricted to native context-delivery platforms", () => {
+    // Codex uses SubagentStart additionalContext; these platforms remain
+    // pull-based and must not install the shared context hook.
+    const pullBased = new Set(["copilot", "gemini", "qoder", "trae"]);
     for (const [platform, hooks] of Object.entries(
       SHARED_HOOKS_BY_PLATFORM,
     )) {
       const has = hooks.includes("inject-subagent-context.py");
-      if (class2.has(platform))
+      if (pullBased.has(platform))
         expect(
           has,
-          `${platform} is class-2 pull-based and must not ship inject-subagent-context.py`,
+          `${platform} is pull-based and must not ship inject-subagent-context.py`,
         ).toBe(false);
     }
+    expect(SHARED_HOOKS_BY_PLATFORM.codex).toContain(
+      "inject-subagent-context.py",
+    );
   });
 
   it("codex + copilot do not take the shared session-start.py (they bundle their own)", () => {

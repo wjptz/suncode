@@ -219,15 +219,17 @@ Required order:
 1. install dependencies
 2. `release-preflight check-versions --require-tag`
 3. `pnpm typecheck`
-4. `pnpm test`
-5. `pnpm build`
+4. `pnpm build`
+5. `pnpm test`
 6. `release-preflight verify-packed-cli`
 7. `release-preflight publish-plan --github`
-8. publish `@mindfoldhq/trellis-core` if missing
-9. publish `@mindfoldhq/trellis` if missing
+8. publish `@wjptz/suncode-core` if missing
+9. publish `@wjptz/suncode` if missing
 10. `release-preflight verify-npm --package all`
 
-Core publishes first because the CLI package depends on the exact core version in the packed artifact.
+Build must precede test because integration tests spawn the real CLI through
+`packages/cli/bin/suncode.js`, which imports `dist/`. Core publishes first
+because the CLI package depends on the exact core version in the packed artifact.
 
 ---
 

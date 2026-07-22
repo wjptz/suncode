@@ -47,7 +47,7 @@ suncode init -u your-name
 Initialize only the platforms you use:
 
 ```bash
-suncode init --cursor --opencode --engineer --codex -u your-name
+suncode init --cursor --opencode --engineer --codex --grok --kimi -u your-name
 ```
 
 Oh My Pi is supported through `suncode init --omp -u your-name`. A pre-existing
@@ -63,6 +63,9 @@ suncode --help
 suncode init --help
 suncode update --help
 suncode uninstall --help
+suncode platforms --json
+python3 ./.suncode/scripts/task.py current --json
+python3 ./.suncode/scripts/task.py list --json
 ```
 
 Hub commands:

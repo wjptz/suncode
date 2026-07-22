@@ -47,7 +47,7 @@ suncode init -u your-name
 只初始化你实际使用的平台：
 
 ```bash
-suncode init --cursor --opencode --engineer --codex -u your-name
+suncode init --cursor --opencode --engineer --codex --grok --kimi -u your-name
 ```
 
 Oh My Pi 可通过 `suncode init --omp -u your-name` 初始化。已有的 `.omp/`
@@ -63,6 +63,9 @@ suncode --help
 suncode init --help
 suncode update --help
 suncode uninstall --help
+suncode platforms --json
+python3 ./.suncode/scripts/task.py current --json
+python3 ./.suncode/scripts/task.py list --json
 ```
 
 Hub 命令：

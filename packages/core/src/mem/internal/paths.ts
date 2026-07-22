@@ -13,6 +13,8 @@ import * as path from "node:path";
 export const HOME = os.homedir();
 export const CLAUDE_PROJECTS = path.join(HOME, ".claude", "projects");
 export const CODEX_SESSIONS = path.join(HOME, ".codex", "sessions");
+/** ZCode persisted-session SQLite store; the reader auto-detects its WAL. */
+export const ZCODE_DB = path.join(HOME, ".zcode", "cli", "db", "db.sqlite");
 
 function expandHome(p: string): string {
   if (p === "~") return HOME;

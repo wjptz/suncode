@@ -2601,6 +2601,329 @@ describe("regression: current-task path normalization", () => {
     expect(hookOutput.trim()).toBe("");
   });
 
+  it("[codex-native-subagents] SubagentStart injects a marker and the valid parent task", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join(".git", "HEAD"), "ref: refs/heads/main\n");
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "implement.jsonl"),
+      '{"file":"src/implement-context.md","reason":"implement contract"}\n',
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "design.md"),
+      "TOKEN_CODEX_DESIGN\n",
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "implement.md"),
+      "TOKEN_CODEX_PLAN\n",
+    );
+    writeProjectFile("src/implement-context.md", "TOKEN_CODEX_IMPLEMENT\n");
+    writeSessionContext("codex_parent-a", ".suncode/tasks/issue-106");
+    const injectSubagentContextScript = getSharedHookScripts().find(
+      (hook) => hook.name === "inject-subagent-context.py",
+    )?.content;
+    const hookPath = path.join(
+      ".codex",
+      "hooks",
+      "inject-subagent-context.py",
+    );
+    writeProjectFile(
+      hookPath,
+      expectTemplateContent(
+        injectSubagentContextScript,
+        "codex inject-subagent-context hook",
+      ),
+    );
+
+    const output = runPython(
+      hookPath,
+      JSON.stringify({
+        hook_event_name: "SubagentStart",
+        agent_type: "suncode-implement",
+        session_id: "parent-a",
+        cwd: tmpDir,
+      }),
+    );
+    const parsed = JSON.parse(output) as {
+      hookSpecificOutput?: {
+        hookEventName?: string;
+        additionalContext?: string;
+      };
+    };
+    const context = parsed.hookSpecificOutput?.additionalContext ?? "";
+
+    expect(parsed.hookSpecificOutput?.hookEventName).toBe("SubagentStart");
+    expect(context).toContain("<!-- suncode-hook-injected -->");
+    expect(context).toContain("Suncode Native Implement Subagent");
+    expect(context).toContain("`suncode-implement` role");
+    expect(context).toContain("Active task: .suncode/tasks/issue-106");
+    expect(context).toContain("TOKEN_CODEX_IMPLEMENT");
+    expect(context).toContain("TOKEN_CODEX_DESIGN");
+    expect(context).toContain("TOKEN_CODEX_PLAN");
+  });
+
+  it("[codex-native-subagents] implement and check preserve curated context before task artifacts", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join(".git", "HEAD"), "ref: refs/heads/main\n");
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "implement.jsonl"),
+      '{"file":"src/implement-order.md","reason":"implement ordering"}\n',
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "check.jsonl"),
+      '{"file":"src/check-order.md","reason":"check ordering"}\n',
+    );
+    writeProjectFile("src/implement-order.md", "TOKEN_IMPLEMENT_ORDER\n");
+    writeProjectFile("src/check-order.md", "TOKEN_CHECK_ORDER\n");
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "prd.md"),
+      "TOKEN_PRD_ORDER\n",
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "design.md"),
+      "TOKEN_DESIGN_ORDER\n",
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "implement.md"),
+      "TOKEN_PLAN_ORDER\n",
+    );
+    writeSessionContext("codex_parent-order", ".suncode/tasks/issue-106");
+    const injectSubagentContextScript = getSharedHookScripts().find(
+      (hook) => hook.name === "inject-subagent-context.py",
+    )?.content;
+    const hookPath = path.join(
+      ".codex",
+      "hooks",
+      "inject-subagent-context.py",
+    );
+    writeProjectFile(
+      hookPath,
+      expectTemplateContent(
+        injectSubagentContextScript,
+        "codex inject-subagent-context hook",
+      ),
+    );
+
+    for (const [agentType, curatedToken] of [
+      ["suncode-implement", "TOKEN_IMPLEMENT_ORDER"],
+      ["suncode-check", "TOKEN_CHECK_ORDER"],
+    ] as const) {
+      const output = runPython(
+        hookPath,
+        JSON.stringify({
+          hook_event_name: "SubagentStart",
+          agent_type: agentType,
+          session_id: "parent-order",
+          cwd: tmpDir,
+        }),
+      );
+      const parsed = JSON.parse(output) as {
+        hookSpecificOutput: { additionalContext: string };
+      };
+      const context = parsed.hookSpecificOutput.additionalContext;
+      const positions = [
+        context.indexOf(curatedToken),
+        context.indexOf("TOKEN_PRD_ORDER"),
+        context.indexOf("TOKEN_DESIGN_ORDER"),
+        context.indexOf("TOKEN_PLAN_ORDER"),
+      ];
+
+      for (const position of positions) {
+        expect(position).toBeGreaterThanOrEqual(0);
+      }
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    }
+  });
+
+  it("[codex-native-subagents] research gets its task path without implement or check manifests", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join(".git", "HEAD"), "ref: refs/heads/main\n");
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "implement.jsonl"),
+      '{"file":"src/implement-private.md","reason":"must stay isolated"}\n',
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "check.jsonl"),
+      '{"file":"src/check-private.md","reason":"must stay isolated"}\n',
+    );
+    writeProjectFile("src/implement-private.md", "TOKEN_IMPLEMENT_PRIVATE\n");
+    writeProjectFile("src/check-private.md", "TOKEN_CHECK_PRIVATE\n");
+    writeSessionContext("codex_research-parent", ".suncode/tasks/issue-106");
+    const injectSubagentContextScript = getSharedHookScripts().find(
+      (hook) => hook.name === "inject-subagent-context.py",
+    )?.content;
+    const hookPath = path.join(
+      ".codex",
+      "hooks",
+      "inject-subagent-context.py",
+    );
+    writeProjectFile(
+      hookPath,
+      expectTemplateContent(
+        injectSubagentContextScript,
+        "codex inject-subagent-context hook",
+      ),
+    );
+
+    const output = runPython(
+      hookPath,
+      JSON.stringify({
+        hookEventName: "SubagentStart",
+        agentType: "suncode-research",
+        sessionId: "research-parent",
+        cwd: tmpDir,
+      }),
+    );
+    const parsed = JSON.parse(output) as {
+      hookSpecificOutput: { additionalContext: string };
+    };
+    const context = parsed.hookSpecificOutput.additionalContext;
+
+    expect(context).toContain("Active task: .suncode/tasks/issue-106");
+    expect(context).toContain("Project Spec Directory Structure");
+    expect(context).not.toContain("TOKEN_IMPLEMENT_PRIVATE");
+    expect(context).not.toContain("TOKEN_CHECK_PRIVATE");
+    expect(context).not.toContain("implement.jsonl");
+    expect(context).not.toContain("check.jsonl");
+  });
+
+  it("[codex-native-subagents] unknown or malformed parents never borrow a sole session task", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join(".git", "HEAD"), "ref: refs/heads/main\n");
+    writeSessionContext("codex_unrelated", ".suncode/tasks/issue-106");
+    const injectSubagentContextScript = getSharedHookScripts().find(
+      (hook) => hook.name === "inject-subagent-context.py",
+    )?.content;
+    const hookPath = path.join(
+      ".codex",
+      "hooks",
+      "inject-subagent-context.py",
+    );
+    writeProjectFile(
+      hookPath,
+      expectTemplateContent(
+        injectSubagentContextScript,
+        "codex inject-subagent-context hook",
+      ),
+    );
+
+    for (const sessionId of ["missing-parent", { id: "malformed" }, "  "]) {
+      const output = runPython(
+        hookPath,
+        JSON.stringify({
+          hook_event_name: "SubagentStart",
+          agent_type: "suncode-implement",
+          session_id: sessionId,
+          cwd: tmpDir,
+        }),
+      );
+      expect(output.trim()).toBe("");
+    }
+  });
+
+  it("[codex-native-subagents] parent session isolates concurrent tasks and ignores inherited context", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join(".git", "HEAD"), "ref: refs/heads/main\n");
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-106", "implement.jsonl"),
+      '{"file":"src/session-a.md","reason":"session A only"}\n',
+    );
+    writeProjectFile("src/session-a.md", "TOKEN_CODEX_SESSION_A\n");
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-107", "task.json"),
+      JSON.stringify({ title: "Issue 107", status: "in_progress" }, null, 2),
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-107", "prd.md"),
+      "TOKEN_CODEX_PRD_B\n",
+    );
+    writeProjectFile(
+      path.join(".suncode", "tasks", "issue-107", "implement.jsonl"),
+      '{"file":"src/session-b.md","reason":"session B only"}\n',
+    );
+    writeProjectFile("src/session-b.md", "TOKEN_CODEX_SESSION_B\n");
+    writeSessionContext("codex_parent-a", ".suncode/tasks/issue-106");
+    writeSessionContext("codex_parent-b", ".suncode/tasks/issue-107");
+    const injectSubagentContextScript = getSharedHookScripts().find(
+      (hook) => hook.name === "inject-subagent-context.py",
+    )?.content;
+    const hookPath = path.join(
+      ".codex",
+      "hooks",
+      "inject-subagent-context.py",
+    );
+    writeProjectFile(
+      hookPath,
+      expectTemplateContent(
+        injectSubagentContextScript,
+        "codex inject-subagent-context hook",
+      ),
+    );
+
+    const outputFor = (sessionId: string, env: NodeJS.ProcessEnv = {}) => {
+      const output = runPython(
+        hookPath,
+        JSON.stringify({
+          hook_event_name: "SubagentStart",
+          agent_type: "suncode-implement",
+          session_id: sessionId,
+          cwd: tmpDir,
+        }),
+        env,
+      );
+      return (
+        JSON.parse(output) as {
+          hookSpecificOutput: { additionalContext: string };
+        }
+      ).hookSpecificOutput.additionalContext;
+    };
+
+    const sessionA = outputFor("parent-a");
+    const sessionB = outputFor("parent-b");
+    const parentWins = outputFor("parent-a", {
+      SUNCODE_CONTEXT_ID: "codex_parent-b",
+    });
+
+    expect(sessionA).toContain("TOKEN_CODEX_SESSION_A");
+    expect(sessionA).not.toContain("TOKEN_CODEX_SESSION_B");
+    expect(sessionB).toContain("TOKEN_CODEX_SESSION_B");
+    expect(sessionB).not.toContain("TOKEN_CODEX_SESSION_A");
+    expect(parentWins).toContain("TOKEN_CODEX_SESSION_A");
+    expect(parentWins).not.toContain("TOKEN_CODEX_SESSION_B");
+  });
+
+  it("[codex-native-subagents] non-Suncode SubagentStart agents stay silent", () => {
+    setupTaskRepo();
+    writeProjectFile(path.join(".git", "HEAD"), "ref: refs/heads/main\n");
+    writeSessionContext("codex_parent-a", ".suncode/tasks/issue-106");
+    const injectSubagentContextScript = getSharedHookScripts().find(
+      (hook) => hook.name === "inject-subagent-context.py",
+    )?.content;
+    const hookPath = path.join(
+      ".codex",
+      "hooks",
+      "inject-subagent-context.py",
+    );
+    writeProjectFile(
+      hookPath,
+      expectTemplateContent(
+        injectSubagentContextScript,
+        "codex inject-subagent-context hook",
+      ),
+    );
+
+    const output = runPython(
+      hookPath,
+      JSON.stringify({
+        hook_event_name: "SubagentStart",
+        agent_type: "general-purpose-reviewer",
+        session_id: "parent-a",
+        cwd: tmpDir,
+      }),
+    );
+
+    expect(output.trim()).toBe("");
+  });
+
   it("[session-current-task] Cursor hook uses conversation_id when transcript_path is null", () => {
     setupTaskRepo();
     writeLegacyCurrentTask(".suncode/tasks/issue-106");
@@ -2755,7 +3078,7 @@ describe("regression: current-task path normalization", () => {
     }
   });
 
-  it("[session-start-proof] shared and Codex contexts include one-shot first-reply notice without changing payload shape", () => {
+  it("[#412] shared and Codex contexts include an adaptive one-shot notice without changing payload shape", () => {
     setupTaskRepo();
 
     writeProjectFile(
@@ -2771,6 +3094,7 @@ describe("regression: current-task path normalization", () => {
       runPython(path.join(".claude", "hooks", "session-start.py")),
     ) as {
       hookSpecificOutput: { hookEventName: string; additionalContext: string };
+      additional_context: string;
     };
     const codexPayload = JSON.parse(
       runPython(
@@ -2778,11 +3102,29 @@ describe("regression: current-task path normalization", () => {
         JSON.stringify({ cwd: tmpDir }),
       ),
     ) as {
+      suppressOutput: boolean;
+      systemMessage: string;
       hookSpecificOutput: { hookEventName: string; additionalContext: string };
     };
 
+    expect(Object.keys(sharedPayload)).toEqual([
+      "hookSpecificOutput",
+      "additional_context",
+    ]);
+    expect(sharedPayload.additional_context).toBe(
+      sharedPayload.hookSpecificOutput.additionalContext,
+    );
+    expect(Object.keys(codexPayload)).toEqual([
+      "suppressOutput",
+      "systemMessage",
+      "hookSpecificOutput",
+    ]);
+    expect(codexPayload.suppressOutput).toBe(true);
+    expect(codexPayload.systemMessage).toMatch(
+      /^Suncode context injected \(\d+ chars\)$/,
+    );
+
     for (const payload of [sharedPayload, codexPayload]) {
-      expect(Object.keys(payload)).not.toContain("firstReplyNotice");
       expect(Object.keys(payload.hookSpecificOutput)).toEqual([
         "hookEventName",
         "additionalContext",
@@ -2790,12 +3132,37 @@ describe("regression: current-task path normalization", () => {
       expect(payload.hookSpecificOutput.hookEventName).toBe("SessionStart");
 
       const ctx = payload.hookSpecificOutput.additionalContext;
+      expect(ctx.startsWith("<session-context>")).toBe(true);
+      expect(ctx).toContain("Suncode compact SessionStart context");
       expect(ctx).toContain("<first-reply-notice>");
-      expect(ctx).toMatch(/first visible assistant reply|First visible reply|Suncode SessionStart 已注入/);
-      expect(ctx).toMatch(/one-shot/i);
+      expect(ctx).toContain("the user's current request");
+      expect(ctx).toContain("the user message that triggered this reply");
+      expect(ctx).toContain("has no clear natural language");
+      expect(ctx).toContain(
+        "explicitly established project communication language",
+      );
+      expect(ctx).toContain("Suncode SessionStart ✓");
+      expect(ctx).toContain("Continue directly with the user's request");
+      expect(ctx).toContain(
+        "must not alter the language used for the remainder of the response",
+      );
+      expect(ctx).toContain("This notice is one-shot");
+      expect(ctx.indexOf("the user's current request")).toBeLessThan(
+        ctx.indexOf("explicitly established project communication language"),
+      );
+      expect(
+        ctx.indexOf("explicitly established project communication language"),
+      ).toBeLessThan(ctx.indexOf("Suncode SessionStart ✓"));
       expect(ctx.indexOf("<first-reply-notice>")).toBeLessThan(
         ctx.indexOf("<current-state>"),
       );
+      expect(ctx).toContain("<current-state>");
+      expect(ctx).toContain("<suncode-workflow>");
+      expect(ctx).toContain("<guidelines>");
+      expect(ctx).toContain("<task-status>");
+      expect(ctx).not.toContain("say once in Chinese");
+      expect(ctx).not.toContain("exactly one short Chinese sentence");
+      expect(ctx).not.toContain(firstReplyNoticeSentence);
     }
   });
 
@@ -3770,7 +4137,7 @@ print(len(entries))
         "utf-8",
       );
       expect(content, relativePath).toContain(
-        "Before final review or `task.py start`, run the PRD convergence pass below.",
+        "After the requirement convergence gate, rewrite `prd.md` once against the final structure described in the artifact rules above.",
       );
       expect(content, relativePath).toContain("## PRD Convergence Pass");
       expect(content, relativePath).toContain(
@@ -3781,6 +4148,54 @@ print(len(entries))
       );
       expect(content, relativePath).toContain(
         "no unresolved temporary brainstorm sections, no duplicate facts across sections",
+      );
+    }
+  });
+
+  it("[#412] brainstorm templates require a fresh approval after final planning review", () => {
+    const templateRoot = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "src",
+      "templates",
+    );
+    const brainstormFiles = [
+      "common/skills/brainstorm.md",
+      "codex/skills/brainstorm/SKILL.md",
+      "copilot/prompts/brainstorm.prompt.md",
+    ];
+
+    for (const relativePath of brainstormFiles) {
+      const content = fs.readFileSync(
+        path.join(templateRoot, relativePath),
+        "utf-8",
+      );
+      expect(content, relativePath).toContain(
+        "A request to build, implement, fix, refactor, or \"go ahead\" is not approval to leave planning.",
+      );
+      expect(content, relativePath).toContain(
+        "the user must respond at least once after the initial request before implementation begins",
+      );
+      expect(content, relativePath).toContain(
+        "end the turn with exactly one highest-value question",
+      );
+      expect(content, relativePath).toContain(
+        "## Requirement Convergence Gate",
+      );
+      expect(content, relativePath).toContain(
+        "The final planning summary must show Goal, In Scope, Out of Scope, Acceptance Criteria, Key Decisions, relevant Risks or Deferred Items, and artifact status.",
+      );
+      expect(content, relativePath).toContain(
+        "Present the final planning summary and stop. Do not run `task.py start` or edit product code in the same turn.",
+      );
+      expect(content, relativePath).toContain(
+        "Only a subsequent user message that explicitly approves the latest planning summary authorizes `task.py start` and implementation.",
+      );
+      expect(content, relativePath).toContain(
+        "If the artifacts change materially after approval, repeat the final review.",
+      );
+      expect(content, relativePath).toContain(
+        "Do not start implementation merely because the user originally asked for implementation.",
       );
     }
   });
@@ -3933,7 +4348,7 @@ print(len(entries))
     expect(output).not.toContain("before-dev takes under a minute");
   });
 
-  it("[workflow-v2] step 2.1 for codex (sub-agent mode) describes self-loaded agent context, not hook injection", () => {
+  it("[upstream-v0.6.8] step 2.1 for codex sub-agent mode describes native SubagentStart context", () => {
     writeSuncodeScripts();
     writeProjectFile(path.join(".suncode", ".developer"), "name=test\n");
     writeProjectFile(
@@ -3955,11 +4370,12 @@ print(len(entries))
       { cwd: tmpDir, encoding: "utf-8" },
     );
 
-    expect(output).toContain("The pull-based sub-agent definition auto-handles");
+    expect(output).toContain("The platform hook/plugin auto-handles");
     expect(output).toContain(
-      "Resolves the active task with `task.py current --source`",
+      "For Codex, `SubagentStart` supplies native context injection",
     );
-    expect(output).not.toContain("The platform hook/plugin auto-handles");
+    expect(output).toContain("child-side loading as the fallback");
+    expect(output).not.toContain("The pull-based sub-agent definition auto-handles");
     expect(output).not.toContain("Load the `suncode-before-dev` skill");
   });
 
@@ -4359,8 +4775,10 @@ print(len(entries))
         "spec.loader.exec_module(mod)",
         "result = {",
         "  'codex_inline': mod.resolve_breadcrumb_key('in_progress', 'codex', {'codex': {'dispatch_mode': 'inline'}}),",
+        "  'codex_auto': mod.resolve_breadcrumb_key('in_progress', 'codex', {'codex': {'dispatch_mode': 'auto'}}),",
         "  'codex_subagent': mod.resolve_breadcrumb_key('in_progress', 'codex', {'codex': {'dispatch_mode': 'sub-agent'}}),",
         "  'codex_missing': mod.resolve_breadcrumb_key('in_progress', 'codex', {}),",
+        "  'codex_invalid': mod.resolve_breadcrumb_key('in_progress', 'codex', {'codex': {'dispatch_mode': 'invalid'}}),",
         "  'claude_inline': mod.resolve_breadcrumb_key('in_progress', 'claude', {'codex': {'dispatch_mode': 'inline'}}),",
         "}",
         "print(json.dumps(result))",
@@ -4374,9 +4792,11 @@ print(len(entries))
       output.split("\n").filter((l) => l.startsWith("{")).pop() ?? "{}",
     ) as Record<string, string>;
     expect(result.codex_inline).toBe("in_progress-inline");
+    expect(result.codex_auto).toBe("in_progress");
     expect(result.codex_subagent).toBe("in_progress");
     // Default for codex (missing config) is inline since 0.5.9.
     expect(result.codex_missing).toBe("in_progress-inline");
+    expect(result.codex_invalid).toBe("in_progress-inline");
     expect(result.claude_inline).toBe("in_progress");
   });
 
@@ -4438,6 +4858,7 @@ print(len(entries))
         "from common.workflow_phase import resolve_effective_platform",
         "result = {",
         "  'codex_default': resolve_effective_platform('codex', {}),",
+        "  'codex_auto': resolve_effective_platform('codex', {'codex': {'dispatch_mode': 'auto'}}),",
         "  'codex_explicit_subagent': resolve_effective_platform('codex', {'codex': {'dispatch_mode': 'sub-agent'}}),",
         "  'codex_inline': resolve_effective_platform('codex', {'codex': {'dispatch_mode': 'inline'}}),",
         "  'codex_invalid_mode': resolve_effective_platform('codex', {'codex': {'dispatch_mode': 'invalid'}}),",
@@ -4455,6 +4876,7 @@ print(len(entries))
       output.split("\n").filter((l) => l.startsWith("{")).pop() ?? "{}",
     ) as Record<string, string>;
     expect(result.codex_default).toBe("codex-inline");
+    expect(result.codex_auto).toBe("codex-sub-agent");
     expect(result.codex_explicit_subagent).toBe("codex-sub-agent");
     expect(result.codex_inline).toBe("codex-inline");
     // Invalid mode falls back to default inline rather than passing through.
@@ -4490,14 +4912,23 @@ print(len(entries))
       "<codex-mode>inline: the main session implements/checks directly; do not dispatch implement/check sub-agents.</codex-mode>",
     );
 
-    // Explicit sub-agent → sub-agent banner.
+    // Legacy sub-agent alias → normalized auto banner.
     writeConfigYaml("codex:\n  dispatch_mode: sub-agent\n");
     const subAgentRun = JSON.parse(
       runPython(codexHookPath, JSON.stringify({ cwd: tmpDir, session_id: "workflow-a" })),
     ) as { hookSpecificOutput: { additionalContext: string } };
     expect(subAgentRun.hookSpecificOutput.additionalContext).toContain(
-      "<codex-mode>sub-agent: implement/check work defaults to Suncode sub-agents; the main session still coordinates, clarifies, updates specs, commits, and finishes.</codex-mode>",
+      "<codex-mode>auto: implement/check work defaults to Suncode sub-agents; native Codex context injection is preferred and child-side loading is the fallback. The main session still coordinates, clarifies, updates specs, commits, and finishes.</codex-mode>",
     );
+  });
+
+  it("[workflow-state-dispatch-mode-dedup] banner and breadcrumb share one normalization helper", () => {
+    const py = injectWorkflowStateScript ?? "";
+    expect(py).toContain("def _resolve_codex_dispatch_mode(");
+    const cascadeOccurrences = (
+      py.match(/if cfg_mode in \("auto", "sub-agent"\):/g) ?? []
+    ).length;
+    expect(cascadeOccurrences).toBe(1);
   });
 
   it("[issue-codex-dispatch-mode] non-codex hook does NOT inject <codex-mode> banner", () => {
@@ -4524,6 +4955,220 @@ print(len(entries))
     ) as { hookSpecificOutput: { additionalContext: string } };
     expect(result.hookSpecificOutput.additionalContext).not.toContain(
       "<codex-mode>",
+    );
+  });
+
+  it("[upstream-v0.6.8] task.py list --json emits the stable machine schema", () => {
+    setupTaskRepo();
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+
+    const output = execSync(
+      `${pythonCmd} ${JSON.stringify(taskScriptPath)} list --json`,
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    const parsed = JSON.parse(output) as {
+      tasks: Record<string, unknown>[];
+    };
+    expect(parsed.tasks).toHaveLength(1);
+    expect(parsed.tasks[0]).toMatchObject({
+      dir: ".suncode/tasks/issue-106",
+      title: "Issue 106 task",
+      status: "in_progress",
+      display_status: "in_progress",
+      parent: null,
+      children: [],
+      assignee: null,
+    });
+  });
+
+  it("[upstream-v0.6.8] task.py current --json reports null without an active task", () => {
+    setupTaskRepo();
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+
+    const result = spawnSync(
+      pythonCmd,
+      [taskScriptPath, "current", "--json"],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      current_task: null,
+      stale: false,
+    });
+  });
+
+  it("[upstream-v0.6.8] task.py current --json reports the active task object", () => {
+    setupTaskRepo();
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    const env = sessionEnv({ SUNCODE_CONTEXT_ID: "json-current-session" });
+
+    execSync(
+      `${pythonCmd} ${JSON.stringify(taskScriptPath)} start ${JSON.stringify(".suncode/tasks/issue-106")}`,
+      { cwd: tmpDir, encoding: "utf-8", env },
+    );
+    const output = execSync(
+      `${pythonCmd} ${JSON.stringify(taskScriptPath)} current --json`,
+      { cwd: tmpDir, encoding: "utf-8", env },
+    );
+
+    expect(JSON.parse(output).current_task).toMatchObject({
+      dir: ".suncode/tasks/issue-106",
+      title: "Issue 106 task",
+      status: "in_progress",
+    });
+  });
+
+  it("[upstream-v0.6.8] task.py create resolves base_branch from origin/HEAD", () => {
+    setupTaskRepo();
+    execSync("git init -q -b feature/some-work", { cwd: tmpDir });
+    execSync("git config user.email test@example.com", { cwd: tmpDir });
+    execSync("git config user.name Test", { cwd: tmpDir });
+    execSync("git add -A", { cwd: tmpDir });
+    execSync('git commit -q -m init', { cwd: tmpDir });
+
+    const remotePath = path.join(tmpDir, "origin-bare.git");
+    execSync(`git init -q --bare ${JSON.stringify(remotePath)}`, { cwd: tmpDir });
+    execSync("git branch -m feature/some-work main", { cwd: tmpDir });
+    execSync(`git remote add origin ${JSON.stringify(remotePath)}`, { cwd: tmpDir });
+    execSync("git push -q origin main", { cwd: tmpDir });
+    execSync("git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main", { cwd: tmpDir });
+    execSync("git checkout -q -b feature/some-work", { cwd: tmpDir });
+
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    execSync(
+      `${pythonCmd} ${JSON.stringify(taskScriptPath)} create "base branch test" --slug base-branch-test --assignee test-dev --no-start`,
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    const taskDir = fs
+      .readdirSync(path.join(tmpDir, ".suncode", "tasks"))
+      .find((entry) => entry.includes("base-branch-test"));
+    const taskJson = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", "tasks", taskDir as string, "task.json"),
+        "utf-8",
+      ),
+    ) as { base_branch: string };
+    expect(taskJson.base_branch).toBe("main");
+  });
+
+  it("[upstream-v0.6.8] task.py create warns when default-branch resolution falls back", () => {
+    setupTaskRepo();
+    execSync("git init -q -b solo-branch", { cwd: tmpDir });
+    execSync("git config user.email test@example.com", { cwd: tmpDir });
+    execSync("git config user.name Test", { cwd: tmpDir });
+    execSync("git add -A", { cwd: tmpDir });
+    execSync('git commit -q -m init', { cwd: tmpDir });
+
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    const result = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "fallback test",
+        "--slug",
+        "fallback-test",
+        "--assignee",
+        "test-dev",
+        "--no-start",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("could not resolve the repository's default branch");
+    expect(result.stderr).toContain("solo-branch");
+    const taskDir = fs
+      .readdirSync(path.join(tmpDir, ".suncode", "tasks"))
+      .find((entry) => entry.includes("fallback-test"));
+    const taskJson = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", "tasks", taskDir as string, "task.json"),
+        "utf-8",
+      ),
+    ) as { base_branch: string };
+    expect(taskJson.base_branch).toBe("solo-branch");
+  });
+
+  it("[upstream-v0.6.8] task.py create --base-branch overrides detection", () => {
+    setupTaskRepo();
+    execSync("git init -q -b solo-branch", { cwd: tmpDir });
+    execSync("git config user.email test@example.com", { cwd: tmpDir });
+    execSync("git config user.name Test", { cwd: tmpDir });
+    execSync("git add -A", { cwd: tmpDir });
+    execSync('git commit -q -m init', { cwd: tmpDir });
+
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    const result = spawnSync(
+      pythonCmd,
+      [
+        taskScriptPath,
+        "create",
+        "explicit base branch test",
+        "--slug",
+        "explicit-base-branch-test",
+        "--assignee",
+        "test-dev",
+        "--base-branch",
+        "release/1.0",
+        "--no-start",
+      ],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("could not resolve the repository's default branch");
+    const taskDir = fs
+      .readdirSync(path.join(tmpDir, ".suncode", "tasks"))
+      .find((entry) => entry.includes("explicit-base-branch-test"));
+    const taskJson = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, ".suncode", "tasks", taskDir as string, "task.json"),
+        "utf-8",
+      ),
+    ) as { base_branch: string };
+    expect(taskJson.base_branch).toBe("release/1.0");
+  });
+
+  it("[upstream-v0.6.8] validate and archive warn about a stale recorded branch", () => {
+    setupTaskRepo();
+    execSync("git init -q -b main", { cwd: tmpDir });
+    execSync("git config user.email test@example.com", { cwd: tmpDir });
+    execSync("git config user.name Test", { cwd: tmpDir });
+    execSync("git add -A", { cwd: tmpDir });
+    execSync('git commit -q -m init', { cwd: tmpDir });
+
+    const taskJsonPath = path.join(
+      tmpDir,
+      ".suncode",
+      "tasks",
+      "issue-106",
+      "task.json",
+    );
+    const data = JSON.parse(fs.readFileSync(taskJsonPath, "utf-8"));
+    data.branch = "task/deleted-branch-does-not-exist";
+    fs.writeFileSync(taskJsonPath, JSON.stringify(data, null, 2));
+
+    const taskScriptPath = path.join(tmpDir, ".suncode", "scripts", "task.py");
+    const validateResult = spawnSync(
+      pythonCmd,
+      [taskScriptPath, "validate", ".suncode/tasks/issue-106"],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+    expect(validateResult.stdout).toContain(
+      "recorded branch 'task/deleted-branch-does-not-exist' no longer exists locally",
+    );
+
+    const archiveResult = spawnSync(
+      pythonCmd,
+      [taskScriptPath, "archive", ".suncode/tasks/issue-106", "--no-commit"],
+      { cwd: tmpDir, encoding: "utf-8", env: sessionEnv() },
+    );
+    expect(archiveResult.stderr).toContain(
+      "recorded branch 'task/deleted-branch-does-not-exist' no longer exists locally",
     );
   });
 });
@@ -4949,7 +5594,7 @@ describe("regression: cli_adapter platform support (beta.9, beta.13, beta.16)", 
     expect(taskStore as string).toContain('".omp"');
     expect(taskStore as string).toContain('_CODEX_CONFIG_DIR = ".codex"');
     expect(taskStore as string).toContain(
-      'get_codex_dispatch_mode(repo_root) == "sub-agent"',
+      'get_codex_dispatch_mode(repo_root) == "auto"',
     );
     expect(commonConfig).toContain("def get_codex_dispatch_mode");
     // Seed row is self-describing and has no `file` field (so consumers skip
@@ -5571,15 +6216,6 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
         ".gemini/agents/suncode-check.md",
       ],
       nonPreludeAgents: [".gemini/agents/suncode-research.md"],
-    },
-    {
-      id: "codex" as const,
-      hooksDir: ".codex/hooks",
-      preludeAgents: [
-        ".codex/agents/suncode-implement.toml",
-        ".codex/agents/suncode-check.toml",
-      ],
-      nonPreludeAgents: [".codex/agents/suncode-research.toml"],
     },
     {
       id: "copilot" as const,

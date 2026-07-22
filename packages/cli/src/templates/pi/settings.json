@@ -3,9 +3,6 @@
   "extensions": [
     "./extensions/suncode/index.ts"
   ],
-  "skills": [
-    "./skills"
-  ],
   "prompts": [
     "./prompts"
   ]

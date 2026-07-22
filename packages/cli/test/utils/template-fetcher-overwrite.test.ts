@@ -41,6 +41,9 @@ describe("downloadWithStrategy overwrite safety", () => {
     await expect(
       downloadWithStrategy("some/path", destDir, "overwrite"),
     ).resolves.toBe(true);
+    expect(downloadTemplateMock.mock.calls[0]?.[1]).not.toHaveProperty(
+      "preferOffline",
+    );
     expect(fs.readFileSync(path.join(destDir, "template.md"), "utf-8")).toBe(
       "TEMPLATE",
     );
@@ -76,6 +79,45 @@ describe("downloadWithStrategy overwrite safety", () => {
     await expect(
       downloadWithStrategy("some/path", destDir, "overwrite"),
     ).resolves.toBe(true);
+    expect(fs.readFileSync(path.join(destDir, "template.md"), "utf-8")).toBe(
+      "TEMPLATE",
+    );
+  });
+
+  it("uses network-first giget defaults for a fresh download", async () => {
+    fs.rmSync(destDir, { recursive: true, force: true });
+    downloadTemplateMock.mockImplementation(
+      async (_source: string, options: { dir: string }) => {
+        fs.mkdirSync(options.dir, { recursive: true });
+        fs.writeFileSync(path.join(options.dir, "template.md"), "TEMPLATE");
+      },
+    );
+
+    await expect(
+      downloadWithStrategy("some/path", destDir, "skip"),
+    ).resolves.toBe(true);
+    expect(downloadTemplateMock.mock.calls[0]?.[1]).not.toHaveProperty(
+      "preferOffline",
+    );
+  });
+
+  it("uses network-first giget defaults for append", async () => {
+    downloadTemplateMock.mockImplementation(
+      async (_source: string, options: { dir: string }) => {
+        fs.mkdirSync(options.dir, { recursive: true });
+        fs.writeFileSync(path.join(options.dir, "template.md"), "TEMPLATE");
+      },
+    );
+
+    await expect(
+      downloadWithStrategy("some/path", destDir, "append"),
+    ).resolves.toBe(true);
+    expect(downloadTemplateMock.mock.calls[0]?.[1]).not.toHaveProperty(
+      "preferOffline",
+    );
+    expect(fs.readFileSync(path.join(destDir, "user.md"), "utf-8")).toBe(
+      "MY OWN SPEC",
+    );
     expect(fs.readFileSync(path.join(destDir, "template.md"), "utf-8")).toBe(
       "TEMPLATE",
     );

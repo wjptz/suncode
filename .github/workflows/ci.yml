@@ -50,11 +50,13 @@ jobs:
       - name: Lint (core + cli)
         run: pnpm lint
 
-      - name: Test (core + cli)
-        run: pnpm test
-
+      # Integration tests spawn the real CLI through packages/cli/bin/suncode.js,
+      # which imports dist/ and therefore requires build output first.
       - name: Build (core then cli)
         run: pnpm build
+
+      - name: Test (core + cli)
+        run: pnpm test
 
       - name: Verify build output
         run: |
