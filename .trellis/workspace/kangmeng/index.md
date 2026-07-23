@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-07-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~701 | Active |
+| `journal-1.md` | ~738 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-07-23 | 发布 Suncode v0.6.11 | `5c23605e`, `be52b89e`, `275618c6`, `a1f7f36f` | `main` |
 | 20 | 2026-07-23 | Align with Trellis v0.6.8 | `a7b2ff82e83ed024230428684b9ee1dd48b45cfc`, `4c0571777b065ebab7a92b071d115f4e5838961f`, `0a9164501cbb87624b9e7a0edd80b1ce3ec5257c` | `main` |
 | 19 | 2026-07-20 | 建立 Trellis 上游持续同步 Skill | `b4d62c4` | `main` |
 | 18 | 2026-07-20 | 采纳 Trellis v0.6.6/v0.6.7 上游更新 | `842056c` | `main` |

@@ -699,3 +699,40 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: 发布 Suncode v0.6.11
+
+**Date**: 2026-07-23
+**Task**: 发布 Suncode v0.6.11
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+完成 v0.6.11 manifest 与双语 changelog，按子模块到主仓顺序推送，在 LF 干净 clone 中构建、测试并执行官方 patch release；GitHub Actions 发布成功，Core/CLI 0.6.11 与 latest 已通过公共 npm 和全新安装验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5c23605e` | (see git log) |
+| `be52b89e` | (see git log) |
+| `275618c6` | (see git log) |
+| `a1f7f36f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
