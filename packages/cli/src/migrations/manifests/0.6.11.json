@@ -1,0 +1,9 @@
+{
+  "version": "0.6.11",
+  "description": "Patch release: adds Grok Build, Kimi Code, and Oh My Pi integrations, machine-readable platform discovery, Codex channel sandbox controls, ZCode memory search, and stronger update, uninstall, channel, and template safety.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Enhancements:**\n- feat(platforms): add `suncode init --grok`, `--kimi`, and `--omp` with platform-specific commands, skills, agents, and the Oh My Pi extension.\n- feat(cli): add `suncode platforms --json` for machine-readable configured-platform discovery.\n- feat(channel): add Codex worker `--sandbox` modes for `suncode channel spawn`.\n- feat(mem): add read-only ZCode SQLite session listing, search, context, and extraction to `suncode mem`.\n\n**Fixes:**\n- fix(channel): reject unsafe channel and worker path segments and process worker stdout serially with backpressure.\n- fix(update): preserve user-owned migration directories, prevent legacy templates from replacing canonical content, and write generated files and registries atomically.\n- fix(uninstall): preserve user instructions around the managed `AGENTS.md` block and refuse unattended deletion of uncommitted `.suncode` specs, tasks, or journals without an explicit override.\n- fix(templates): download overwrite candidates before replacing the current spec so failed downloads leave existing content intact.",
+  "migrations": [],
+  "notes": "No `--migrate` required.\n\nRun `suncode update` after upgrading to receive the refreshed workflow assets and safety fixes. Configure a new integration with `suncode init --grok`, `suncode init --kimi`, or `suncode init --omp`.\n\nZCode sessions are available through `suncode mem` when its SQLite store exists.\n\nInstall: `npm install -g @wjptz/suncode`"
+}
