@@ -40,7 +40,7 @@
 - [x] 从公共 npm 全新安装并核验 CLI/Core 版本、精确依赖、manifest 与 CLI 可执行性。
 - [x] fetch 原工作区远端引用并确认用户脏路径状态未被改变；未强制更新当前工作树。
 - [x] 将 workflow、tag、npm、提交与验证结果写入任务记录。
-- [ ] 完成 Trellis 质量门、journal 与任务归档。
+- [x] 完成 Trellis 质量门、journal 与任务归档。
 
 ## 计划验证命令族
 
