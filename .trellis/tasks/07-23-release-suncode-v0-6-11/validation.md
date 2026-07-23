@@ -7,6 +7,7 @@
 - 中文 changelog：`docs-site/zh/changelog/v0.6.11.mdx`
 - docs-site 导航：`docs-site/docs.json`
 - docs-site 本地提交：`2e7e5dc`（`docs: add v0.6.11 changelog`）
+- 主仓发布准备提交：`5c23605e`（`chore(release): prepare v0.6.11`）
 
 ## 定向检查
 
@@ -36,6 +37,7 @@
 | `release-preflight verify-packed-cli` | 通过；packed CLI 精确依赖 Core 0.6.10 |
 | `release-preflight publish-plan --json` | 通过；当前 0.6.10 两包均已在 npm，符合发布前基线 |
 | CLI `npm pack --dry-run --json` | 通过；904 entries |
+| 主仓 staged GitNexus `detect_changes` | `low`，9 files，0 symbols，0 affected processes |
 
 目标版本 0.6.11 的 package version、精确 Core 依赖和 tag 一致性将在最终批准后的干净 clone 中，由现有 release 脚本 bump 后再次验证。
 
@@ -63,9 +65,26 @@
 - `package.json` 与 `pnpm-lock.yaml` 均不在 `git status --short` 中。
 - 后续烟测直接从 tarball 安装到已有临时目录，不再执行 `npm init`。
 
-## 尚待 go/no-go 前完成
+## Go/no-go 快照
 
-- 主仓 staged GitNexus `detect_changes`。
-- 主仓精确 release-prep 提交。
-- 三个仓库最终 status/log/remote reachability 核验。
-- 最终外部动作清单与用户发布批准。
+本地发布准备与验证结论：**GO**。正式发布仍须单独取得用户最终批准。
+
+下表是写入本记录前的发布内容快照；提交本记录会在主仓再追加一个只含任务证据的本地提交，因此最终 ahead 数会增加 1，但发布内容提交、两个 gitlink 与所有外部基线不变。
+
+| 仓库 | 本地目标 | 相对 `origin/main` | 工作树 | 远端可达性 |
+| --- | --- | --- | --- | --- |
+| 主仓发布内容 | `5c23605e` | ahead 12 | 仅保留 8 个用户原有脏路径；发布文件均已提交 | 否 |
+| docs-site | `2e7e5dc` | ahead 2 | clean | 否 |
+| marketplace | `62f7bf9` | ahead 2 | clean | 否 |
+
+- 三个仓库均已在 fresh fetch 后运行 `git diff --check` 与 `git diff --cached --check`，通过。
+- 主仓 `HEAD` 不在 `origin/main`；docs-site 与 marketplace 的 `HEAD` 也不在各自 `origin/main`。
+- 主仓 gitlink 精确指向 docs-site `2e7e5dcb5649aa9d15e0d423cd384bfcb9798e96` 和 marketplace `62f7bf94df10557936b01708f431013c66538d22`。
+- npm 当前基线未变化：`@wjptz/suncode` 和 `@wjptz/suncode-core` 的版本与 `latest` 均为 `0.6.10`。
+- 本地不存在 `v0.6.11` tag；尚未执行任何 push、tag 或 npm publish。
+
+正式批准后的外部动作顺序：先推送 docs-site，再推送 marketplace，随后推送主仓；从 `origin/main` 创建全新递归 clone，在其中运行官方稳定 patch release；最后监控 GitHub Actions，并验证两个 npm 包及 `latest` 均到达 `0.6.11`。如任一步失败，停止后续阶段，保留已成功事实并按 `design.md` 的恢复策略报告，不移动或重打 tag。
+
+## 剩余批准门
+
+- 等待用户对上述外部写操作给出单独、明确的最终发布批准。

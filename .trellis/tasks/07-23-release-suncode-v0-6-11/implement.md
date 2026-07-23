@@ -8,7 +8,7 @@
 - [x] 更新 docs-site `docs.json` 的双语 Changelog 组与 navbar 入口。
 - [x] 运行 JSON、MDX、双语结构、manifest continuity 与稳定 patch 等价文档注册检查。
 - [x] 审查 docs-site diff，并在子仓创建精确发布提交 `2e7e5dc`。
-- [ ] 审查主仓 manifest 与 gitlink diff，并创建精确发布准备提交。
+- [x] 审查主仓 manifest 与 gitlink diff，并创建精确发布准备提交 `5c23605e`。
 - [x] 不触碰 marketplace 内容；复核其既有 ahead 2 提交是 v0.6.11 所需的可达前置。
 
 ## Phase 2：完整发布前验证（不改变远端）
@@ -17,10 +17,10 @@
 - [x] 运行 root lint、typecheck、test、build。
 - [x] 运行 release preflight、版本一致性和 pack 计划检查。
 - [x] 构建两包 tarball，核对内容并执行临时安装/CLI 烟测。
-- [ ] 在主仓运行 GitNexus `detect_changes`，确认影响范围仅为 manifest、文档 gitlink 与任务记录。
-- [ ] 对主仓、docs-site、marketplace 分别运行 `git diff --check`、status、log 与远端可达性核验。
+- [x] 在主仓运行 GitNexus `detect_changes`：`low`，9 files，0 symbols，0 affected processes。
+- [x] 对主仓、docs-site、marketplace 分别运行 `git diff --check`、status、log 与远端可达性核验。
 - [x] 对照发布前快照确认 8 个用户脏路径未改变、未暂存、未提交。
-- [ ] 汇总 go/no-go：提交 SHA、测试结果、目标 tag、将推送的分支/提交、CI 发布后果与失败处理。
+- [x] 汇总 go/no-go：本地质量门为 GO；三个仓库的待发提交均尚未从对应 `origin/main` 可达，须获最终批准后按子仓到主仓顺序推送。
 
 ## Phase 3：正式发布（需单独最终批准）
 
