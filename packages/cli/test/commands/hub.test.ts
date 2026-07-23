@@ -3292,6 +3292,56 @@ describe("hub commands", () => {
     expect(loadHubManifest(taskDir).artifacts).toEqual({});
   });
 
+  it("submit-spec reports the sanitized upload URL when an upload fails", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    fs.mkdirSync(path.join(tmpDir, ".suncode", "spec", "cli"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, ".suncode", "spec", "cli", "contract.md"),
+      "# Contract\n",
+      "utf-8",
+    );
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch,
+    });
+
+    const { fetch: baseFetch } = createMockFetch();
+    const failingFetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Response(null, { status: 405 });
+      }
+      const response = await baseFetch(url, init);
+      if (String(url).endsWith("/artifact-upload-sessions")) {
+        const data = (await response.json()) as {
+          uploads: { uploadUrl: string }[];
+        };
+        data.uploads = data.uploads.map((upload) => ({
+          ...upload,
+          uploadUrl: `${upload.uploadUrl}?X-Amz-Signature=secret-query&token=login-token`,
+        }));
+        return jsonResponse(data);
+      }
+      return response;
+    });
+
+    await expect(
+      submitSpec({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        fetch: failingFetch,
+      }),
+    ).rejects.toThrow(
+      /^Hub artifact upload failed for \.suncode\/spec\/cli\/contract\.md: PUT https:\/\/hub\.example\.test\/api\/v1\/projects\/proj_123\/artifact-upload-sessions\/UPLOAD-9001\/uploads\/\.suncode\/spec\/cli\/contract\.md\?\[redacted\] -> HTTP 405$/,
+    );
+  });
+
   it("submit-subtasks sends only the current task structured subtasks to Hub", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);

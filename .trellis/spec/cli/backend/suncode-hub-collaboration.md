@@ -1131,6 +1131,15 @@ SUNCODE_HUB_DEBUG_PLAN_READY=true
 - Debug logs must not include authorization headers, login tokens, raw request
   bodies, artifact contents, passwords, or signed URL query strings. URLs with
   query strings must redact the query as `?[redacted]`.
+- Artifact upload 请求默认不打印成功路径的调试输出。上传收到非 2xx HTTP
+  响应时，面向用户的错误必须包含实际 HTTP method 和脱敏后的 upload URL，
+  使 `submit-plan`、`submit-spec`、`submit-completion`、`submit-review`
+  失败时能够定位反向代理路由问题，同时不暴露签名查询参数：
+
+```text
+Hub artifact upload failed for <path>: <METHOD> <sanitizedUrl> -> HTTP <status>
+```
+
 - When a network request throws before a response exists, debug mode should
   rethrow a user-facing error that includes the method and sanitized URL, e.g.:
 
@@ -1148,6 +1157,8 @@ plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-st
 | Request throws before response | Log the failing request and rethrow with method + sanitized URL |
 | URL has query parameters | Log path plus `?[redacted]`, not the raw query string |
 | Headers or body contain secrets | Do not log headers or bodies |
+| Artifact upload 返回非 2xx | 抛出包含 artifact path、method、脱敏 URL 和 HTTP status 的错误 |
+| Artifact upload 在非 debug 模式下成功 | 不增加常规 request 日志 |
 
 ### 5. Good/Base/Bad Cases
 
@@ -1155,12 +1166,16 @@ plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-st
   `preflight-start` failed while calling
   `/api/v1/projects/{projectId}/tasks/{remoteTaskId}/preflight-start`.
 - Good: a signed upload URL is logged without its query string.
+- Good: `submit-spec` 收到上传目标的 HTTP 405 时，错误直接显示实际
+  `PUT` 路径，并把签名查询参数显示为 `?[redacted]`。
 - Base: without `--debug`, `plan-ready` behaves exactly like the normal
   high-level command and only prints the final command result or top-level
   error.
 - Bad: a generic `Error: fetch failed` gives no failing step or URL.
 - Bad: debug logs print `Authorization`, JWTs, artifact contents, or signed URL
   query parameters.
+- Bad：artifact upload 只报告 `HTTP 405`，迫使用户猜测实际访问了 Hub
+  返回的哪个 upload target。
 
 ### 6. Tests Required
 
@@ -1168,6 +1183,10 @@ plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-st
   - logs step start/success/failure lines
   - logs method and sanitized URL for preflight
   - rethrows a network failure with method and sanitized URL
+- Artifact upload 回归测试：
+  - 非 2xx upload 错误包含 artifact path、HTTP method、脱敏 URL 和
+    response status
+  - 错误中不存在签名查询参数的名称和值
 - Existing plan-ready success and stop-before-preflight tests must continue to
   pass without debug logging requirements.
 
@@ -1187,8 +1206,12 @@ parameters.
 #### Correct
 
 ```ts
-logger(`[hub plan-ready] request POST ${sanitizeDebugUrl(url)}`);
-throw new Error(`plan-ready request failed: POST ${sanitizeDebugUrl(url)}: ${message}`);
+logger(`[hub plan-ready] request POST ${sanitizeUrlForLogging(url)}`);
+throw new Error(`plan-ready request failed: POST ${sanitizeUrlForLogging(url)}: ${message}`);
+
+throw new Error(
+  `Hub artifact upload failed for ${artifact.path}: ${method} ${sanitizeUrlForLogging(uploadUrl)} -> HTTP ${response.status}`,
+);
 ```
 
 This gives enough context to debug routing and connectivity while keeping
