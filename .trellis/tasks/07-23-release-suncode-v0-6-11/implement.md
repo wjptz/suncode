@@ -24,22 +24,22 @@
 
 ## Phase 3：正式发布（需单独最终批准）
 
-- [ ] 推送 `docs-site/main`，确认目标 SHA 可从远端获取。
-- [ ] 推送 `marketplace/main`，确认目标 SHA 可从远端获取。
-- [ ] 推送主仓 `main` 的全部准备提交，确认远端包含两个 gitlink。
-- [ ] 从 `origin/main` 创建全新递归临时 clone，确认主仓和子模块 clean、SHA 一致。
-- [ ] 在临时 clone 安装锁定依赖并复核 release preflight。
-- [ ] 执行官方稳定 patch release 命令，由脚本生成版本提交、`v0.6.11` tag 并 push。
-- [ ] 记录版本提交与 tag SHA，确认 tag 触发 publish workflow。
+- [x] 推送 `docs-site/main`，确认目标 SHA `2e7e5dcb` 可从远端获取。
+- [x] 推送 `marketplace/main`，确认目标 SHA `62f7bf94` 可从远端获取。
+- [x] 推送主仓 `main` 的全部准备提交，确认远端包含两个 gitlink。
+- [x] 从 `origin/main` 创建全新递归临时 clone，确认主仓和子模块 clean、SHA 一致；正式执行 clone 显式使用 LF checkout。
+- [x] 在临时 clone 安装锁定依赖、运行 root build 并复核 release preflight。
+- [x] 执行官方稳定 patch release 命令，由脚本生成版本提交 `275618c6`、`v0.6.11` tag 并 push。
+- [x] 记录版本提交与 tag SHA，确认 tag 触发 publish workflow `29973603976`。
 
 ## Phase 4：监控与发布后验证
 
-- [ ] 监控 publish workflow 到最终成功；失败时按 design.md 的阶段化策略停止并报告。
-- [ ] 验证 GitHub tag `v0.6.11` 与主仓提交关系。
-- [ ] 验证 npm 两包均存在 `0.6.11`，且 `latest` 同步指向 `0.6.11`。
-- [ ] 对发布的 tarball 做最终元数据/CLI 可用性核验。
-- [ ] fetch 原工作区远端引用并确认用户脏路径状态未被改变；不强制更新当前工作树。
-- [ ] 将 workflow、tag、npm、提交与验证结果写入任务记录。
+- [x] 监控 publish workflow 到最终成功；所有 publish 与公共 npm 回读步骤通过。
+- [x] 验证 GitHub tag `v0.6.11`、`origin/main` 与版本提交均为 `275618c62b5f9b93b0cca6babc9e4e2c0dbcdc68`。
+- [x] 验证 npm 两包均存在 `0.6.11`，且 `latest` 同步指向 `0.6.11`。
+- [x] 从公共 npm 全新安装并核验 CLI/Core 版本、精确依赖、manifest 与 CLI 可执行性。
+- [x] fetch 原工作区远端引用并确认用户脏路径状态未被改变；未强制更新当前工作树。
+- [x] 将 workflow、tag、npm、提交与验证结果写入任务记录。
 - [ ] 完成 Trellis 质量门、journal 与任务归档。
 
 ## 计划验证命令族

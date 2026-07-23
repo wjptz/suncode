@@ -231,6 +231,82 @@ Build must precede test because integration tests spawn the real CLI through
 `packages/cli/bin/suncode.js`, which imports `dist/`. Core publishes first
 because the CLI package depends on the exact core version in the packed artifact.
 
+## Scenario: WSL 中创建可复现的干净发布 clone
+
+### 1. Scope / Trigger
+
+- 从 WSL、Windows Git 或设置了全局 `core.autocrlf=true` 的环境执行正式发布时，必须使用本节流程。
+- 从全新 clone 运行 `pnpm release` 前，必须先完成 workspace build；仅执行 `pnpm install --frozen-lockfile` 不足以满足 CLI 测试的运行时依赖。
+
+### 2. Signatures
+
+```bash
+git -c core.autocrlf=false clone <origin> <release-dir>
+git -C <release-dir> config core.autocrlf false
+git -C <release-dir> -c core.autocrlf=false submodule update --init --recursive
+
+cd <release-dir>
+pnpm install --frozen-lockfile
+pnpm build
+timeout 60s pnpm test
+pnpm release
+```
+
+### 3. Contracts
+
+- `HEAD` 必须等于待发布的 `origin/main`，所有 submodule SHA 必须等于主仓 gitlink，并且三个仓库的工作树均为 clean。
+- 主仓和 submodule checkout 必须保持仓库字节中的 LF；不得让全局 `core.autocrlf=true` 把 Markdown/frontmatter 模板转换为 CRLF。
+- `pnpm build` 必须先构建 Core，再构建 CLI。CLI 测试会通过 `@wjptz/suncode-core/{channel,task,mem}` package exports 加载 Core `dist`，不能依赖另一个工作区遗留的构建产物。
+- 版本 bump 和 tag 创建只能发生在 manifest、build、测试与 release preflight 全部成功之后。
+- npm registry 的瞬时超时只允许在 tag 前重试；不得把超时当作“版本不存在”并继续发布。
+
+### 4. Validation & Error Matrix
+
+| 条件 | 典型症状 | 处理 |
+|---|---|---|
+| checkout 被转为 CRLF | frontmatter、精确模板或正则断言批量失败，例如收到 `---\r\n` | 放弃该临时执行路径；用 `core.autocrlf=false` 新建 clone，不在脏 checkout 上批量改行尾 |
+| Core 尚未 build | CLI 测试报告 `Cannot find package '@wjptz/suncode-core/channel'`、`/task` 或 `/mem` | 运行 root `pnpm build`，再以 60 秒硬超时重跑完整测试 |
+| submodule SHA 不可从远端获取 | CI checkout 报 `not our ref` | tag 前先推送对应 submodule，并重新核验远端可达性 |
+| npm registry 查询 `ETIMEDOUT` | `publish-plan` 或 manifest continuity 非零退出 | 保持版本/tag 不变，串行重试；只有成功读到明确基线后才能继续 |
+| release clone 出现 tracked diff | `git status --short` 非空 | 停止 release，查明来源；禁止让 `release.js` 的 pre-release sweep 收入意外文件 |
+
+### 5. Good/Base/Bad Cases
+
+- Good：显式 LF clone → recursive submodule checkout → frozen install → root build → 完整测试 → `pnpm release`。
+- Base：原环境已经是 `core.autocrlf=false`，仍显式设置 clone-local 配置并验证模板文件没有 CRLF。
+- Bad：在 `core.autocrlf=true` 的新 clone 中直接运行 release，或只安装依赖就运行 CLI 测试，再把这些可复现失败误判为产品回归。
+
+### 6. Tests Required
+
+- `file` 或等价字节检查确认至少一个严格 frontmatter 模板没有 CRLF。
+- `git status --short --branch` 确认 release clone clean，`git submodule status` 确认 SHA 与 gitlink 一致。
+- `pnpm build` 成功后，`timeout 60s pnpm test` 必须通过；断言 Core/CLI 测试文件和测试数符合当前基线。
+- release 后断言 `origin/main`、`v<version>` 与版本提交 SHA 一致，两个 package version 与 tag 一致。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```bash
+git clone --recurse-submodules <origin> release
+cd release
+pnpm install --frozen-lockfile
+pnpm release
+```
+
+#### Correct
+
+```bash
+git -c core.autocrlf=false clone <origin> release
+git -C release config core.autocrlf false
+git -C release -c core.autocrlf=false submodule update --init --recursive
+cd release
+pnpm install --frozen-lockfile
+pnpm build
+timeout 60s pnpm test
+pnpm release
+```
+
 ---
 
 ## Artifact verification for release-claimed assets

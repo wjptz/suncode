@@ -87,4 +87,51 @@
 
 ## 剩余批准门
 
-- 等待用户对上述外部写操作给出单独、明确的最终发布批准。
+- 用户已明确批准正式发布 v0.6.11；批准后的外部动作已按既定顺序完成。
+
+## 正式发布结果
+
+| 证据 | 结果 |
+| --- | --- |
+| docs-site 远端 | `origin/main=2e7e5dcb5649aa9d15e0d423cd384bfcb9798e96` |
+| marketplace 远端 | `origin/main=62f7bf94df10557936b01708f431013c66538d22` |
+| 主仓发布准备远端 | `origin/main=be52b89e3f723123a0ce8210a5014913a1260f44`，随后由官方 release 追加版本提交 |
+| 版本提交 | `275618c62b5f9b93b0cca6babc9e4e2c0dbcdc68`（`0.6.11`） |
+| Git tag | `v0.6.11`，精确指向 `275618c62b5f9b93b0cca6babc9e4e2c0dbcdc68` |
+| 主仓远端 | 发布时 `origin/main=275618c62b5f9b93b0cca6babc9e4e2c0dbcdc68`，包含 tag 提交 |
+| GitHub Actions | `Publish to npm` run `29973603976`，结论 `success` |
+| npm Core | `@wjptz/suncode-core@0.6.11` 可见，`latest=0.6.11` |
+| npm CLI | `@wjptz/suncode@0.6.11` 可见，`latest=0.6.11` |
+
+Workflow URL：<https://github.com/wjptz/suncode/actions/runs/29973603976>
+
+GitHub Actions 中以下关键步骤全部成功：版本/tag 对齐、typecheck、build、Core/CLI tests、packed CLI 精确依赖、publish plan、Core publish、CLI publish，以及公共 npm registry 回读。
+
+## 干净 clone 发布恢复记录
+
+第一次递归 clone 继承全局 `core.autocrlf=true`，将严格模板文件检出为 CRLF，导致 frontmatter 与字节级模板断言失败。失败发生在版本 bump/tag 前；clone 保持 clean，版本仍为 0.6.10，没有创建或推送 tag。
+
+第二个 clone 显式使用 `core.autocrlf=false`，行尾相关失败全部消失。仅安装依赖后，CLI 测试仍因 Core `dist` 尚未构建而无法解析 `@wjptz/suncode-core/{channel,task,mem}`。运行 root `pnpm build` 后：
+
+- CLI：63 files / 1512 tests 全部通过。
+- 官方 release 内 Core：20 files / 332 passed / 1 skipped。
+- 官方 release 内 CLI：63 files / 1512 passed。
+- 官方 release 在 60 秒硬超时内完成版本 bump、commit、tag 与 push。
+
+这两个可复现前置已写入 `.trellis/spec/cli/backend/release-process.md`：正式 clone 必须显式保持 LF，并在 CLI 测试/release 前先运行 root build。
+
+## 发布包独立验证
+
+- `release-preflight verify-npm --package all`：通过；两个包及 `latest` 均为 0.6.11。
+- 从公共 registry 全新安装 `@wjptz/suncode@0.6.11`：通过，共安装 58 packages。
+- 安装后的元数据：CLI `0.6.11`、Core `0.6.11`、CLI 对 Core 的依赖精确为 `0.6.11`。
+- 发布包包含 `dist/migrations/manifests/0.6.11.json`。
+- `suncode --version`：`0.6.11`。
+- `suncode platforms --json`：在空项目中正常返回 `{ "platforms": [] }`。
+
+## 原工作区发布后核验
+
+- 已 fetch `origin/main` 与 tags；原工作区本地 `main` 仅落后版本提交 1 个 commit，未执行 merge/reset/checkout。
+- 原工作区识别到 `v0.6.11`，且 tag SHA 为 `275618c62b5f9b93b0cca6babc9e4e2c0dbcdc68`。
+- 5 个 `.claude/skills/gitnexus/**/SKILL.md`、`AGENTS.md`、`CLAUDE.md` 与未跟踪 `drafts/kb-design-philosophy.md` 的脏状态保持不变。
+- 没有新增 staged 文件，也没有把用户改动收入任何发布提交。
