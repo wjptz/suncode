@@ -26,6 +26,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Suncode Hub Collaboration](./suncode-hub-collaboration.md) | Optional Hub team collaboration commands, hooks, payloads, idempotency, and current-task ownership boundaries | Done |
 | [Platform Integration](./platform-integration.md) | How to add support for new AI CLI platforms | Done |
 | [Workflow-State Contract](./workflow-state-contract.md) | Per-turn breadcrumb subsystem: marker syntax, status writers, lifecycle events, reachability | Done |
+| [Execution DAG Runtime Contract](./execution-dag-contract.md) | `execution.json`、recovery、scope、NodeResult、final barrier 与 dispatch envelope 的可执行安全契约 | Done |
 | [Configurator Shared Helpers](./configurator-shared.md) | `configurators/shared.ts` public surface: placeholder substitution, write helpers, pull-based prelude, cross-configurator invariants | Done |
 | [`tl mem` Command](./commands-mem.md) | Cross-platform AI session memory: subcommands, schemas, indexing, cleaning pipeline, search relevance | Done |
 | [`trellis upgrade` Command](./commands-upgrade.md) | Global CLI self-upgrade wrapper: channel inference, npm invocation, failure behavior | Done |
@@ -53,6 +54,7 @@ Before writing backend code, read the relevant guidelines based on your task:
 - Editing `packages/cli/src/commands/hub/**`, Hub lifecycle hooks, Hub payloads, or Hub workflow steps → [suncode-hub-collaboration.md](./suncode-hub-collaboration.md)
 - Adding any native (`.node` / C++ / `node-gyp`) dependency → [quality-guidelines.md "Native dependency policy"](./quality-guidelines.md)
 - Editing `[workflow-state:STATUS]` breadcrumb blocks / `task.json.status` writers / lifecycle hooks → [workflow-state-contract.md](./workflow-state-contract.md)
+- Editing execution DAG plans, scheduler state, recovery, NodeResult, final barriers, or claim dispatch → [execution-dag-contract.md](./execution-dag-contract.md)
 - Editing `configurators/shared.ts` (placeholder substitution, write helpers, prelude injection) → [configurator-shared.md](./configurator-shared.md)
 - Editing `commands/mem.ts` (subcommands, platform indexers, search/cleaning pipeline) → [commands-mem.md](./commands-mem.md)
 - Editing `commands/upgrade.ts` (global CLI self-upgrade behavior) → [commands-upgrade.md](./commands-upgrade.md)

@@ -6289,6 +6289,8 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
           const content = fs.readFileSync(path.join(tmpDir, file), "utf-8");
           expect(content).toContain("Active task:");
           expect(content).toContain("dispatch prompt");
+          expect(content).toContain("Suncode context manifest:");
+          expect(content).toContain("task.py execution context");
         }
       });
 
@@ -7169,6 +7171,48 @@ describe("regression: configSectionsAdded (issue-codex-dispatch-mode)", () => {
     const tmpl = fs.readFileSync(tmplPath, "utf-8");
     expect(tmpl).toContain("# Codex (dispatch behavior)");
     expect(tmpl).toContain("dispatch_mode");
+  });
+
+  it("[config-sections] manifest 0.6.12 declares the execution DAG section", () => {
+    const manifestPath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "src",
+      "migrations",
+      "manifests",
+      "0.6.12.json",
+    );
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as {
+      version: string;
+      migrations: unknown[];
+      configSectionsAdded?: {
+        file: string;
+        sentinel: string;
+        sectionHeading: string;
+      }[];
+    };
+    expect(manifest.version).toBe("0.6.12");
+    expect(manifest.migrations).toEqual([]);
+    expect(manifest.configSectionsAdded).toEqual([
+      {
+        file: ".suncode/config.yaml",
+        sentinel: "execution:",
+        sectionHeading: "Execution DAG",
+      },
+    ]);
+
+    const templatePath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "src",
+      "templates",
+      "suncode",
+      "config.yaml",
+    );
+    const template = fs.readFileSync(templatePath, "utf-8");
+    expect(template).toContain("# Execution DAG");
+    expect(template).toContain("require_for_complex_tasks");
+    expect(template).toContain("max_concurrency");
   });
 });
 

@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 
 import { Command } from "commander";
+import inquirer from "inquirer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -629,6 +630,91 @@ describe("hub init login logout state", () => {
     expect(resolved).toMatchObject({
       enabled: true,
       autoPullSpec: false,
+    });
+  });
+
+  it("interactive init offers and reuses the global API URL without asking for a developer ID", async () => {
+    writeGlobalHubConfig(homeDir, "https://global.example.test/");
+    const promptQuestionNames: string[][] = [];
+    vi.spyOn(inquirer, "prompt").mockImplementation(((questions: unknown) => {
+      const list = Array.isArray(questions) ? questions : [questions];
+      const names = list.map(
+        (question) => (question as { name?: string }).name ?? "",
+      );
+      promptQuestionNames.push(names);
+      if (names.includes("reuseGlobalApiBaseUrl")) {
+        return Promise.resolve({ reuseGlobalApiBaseUrl: true });
+      }
+      return Promise.resolve({
+        pinProjectApiBaseUrl: false,
+        projectId: "proj_reuse",
+        startReviewPolicy: "confirm",
+        autoPullSpec: true,
+      });
+    }) as never);
+
+    const result = await hubInit({ cwd: tmpDir, homeDir });
+
+    expect(result.message).toContain("https://global.example.test");
+    expect(promptQuestionNames).toHaveLength(2);
+    expect(promptQuestionNames[0]).toEqual(["reuseGlobalApiBaseUrl"]);
+    expect(promptQuestionNames[1]).not.toContain("apiBaseUrl");
+    expect(promptQuestionNames[1]).not.toContain("developerId");
+    const projectConfig = fs.readFileSync(
+      path.join(tmpDir, ".suncode", "config.yaml"),
+      "utf-8",
+    );
+    expect(projectConfig).toContain("projectId: proj_reuse");
+    expect(projectConfig).toContain("developerId: null");
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(homeDir, ".suncode", "hub", "config.json"),
+          "utf-8",
+        ),
+      ),
+    ).toEqual({
+      version: 1,
+      defaultApiBaseUrl: "https://global.example.test",
+    });
+  });
+
+  it("interactive init asks for a replacement URL when global URL reuse is declined", async () => {
+    writeGlobalHubConfig(homeDir, "https://old.example.test");
+    const promptQuestionNames: string[][] = [];
+    vi.spyOn(inquirer, "prompt").mockImplementation(((questions: unknown) => {
+      const list = Array.isArray(questions) ? questions : [questions];
+      const names = list.map(
+        (question) => (question as { name?: string }).name ?? "",
+      );
+      promptQuestionNames.push(names);
+      if (names.includes("reuseGlobalApiBaseUrl")) {
+        return Promise.resolve({ reuseGlobalApiBaseUrl: false });
+      }
+      return Promise.resolve({
+        apiBaseUrl: "https://new.example.test/",
+        pinProjectApiBaseUrl: false,
+        projectId: "proj_replace",
+        startReviewPolicy: "confirm",
+        autoPullSpec: true,
+      });
+    }) as never);
+
+    await hubInit({ cwd: tmpDir, homeDir });
+
+    expect(promptQuestionNames).toHaveLength(2);
+    expect(promptQuestionNames[1]).toContain("apiBaseUrl");
+    expect(promptQuestionNames[1]).not.toContain("developerId");
+    expect(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(homeDir, ".suncode", "hub", "config.json"),
+          "utf-8",
+        ),
+      ),
+    ).toEqual({
+      version: 1,
+      defaultApiBaseUrl: "https://new.example.test",
     });
   });
 
@@ -3488,6 +3574,75 @@ describe("hub commands", () => {
         },
       ],
     });
+  });
+
+  it("submit-subtasks projects execution.json in stable topological order before implement.md", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    fs.writeFileSync(
+      path.join(taskDir, "implement.md"),
+      "- [ ] [P0] Wrong fallback: execution.json must take precedence.\n",
+      "utf-8",
+    );
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "06-30-payment-retry",
+      defaults: {},
+      nodes: [
+        {
+          id: "integration",
+          priority: "P2",
+          name: "Integrate branches",
+          description: "Run the final integration barrier.",
+          dependsOn: ["left", "right"],
+        },
+        {
+          id: "root",
+          priority: "P1",
+          name: "Build shared model",
+          description: "Create the shared contract.",
+          dependsOn: [],
+        },
+        {
+          id: "right",
+          priority: "P1",
+          name: "Implement right branch",
+          description: "Implement the independent right branch.",
+          dependsOn: ["root"],
+        },
+        {
+          id: "left",
+          priority: "P1",
+          name: "Implement left branch",
+          description: "Implement the independent left branch.",
+          dependsOn: ["root"],
+        },
+      ],
+      barriers: { final: ["integration"] },
+    });
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({ cwd: tmpDir, homeDir, taskJsonPath, fetch });
+    const { calls, fetch: trackedFetch } = createMockFetch();
+    const result = await submitSubtasks({
+      cwd: tmpDir,
+      homeDir,
+      taskJsonPath,
+      fetch: trackedFetch,
+    });
+
+    expect(result.status).toBe("submitted");
+    const submission = calls.find((call) => call.url.endsWith("/subtasks"));
+    const payload = JSON.parse(submission?.body ?? "{}") as {
+      subtasks: { name: string }[];
+    };
+    expect(payload.subtasks.map((subtask) => subtask.name)).toEqual([
+      "Build shared model",
+      "Implement right branch",
+      "Implement left branch",
+      "Integrate branches",
+    ]);
+    expect(submission?.body).not.toContain("Wrong fallback");
   });
 
   it("hub plan-ready submits plan, generated subtasks, and preflight start", async () => {

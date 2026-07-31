@@ -1,0 +1,16 @@
+{
+  "version": "0.6.12",
+  "description": "Adds a platform-neutral execution DAG, safe ready-set fan-out, recoverable runtime state, and deterministic node-level sub-agent context manifests.",
+  "breaking": false,
+  "recommendMigrate": false,
+  "changelog": "**Execution DAG:**\n- feat(execution): add strict `execution.json` v1 planning, validation, conservative legacy normalization, stable plan hashing, safe conflict-aware ready sets, wait-any scheduling, NodeResult v1, and recoverable runtime state.\n- feat(context): generate bounded, redacted, auditable node context manifests with direct dependency results; hook push and agent pull use the same immutable artifact.\n- feat(subagents): dispatch all safe ready nodes before waiting, use clean Codex `fork_turns=none` contexts, and keep inline on the same graph with concurrency one.\n- feat(hub): preserve Hub subtasks v1 payload/hash while projecting display nodes from `execution.json` when no explicit `subtasks.json` override exists.\n\n**Compatibility:**\n- Existing tasks without `execution.json` continue through conservative serial normalization. Complex-task enforcement is snapshotted only into newly-created tasks when `require_for_complex_tasks` is enabled.\n- `execution.dag.enabled: false` restores the legacy serial workflow without deleting reviewed plans.",
+  "migrations": [],
+  "configSectionsAdded": [
+    {
+      "file": ".suncode/config.yaml",
+      "sentinel": "execution:",
+      "sectionHeading": "Execution DAG"
+    }
+  ],
+  "notes": "No `--migrate` required. Run `suncode update` after upgrading so workflow, hooks, agents, scripts, and the additive execution configuration section are refreshed. Review `execution.dag.require_for_complex_tasks` before enabling enforcement for newly-created complex tasks."
+}

@@ -161,6 +161,8 @@ describe("codex two-channel sub-agent context (native SubagentStart)", () => {
 
       expect(content).toContain("<!-- suncode-hook-injected -->");
       expect(content).toContain("Active task: <path>");
+      expect(content).toContain("Suncode context manifest: <path>");
+      expect(content).toContain("task.py execution context <path>");
       expect(content).toContain("multi_agent = false");
     });
   }

@@ -6,8 +6,9 @@
  * Uses OpenCode's tool.execute.before hook.
  */
 
-import { existsSync, readdirSync } from "fs"
-import { join } from "path"
+import { createHash } from "crypto"
+import { existsSync, readFileSync, readdirSync } from "fs"
+import { isAbsolute, join, relative, resolve } from "path"
 import { SuncodeContext, debugLog } from "../lib/suncode-context.js"
 
 // Supported subagent types
@@ -18,11 +19,107 @@ const AGENTS_REQUIRE_TASK = ["implement", "check"]
 // prompt. Mirrors the contract in workflow.md's [workflow-state:in_progress]
 // breadcrumb so multi-window users can disambiguate which task is targeted.
 const ACTIVE_TASK_HINT_RE = /^\s*Active task:\s*(\S+)\s*$/m
+const CONTEXT_MANIFEST_HINT_RE = /^\s*Suncode context manifest:\s*(\S+)\s*$/m
+const MANIFEST_ROLES_BY_AGENT = {
+  implement: ["implement", "fix", "integration"],
+  check: ["check"],
+  research: ["research"],
+}
 
 function extractActiveTaskHint(prompt) {
   if (typeof prompt !== "string" || !prompt) return null
   const match = prompt.match(ACTIVE_TASK_HINT_RE)
   return match ? match[1].trim() : null
+}
+
+function extractContextManifestHint(prompt) {
+  if (typeof prompt !== "string" || !prompt) return null
+  const match = prompt.match(CONTEXT_MANIFEST_HINT_RE)
+  return match ? match[1].trim() : null
+}
+
+function isWithin(root, candidate) {
+  const rel = relative(root, candidate)
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map(key => [key, canonicalize(value[key])]),
+    )
+  }
+  return value
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex")
+}
+
+function readExecutionContext(projectRoot, prompt, subagentType, sessionId) {
+  const manifestRef = extractContextManifestHint(prompt)
+  if (!manifestRef) return null
+  const root = resolve(projectRoot)
+  const runtimeRoot = resolve(root, ".suncode", ".runtime", "execution")
+  const manifestPath = resolve(root, manifestRef)
+  if (!isWithin(runtimeRoot, manifestPath) || !manifestPath.endsWith("manifest.json")) {
+    throw new Error(`Execution context manifest is outside runtime: ${manifestRef}`)
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"))
+  if (!manifest || manifest.version !== 1 || typeof manifest.manifestHash !== "string") {
+    throw new Error("Execution context manifest version/hash is invalid")
+  }
+  const hashInput = { ...manifest }
+  delete hashInput.manifestHash
+  const expectedHash = sha256(JSON.stringify(canonicalize(hashInput)))
+  if (expectedHash !== manifest.manifestHash) {
+    throw new Error("Execution context manifest hash mismatch")
+  }
+  if (!MANIFEST_ROLES_BY_AGENT[subagentType]?.includes(manifest.role)) {
+    throw new Error(`Execution context role ${manifest.role} does not match ${subagentType}`)
+  }
+  if (
+    manifest.run?.parentSession &&
+    sessionId &&
+    manifest.run.parentSession !== sessionId
+  ) {
+    throw new Error("Execution context parent session mismatch")
+  }
+  const contentRef = manifest.content?.path
+  if (typeof contentRef !== "string" || !contentRef) {
+    throw new Error("Execution context content path is invalid")
+  }
+  const contentPath = resolve(manifestPath, "..", contentRef)
+  if (!isWithin(resolve(manifestPath, ".."), contentPath)) {
+    throw new Error("Execution context content path escapes its attempt directory")
+  }
+  const contentBuffer = readFileSync(contentPath)
+  if (sha256(contentBuffer) !== manifest.content.sha256) {
+    throw new Error("Execution context content hash mismatch")
+  }
+  if (
+    !Number.isInteger(manifest.budget?.usedBytes) ||
+    !Number.isInteger(manifest.budget?.totalBytes) ||
+    manifest.budget.usedBytes !== contentBuffer.byteLength ||
+    manifest.budget.usedBytes > manifest.budget.totalBytes
+  ) {
+    throw new Error("Execution context content budget mismatch")
+  }
+  const taskPath = manifest.task?.path
+  if (typeof taskPath !== "string" || !taskPath) {
+    throw new Error("Execution context task path is invalid")
+  }
+  const resolvedTaskPath = resolve(root, taskPath)
+  if (!isWithin(resolve(root, ".suncode", "tasks"), resolvedTaskPath)) {
+    throw new Error("Execution context task path is outside .suncode/tasks")
+  }
+  return {
+    taskPath,
+    content: contentBuffer.toString("utf-8"),
+  }
 }
 
 /**
@@ -293,6 +390,22 @@ ${originalPrompt}
   return templates[agentType] || originalPrompt
 }
 
+function buildExecutionPrompt(originalPrompt, context) {
+  return `<!-- suncode-hook-injected -->
+# Suncode Execution Node
+
+The immutable, budgeted node context is below. Its objective, boundaries,
+validation, and result protocol override legacy role defaults.
+
+${context}
+
+---
+
+## Dispatch Request
+
+${originalPrompt}`
+}
+
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`
 }
@@ -419,11 +532,17 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
           //      inference so multi-window users can disambiguate)
           //   3. Single-session fallback — only when exactly 1 session
           //      runtime file exists locally
-          let taskDir = null
-          let taskSource = null
+          const executionContext = readExecutionContext(
+            ctx.directory,
+            originalPrompt,
+            subagentType,
+            input?.sessionID,
+          )
+          let taskDir = executionContext?.taskPath || null
+          let taskSource = executionContext ? "execution-manifest" : null
 
           const contextKey = ctx.getContextKey(input)
-          if (contextKey) {
+          if (!taskDir && contextKey) {
             const context = ctx.readContext(contextKey)
             const exactRef = ctx.normalizeTaskRef(context?.current_task || "")
             if (exactRef) {
@@ -477,19 +596,21 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
           const isFinish = originalPrompt.toLowerCase().includes("[finish]")
 
           // Get context based on agent type
-          let context = ""
-          switch (subagentType) {
-            case "implement":
-              context = getImplementContext(ctx, taskDir)
-              break
-            case "check":
-              context = isFinish
-                ? getFinishContext(ctx, taskDir)
-                : getCheckContext(ctx, taskDir)
-              break
-            case "research":
-              context = getResearchContext(ctx, taskDir)
-              break
+          let context = executionContext?.content || ""
+          if (!executionContext) {
+            switch (subagentType) {
+              case "implement":
+                context = getImplementContext(ctx, taskDir)
+                break
+              case "check":
+                context = isFinish
+                  ? getFinishContext(ctx, taskDir)
+                  : getCheckContext(ctx, taskDir)
+                break
+              case "research":
+                context = getResearchContext(ctx, taskDir)
+                break
+            }
           }
 
           if (!context) {
@@ -497,7 +618,9 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
             return
           }
 
-          const newPrompt = buildPrompt(subagentType, originalPrompt, context, isFinish)
+          const newPrompt = executionContext
+            ? buildExecutionPrompt(originalPrompt, context)
+            : buildPrompt(subagentType, originalPrompt, context, isFinish)
 
           // Mutate args in-place — whole-object replacement does NOT work for the task tool
           // because the runtime holds a local reference to the same args object.

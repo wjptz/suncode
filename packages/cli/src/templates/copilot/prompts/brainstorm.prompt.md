@@ -61,9 +61,10 @@ Use a concise title from the user's request. Use a slug without a date prefix. `
 4. If a user-owned decision remains, ask the single highest-value question, include your recommendation and trade-off, then stop. Do not perform implementation work in the same turn.
 5. After each user answer, update `prd.md`, recompute the decision inventory, and repeat from step 2.
 6. When no user-owned decision remains, create or update `design.md` and `implement.md` for complex tasks.
-7. Run the requirement convergence gate, then the PRD convergence pass.
-8. Present the final planning summary and stop. Do not run `task.py start` or edit product code in the same turn.
-9. Only a subsequent user message that explicitly approves the latest planning summary authorizes `task.py start` and implementation. If the artifacts change materially after approval, repeat the final review.
+7. When `execution.dag.enabled`, create or update `execution.json` for every task, then validate it. A lightweight task may use one node; a complex task must expose real dependency-safe parallelism rather than copying checklist order into a serial chain.
+8. Run the requirement convergence gate, then the PRD convergence pass.
+9. Present the final planning summary and stop. Do not run `task.py start` or edit product code in the same turn.
+10. Only a subsequent user message that explicitly approves the latest planning summary authorizes `task.py start` and implementation. If the artifacts change materially after approval, repeat the final review.
 
 Do not invent a project-specific product/spec hierarchy. If the repository already has product, domain, or spec docs, use them. If it does not, proceed with the evidence that exists.
 
@@ -120,7 +121,7 @@ The final planning summary must show Goal, In Scope, Out of Scope, Acceptance Cr
 - important trade-offs
 - operational or rollback considerations
 
-`implement.md` records execution planning for complex tasks:
+`implement.md` records the human-readable implementation view for complex tasks:
 
 - ordered implementation checklist
 - validation commands
@@ -136,7 +137,19 @@ Every complex task `implement.md` must include a parseable implementation checkl
 - [ ] [P2] 子任务名称: 子任务说明
 ```
 
-Use one checklist item per execution subtask. This section is the default source for Hub structured subtasks; write `subtasks.json` only when the derived checklist needs an explicit override.
+Use one checklist item per user-visible implementation unit. This section remains the human/legacy serial view and Hub fallback; it is not the canonical dependency graph. Write `subtasks.json` only when the Hub display projected from `execution.json` (or the checklist fallback) needs an explicit v1 override.
+
+When `.suncode/config.yaml` has `execution.dag.enabled: true`, `execution.json` is required planning output for every task entering implementation:
+
+- Start with `python3 ./.suncode/scripts/task.py execution scaffold <task-dir>`, then replace its conservative serial assumptions where the evidence proves work is independent.
+- Give each node a stable ID, role, objective, real `dependsOn`, read/write scopes, logical resources, validation, minimal context selection, and executor/isolation/retry policy.
+- Preserve independent roots and siblings. Do not add dependencies merely because one checklist item appears later in `implement.md`.
+- Shared-worktree `check` / `research` nodes are read-only; route fixes through one dependent `fix` node.
+- Make every branch feed a final integration/global-check barrier.
+- Run `python3 ./.suncode/scripts/task.py execution validate <task-dir>` before final review.
+- Inline and sub-agent modes use the same DAG. Inline simply executes it with concurrency one.
+
+`subtasks.json` is only a Hub v1 display override (`priority`, `name`, `description`); never put DAG dependencies, scopes, context, or runtime state in it.
 
 Lightweight tasks may have only `prd.md`. Complex tasks must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
 
@@ -166,6 +179,7 @@ Before declaring planning ready:
 - Repository-answerable questions have already been answered through inspection.
 - Blocking open questions are empty.
 - Complex tasks have `design.md` and `implement.md`.
+- When execution DAG is enabled, `execution.json` exists and validates; complex graphs expose real dependencies/scopes/resources and end at a final integration/check barrier.
 - Sub-agent-dispatch tasks have real curated entries in both `implement.jsonl` and `check.jsonl`; seed-only manifests are not ready.
 - The latest final planning summary has been presented to the user.
 - In a subsequent message, the user explicitly approved that summary for implementation.

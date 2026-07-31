@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -707,6 +708,75 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     expect(output.args.prompt).not.toContain("Demo PRD");
   });
 
+  it("uses a verified execution manifest before session and legacy task context", async () => {
+    writeSessionFile(dir, "opencode_stranger", ".suncode/tasks/demo-task");
+    const attemptDir = join(
+      dir,
+      ".suncode",
+      ".runtime",
+      "execution",
+      "manifest-task",
+      "run-1",
+      "contexts",
+      "node-a",
+      "1",
+    );
+    mkdirSync(attemptDir, { recursive: true });
+    const content = "# Suncode execution node\n\nUNIQUE_MANIFEST_CONTEXT_73\n";
+    writeFileSync(join(attemptDir, "content.md"), content, "utf-8");
+    const manifestBase = {
+      version: 1,
+      task: {
+        id: "manifest-task",
+        path: ".suncode/tasks/demo-task",
+        planHash: "plan-hash",
+      },
+      run: {
+        id: "run-1",
+        nodeId: "node-a",
+        attempt: 1,
+        parentSession: "stranger",
+      },
+      role: "implement",
+      budget: {
+        perSourceBytes: 65_536,
+        totalBytes: 262_144,
+        usedBytes: Buffer.byteLength(content),
+      },
+      content: {
+        path: "content.md",
+        sha256: sha256ForTest(content),
+      },
+    };
+    const manifest = {
+      ...manifestBase,
+      manifestHash: sha256ForTest(JSON.stringify(canonicalizeForTest(manifestBase))),
+    };
+    const manifestPath = join(attemptDir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+    const manifestRef = manifestPath.slice(dir.length + 1).replaceAll("\\", "/");
+    const output: TaskToolOutput = {
+      args: {
+        subagent_type: "suncode-implement",
+        prompt: [
+          "Active task: .suncode/tasks/demo-task",
+          `Suncode context manifest: ${manifestRef}`,
+          "",
+          "run the node",
+        ].join("\n"),
+      },
+    };
+
+    await hooks["tool.execute.before"](
+      { tool: "task", sessionID: "stranger" },
+      output,
+    );
+
+    expect(output.args.prompt).toContain("# Suncode Execution Node");
+    expect(output.args.prompt).toContain("UNIQUE_MANIFEST_CONTEXT_73");
+    expect(output.args.prompt).not.toContain("Demo PRD");
+  });
+
   it("emits the suncode-hook-injected marker for research agent too", async () => {
     const output: TaskToolOutput = {
       args: {
@@ -921,3 +991,22 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     });
   });
 });
+
+function canonicalizeForTest(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeForTest);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [
+          key,
+          canonicalizeForTest((value as Record<string, unknown>)[key]),
+        ]),
+    );
+  }
+  return value;
+}
+
+function sha256ForTest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}

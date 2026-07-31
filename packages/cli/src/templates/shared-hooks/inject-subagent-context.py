@@ -28,6 +28,7 @@ warnings.filterwarnings("ignore")
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,16 @@ AGENT_RESEARCH = "suncode-research"
 AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, AGENT_CHECK)
 # All supported agents
 AGENTS_ALL = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_RESEARCH)
+
+_CONTEXT_MANIFEST_HINT_RE = re.compile(
+    r"^\s*Suncode context manifest:\s*(\S+)\s*$",
+    re.MULTILINE,
+)
+_MANIFEST_ROLES_BY_AGENT = {
+    AGENT_IMPLEMENT: ("implement", "fix", "integration"),
+    AGENT_CHECK: ("check",),
+    AGENT_RESEARCH: ("research",),
+}
 
 
 def find_repo_root(start_path: str) -> str | None:
@@ -361,6 +372,68 @@ def get_finish_context(repo_root: str, task_dir: str) -> str:
     return get_check_context(repo_root, task_dir)
 
 
+def _context_manifest_hint(input_data: dict, prompt: str = "") -> str:
+    for key in ("context_manifest", "contextManifest"):
+        value = _string_value(input_data.get(key))
+        if value:
+            return value
+    match = _CONTEXT_MANIFEST_HINT_RE.search(prompt)
+    return match.group(1).strip() if match else ""
+
+
+def get_execution_manifest_context(
+    repo_root: str,
+    input_data: dict,
+    prompt: str,
+    subagent_type: str,
+) -> tuple[str, str] | None:
+    """Load the canonical node manifest when a dispatch explicitly references it."""
+    manifest_ref = _context_manifest_hint(input_data, prompt)
+    if not manifest_ref:
+        return None
+    scripts_dir = Path(repo_root) / DIR_WORKFLOW / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.execution_context import (  # type: ignore[import-not-found]
+            read_node_context_manifest,
+        )
+
+        manifest, content = read_node_context_manifest(
+            Path(repo_root),
+            manifest_ref,
+        )
+    except Exception as exc:
+        print(
+            f"[inject-subagent-context] WARN: invalid execution manifest: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    role = manifest.get("role")
+    if role not in _MANIFEST_ROLES_BY_AGENT.get(subagent_type, ()):
+        print(
+            f"[inject-subagent-context] WARN: manifest role {role!r} does not match {subagent_type}",
+            file=sys.stderr,
+        )
+        return None
+    task = manifest.get("task")
+    task_path = task.get("path") if isinstance(task, dict) else None
+    if not isinstance(task_path, str) or not task_path:
+        return None
+    run = manifest.get("run")
+    parent_session = run.get("parentSession") if isinstance(run, dict) else None
+    event_parent_session = _string_value(
+        input_data.get("session_id") or input_data.get("sessionId")
+    )
+    if parent_session and event_parent_session and parent_session != event_parent_session:
+        print(
+            "[inject-subagent-context] WARN: manifest parent session does not match hook event",
+            file=sys.stderr,
+        )
+        return None
+    return task_path, content
+
+
 
 def build_implement_prompt(original_prompt: str, context: str) -> str:
     """Build complete prompt for Implement"""
@@ -395,6 +468,23 @@ All the information you need has been prepared for you:
 - Do NOT execute git commit, only code modifications
 - Follow all dev specs injected above
 - Report list of modified/created files when done"""
+
+
+def build_execution_prompt(original_prompt: str, context: str) -> str:
+    """Build a role-neutral prompt around the canonical execution-node contract."""
+    return f"""<!-- suncode-hook-injected -->
+# Suncode Execution Node
+
+The immutable, budgeted node context is below. Its objective, boundaries,
+validation, and result protocol override legacy role defaults.
+
+{context}
+
+---
+
+## Dispatch Request
+
+{original_prompt}"""
 
 
 def build_check_prompt(original_prompt: str, context: str) -> str:
@@ -646,6 +736,30 @@ def _handle_codex_subagent_start(input_data: dict) -> None:
     if not repo_root:
         return
 
+    manifest_ref = _context_manifest_hint(input_data)
+    manifest_context = get_execution_manifest_context(
+        repo_root,
+        input_data,
+        "",
+        subagent_type,
+    )
+    if manifest_ref and manifest_context is None:
+        return
+    if manifest_context is not None:
+        task_dir, context = manifest_context
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStart",
+                "additionalContext": build_codex_subagent_context(
+                    subagent_type,
+                    task_dir,
+                    context,
+                ),
+            }
+        }
+        print(json.dumps(output, ensure_ascii=False))
+        return
+
     task_dir = get_current_task(
         repo_root,
         {"session_id": parent_session_id},
@@ -825,8 +939,22 @@ def main():
     if not repo_root:
         sys.exit(0)
 
-    # Get current task directory (research doesn't require it)
-    task_dir = get_current_task(repo_root, input_data)
+    manifest_ref = _context_manifest_hint(input_data, original_prompt)
+    manifest_context = get_execution_manifest_context(
+        repo_root,
+        input_data,
+        original_prompt,
+        subagent_type,
+    )
+    if manifest_ref and manifest_context is None:
+        sys.exit(0)
+
+    # Get current task directory only when no explicit node manifest is present.
+    task_dir = (
+        manifest_context[0]
+        if manifest_context is not None
+        else get_current_task(repo_root, input_data)
+    )
 
     # implement/check need task directory
     if subagent_type in AGENTS_REQUIRE_TASK:
@@ -837,11 +965,20 @@ def main():
         if not os.path.exists(task_dir_full):
             sys.exit(0)
 
+    if manifest_context is not None:
+        context = manifest_context[1]
+        new_prompt = build_execution_prompt(original_prompt, context)
+    else:
+        context = ""
+        new_prompt = ""
+
     # Check for [finish] marker in prompt (check agent with finish context)
     is_finish_phase = "[finish]" in original_prompt.lower()
 
     # Get context and build prompt based on subagent type
-    if subagent_type == AGENT_IMPLEMENT:
+    if manifest_context is not None:
+        pass
+    elif subagent_type == AGENT_IMPLEMENT:
         assert task_dir is not None  # validated above
         context = get_implement_context(repo_root, task_dir)
         new_prompt = build_implement_prompt(original_prompt, context)

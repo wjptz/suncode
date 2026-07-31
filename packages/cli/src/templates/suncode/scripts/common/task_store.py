@@ -24,6 +24,7 @@ from pathlib import Path
 
 from .config import (
     get_codex_dispatch_mode,
+    get_execution_dag_settings,
     get_packages,
     get_session_auto_commit,
     is_monorepo,
@@ -397,6 +398,16 @@ def cmd_create(args: argparse.Namespace) -> int:
         )
 
     hub_meta = _hub_meta_from_args(args)
+    execution_settings = get_execution_dag_settings(repo_root)
+    task_meta: dict[str, object] = {
+        "execution": {
+            "policyVersion": 1,
+            "dagEnabled": execution_settings.enabled,
+            "requireForComplexTasks": execution_settings.require_for_complex_tasks,
+        }
+    }
+    if hub_meta:
+        task_meta["hub"] = hub_meta
     task_data = {
         "id": slug,
         "name": args.title,
@@ -421,7 +432,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "parent": None,
         "relatedFiles": [],
         "notes": "",
-        "meta": {"hub": hub_meta} if hub_meta else {},
+        "meta": task_meta,
     }
 
     write_json(task_json_path, task_data)
@@ -504,7 +515,14 @@ def cmd_create(args: argparse.Namespace) -> int:
     print(colored("后续步骤:", Colors.BLUE), file=sys.stderr)
     print("  - 补充 prd.md 的需求、约束和验收标准，优先使用简体中文", file=sys.stderr)
     print("  - 轻量任务可以只保留 PRD", file=sys.stderr)
-    print("  - 复杂任务在 task.py start 前补充 design.md 和 implement.md", file=sys.stderr)
+    print(
+        "  - 进入实施前生成并审查 execution.json；轻量任务可以是一节点 DAG",
+        file=sys.stderr,
+    )
+    print(
+        "  - 复杂任务在 task.py start 前补充 design.md、implement.md 和真实依赖 DAG",
+        file=sys.stderr,
+    )
     if seeded_jsonl:
         print(
             "  - 子代理需要上下文时，整理 implement.jsonl / check.jsonl 作为 spec/research 清单",

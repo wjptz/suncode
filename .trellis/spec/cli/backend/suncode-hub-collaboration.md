@@ -22,6 +22,16 @@ suncode hub logout [--api-base-url <url>]
 suncode hub state [--json]
 ```
 
+`suncode hub init` 的交互契约：
+
+- 未传 `--api-base-url` 且全局 `defaultApiBaseUrl` 存在时，先询问是否复用；
+  默认选择复用。
+- 接受复用时不再显示 URL 输入；拒绝时才要求输入新的全局 URL。
+- 普通交互不询问 `developerId`。只有显式 `--developer-id <id>` 才写入项目级
+  Hub 成员 / 用户 ID override。
+- `--yes` 保持非交互契约：仍必须显式提供 `--api-base-url` 和
+  `--project-id`，不产生确认问题。
+
 Hub login API:
 
 ```http
@@ -124,6 +134,9 @@ Authentication contract:
 - Login state is global but bound to the normalized `apiBaseUrl`.
 - State is project-local because it depends on the current project, active task,
   and available work.
+- 项目 `hub.developerId` 是高级 override，不是初始化必填身份。未显式传
+  `--developer-id` 时保持 `null`，运行期优先使用对应 Hub 登录 session 的
+  `developerId`；不要把用户私有的 session ID 自动固化进团队共享配置。
 
 Hook contract:
 
@@ -185,12 +198,18 @@ Spec sync config:
 | `SUNCODE_HUB_TOKEN` is set | Ignore it; behavior depends only on login session |
 | `hub.autoPullSpec` is missing | Resolve as `true` |
 | `hub.autoPullSpec: false` | `hub intake` skips automatic spec pull; manual `pull-spec` still works |
+| 交互初始化存在全局 URL，用户确认复用 | 跳过 URL 输入，并继续使用已规范化的全局 URL |
+| 交互初始化存在全局 URL，用户拒绝复用 | 显示 URL 输入；成功初始化后以新 URL 更新全局默认值 |
+| 交互初始化未传 `--developer-id` | 不显示 Developer ID 问题；项目配置写 `developerId: null`，运行期从登录 session 解析 |
+| 显式传 `--developer-id <id>` | 保留兼容行为，将该值写为项目级 override |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: Two projects resolve to the same normalized Hub base URL and reuse one
   global login session while keeping separate `.suncode/.runtime/hub-state.json`
   files.
+- Good：第二个项目执行交互式 `hub init` 时确认复用已有全局 URL，只需继续输入
+  project ID 和项目策略，不重复输入 URL 或 Developer ID。
 - Good: `hub state` writes available-work counts and current-task classification
   without caching credentials.
 - Good: `<hub-state>` says `workflow:primary` and uses `Flow add-on:` so the
@@ -204,11 +223,17 @@ Spec sync config:
   `mark-started` without explicit Hub binding.
 - Bad: A command silently falls back to `SUNCODE_HUB_TOKEN` when no login
   session exists.
+- Bad：`hub init` 明明能读取全局 `defaultApiBaseUrl`，却仍无条件要求重新输入 URL。
+- Bad：把已登录用户的 `developerId` 自动写进可提交的项目配置，导致其他成员继承
+  错误的个人身份。
 
 ### 6. Tests Required
 
 - Command tests for `hub init`:
   - writes global `defaultApiBaseUrl`
+  - 交互模式检测到全局 URL 时先询问复用；确认后不再出现 URL 输入
+  - 拒绝复用时要求新 URL，并更新全局默认值
+  - 普通交互不出现 `developerId` 问题；显式 `--developer-id` 仍可写 override
   - writes/replaces only the project `hub:` block
   - preserves unrelated project config
   - supports optional project `apiBaseUrl` override
@@ -277,6 +302,31 @@ if (currentTask.state === "local-only") {
 
 This keeps auth explicit, bound to the resolved Hub service, and scoped to tasks
 that actually carry Hub metadata.
+
+#### Wrong：重复收集可推导身份
+
+```ts
+await inquirer.prompt([
+  { name: "apiBaseUrl", type: "input" },
+  { name: "developerId", type: "input" },
+]);
+```
+
+这会忽略已经持久化的全局 URL，并让普通用户手工输入可由登录 session 解析的
+Hub 成员 ID。
+
+#### Correct：先复用全局 URL，身份只接受显式 override
+
+```ts
+const globalUrl = loadGlobalHubConfig({ homeDir }).defaultApiBaseUrl;
+const apiBaseUrl = globalUrl && (await confirmReuse(globalUrl))
+  ? globalUrl
+  : await promptForApiBaseUrl();
+const developerId = options.developerId;
+```
+
+这让全局 URL 真正承担跨项目默认值职责，同时保留 `developerId` 协议字段和高级
+override，不把登录用户身份写入共享配置。
 
 ## Scenario: Hub Finish Binding Ensure
 

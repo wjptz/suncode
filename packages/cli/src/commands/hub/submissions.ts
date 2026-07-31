@@ -790,10 +790,97 @@ function buildTaskSummary(
 
 function readStructuredSubtasks(taskDir: string): HubStructuredSubtask[] {
   const filePath = path.join(taskDir, "subtasks.json");
-  if (!fs.existsSync(filePath)) return readGeneratedSubtasks(taskDir);
+  if (fs.existsSync(filePath)) {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+    const subtasks = extractSubtasks(parsed);
+    return subtasks.map(normalizeSubtask);
+  }
+  const executionPath = path.join(taskDir, "execution.json");
+  if (fs.existsSync(executionPath)) {
+    return readExecutionSubtasks(executionPath);
+  }
+  return readGeneratedSubtasks(taskDir);
+}
+
+function readExecutionSubtasks(filePath: string): HubStructuredSubtask[] {
   const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
-  const subtasks = extractSubtasks(parsed);
-  return subtasks.map(normalizeSubtask);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("execution.json must be an object.");
+  }
+  const plan = parsed as Record<string, unknown>;
+  if (plan.version !== 1) {
+    throw new Error("execution.json version must equal 1.");
+  }
+  if (!Array.isArray(plan.nodes) || plan.nodes.length === 0) {
+    throw new Error("execution.json must contain a non-empty nodes array.");
+  }
+
+  const nodes = plan.nodes.map((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`execution.json nodes[${index}] must be an object.`);
+    }
+    const record = value as Record<string, unknown>;
+    const id = requiredExecutionString(record.id, `nodes[${index}].id`);
+    const dependsOn = record.dependsOn;
+    if (
+      !Array.isArray(dependsOn) ||
+      dependsOn.some((dependency) => typeof dependency !== "string" || !dependency.trim())
+    ) {
+      throw new Error(
+        `execution.json nodes[${index}].dependsOn must be an array of non-empty strings.`,
+      );
+    }
+    return {
+      id,
+      dependsOn: dependsOn.map((dependency) => String(dependency).trim()),
+      subtask: normalizeSubtask(record),
+      order: index,
+    };
+  });
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  if (nodeMap.size !== nodes.length) {
+    throw new Error("execution.json contains duplicate node ids.");
+  }
+  const followers = new Map(nodes.map((node) => [node.id, [] as string[]]));
+  const indegree = new Map(nodes.map((node) => [node.id, node.dependsOn.length]));
+  for (const node of nodes) {
+    for (const dependency of node.dependsOn) {
+      if (!nodeMap.has(dependency)) {
+        throw new Error(
+          `execution.json node ${node.id} depends on unknown node ${dependency}.`,
+        );
+      }
+      followers.get(dependency)?.push(node.id);
+    }
+  }
+
+  const ready = nodes.filter((node) => indegree.get(node.id) === 0);
+  const ordered: typeof nodes = [];
+  while (ready.length > 0) {
+    ready.sort((left, right) => left.order - right.order);
+    const current = ready.shift();
+    if (!current) break;
+    ordered.push(current);
+    for (const followerId of followers.get(current.id) ?? []) {
+      const remaining = (indegree.get(followerId) ?? 0) - 1;
+      indegree.set(followerId, remaining);
+      if (remaining === 0) {
+        const follower = nodeMap.get(followerId);
+        if (follower) ready.push(follower);
+      }
+    }
+  }
+  if (ordered.length !== nodes.length) {
+    throw new Error("execution.json dependency graph contains a cycle.");
+  }
+  return ordered.map((node) => node.subtask);
+}
+
+function requiredExecutionString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`execution.json ${field} must be a non-empty string.`);
+  }
+  return value.trim();
 }
 
 function readGeneratedSubtasks(taskDir: string): HubStructuredSubtask[] {

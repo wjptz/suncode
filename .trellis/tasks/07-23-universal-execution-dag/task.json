@@ -1,0 +1,28 @@
+{
+  "id": "universal-execution-dag",
+  "name": "universal-execution-dag",
+  "title": "统一执行 DAG 与 Subagent 上下文编排",
+  "description": "将 Suncode 全平台任务规划统一为可执行 DAG，由 inline、native subagent 与 channel 执行器按能力消费；为每个 DAG 节点构造最小、角色化、可审计、可回退的 subagent 上下文包，并保持旧任务、Hub subtasks 和平台集成兼容。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": "cli",
+  "priority": "P1",
+  "creator": "kangmeng",
+  "assignee": "kangmeng",
+  "createdAt": "2026-07-23",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-31-execution-dag-review-fixes"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

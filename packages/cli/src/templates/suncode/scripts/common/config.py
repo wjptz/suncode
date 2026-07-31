@@ -8,6 +8,7 @@ Reads settings from .suncode/config.yaml with sensible defaults.
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .paths import DIR_WORKFLOW, get_repo_root
@@ -168,6 +169,19 @@ DEFAULT_SESSION_COMMIT_MESSAGE = "chore: record journal"
 DEFAULT_MAX_JOURNAL_LINES = 2000
 DEFAULT_SESSION_AUTO_COMMIT = True
 DEFAULT_CODEX_DISPATCH_MODE = "inline"
+DEFAULT_EXECUTION_DAG_ENABLED = True
+DEFAULT_EXECUTION_DAG_REQUIRE_FOR_COMPLEX_TASKS = False
+DEFAULT_EXECUTION_DAG_MAX_CONCURRENCY = 6
+
+
+@dataclass(frozen=True)
+class ExecutionDagSettings:
+    """Validated execution-DAG settings used by planning and scheduling."""
+
+    enabled: bool = DEFAULT_EXECUTION_DAG_ENABLED
+    require_for_complex_tasks: bool = DEFAULT_EXECUTION_DAG_REQUIRE_FOR_COMPLEX_TASKS
+    max_concurrency: int = DEFAULT_EXECUTION_DAG_MAX_CONCURRENCY
+
 
 CONFIG_FILE = "config.yaml"
 
@@ -288,6 +302,91 @@ def get_codex_dispatch_mode(repo_root: Path | None = None) -> str:
         file=sys.stderr,
     )
     return "inline"
+
+
+def get_execution_dag_settings(repo_root: Path | None = None) -> ExecutionDagSettings:
+    """Return validated ``execution.dag`` settings with safe defaults.
+
+    Invalid sections or values never enable unsafe behavior. The DAG stays
+    enabled by default, complex-task enforcement stays opt-in, and concurrency
+    falls back to the conservative built-in limit.
+    """
+    config = _load_config(repo_root)
+    execution = config.get("execution")
+    if execution is None:
+        return ExecutionDagSettings()
+    if not isinstance(execution, dict):
+        print(
+            "[WARN] invalid execution config; using execution DAG defaults",
+            file=sys.stderr,
+        )
+        return ExecutionDagSettings()
+
+    dag = execution.get("dag")
+    if dag is None:
+        return ExecutionDagSettings()
+    if not isinstance(dag, dict):
+        print(
+            "[WARN] invalid execution.dag config; using execution DAG defaults",
+            file=sys.stderr,
+        )
+        return ExecutionDagSettings()
+
+    enabled = _execution_bool(
+        dag.get("enabled"),
+        DEFAULT_EXECUTION_DAG_ENABLED,
+        "execution.dag.enabled",
+    )
+    require_for_complex_tasks = _execution_bool(
+        dag.get("require_for_complex_tasks"),
+        DEFAULT_EXECUTION_DAG_REQUIRE_FOR_COMPLEX_TASKS,
+        "execution.dag.require_for_complex_tasks",
+    )
+    raw_max_concurrency = dag.get(
+        "max_concurrency",
+        DEFAULT_EXECUTION_DAG_MAX_CONCURRENCY,
+    )
+    invalid_max_concurrency = False
+    try:
+        max_concurrency = int(raw_max_concurrency)
+    except (TypeError, ValueError):
+        max_concurrency = DEFAULT_EXECUTION_DAG_MAX_CONCURRENCY
+        invalid_max_concurrency = True
+    if (
+        invalid_max_concurrency
+        or isinstance(raw_max_concurrency, bool)
+        or not 1 <= max_concurrency <= 64
+    ):
+        print(
+            "[WARN] invalid execution.dag.max_concurrency value: "
+            f"{raw_max_concurrency!r}; using {DEFAULT_EXECUTION_DAG_MAX_CONCURRENCY}",
+            file=sys.stderr,
+        )
+        max_concurrency = DEFAULT_EXECUTION_DAG_MAX_CONCURRENCY
+
+    return ExecutionDagSettings(
+        enabled=enabled,
+        require_for_complex_tasks=require_for_complex_tasks,
+        max_concurrency=max_concurrency,
+    )
+
+
+def _execution_bool(value: object, default: bool, key: str) -> bool:
+    """Parse a DAG boolean and warn when the configured value is invalid."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in ("true", "yes", "1", "on"):
+        return True
+    if normalized in ("false", "no", "0", "off"):
+        return False
+    print(
+        f"[WARN] invalid {key} value: {value!r}; using {str(default).lower()}",
+        file=sys.stderr,
+    )
+    return default
 
 
 def get_hooks(event: str, repo_root: Path | None = None) -> list[str]:

@@ -8,6 +8,15 @@ Usage:
     python3 task.py add-context <dir> <file> <path> [reason] # Add jsonl entry
     python3 task.py validate <dir>              # Validate jsonl files
     python3 task.py list-context <dir>          # List jsonl entries
+    python3 task.py execution validate <dir>    # Validate execution.json
+    python3 task.py execution show <dir>        # Show normalized execution DAG
+    python3 task.py execution scaffold <dir>    # Create a conservative serial DAG
+    python3 task.py execution start-run <dir>   # Start recoverable DAG runtime
+    python3 task.py execution ready <dir>       # Select safe fan-out before wait
+    python3 task.py execution claim <dir> <node> # Build context and dispatch envelope
+    python3 task.py execution complete <dir> <node> --result <json>
+    python3 task.py execution recover <dir>     # Reconcile results without guessing worker loss
+    python3 task.py execution context <manifest> # Verify/print node context
     python3 task.py start <dir>                 # Set active task
     python3 task.py current [--source]          # Show active task
     python3 task.py finish                      # Clear active task
@@ -26,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from common.log import Colors, colored
 from common.paths import (
@@ -44,6 +54,8 @@ from common.active_task import (
     set_active_task,
 )
 from common.io import read_json, write_json
+from common.config import get_execution_dag_settings
+from common.execution_model import ExecutionPlanError, load_execution_plan
 from common.task_utils import resolve_task_dir, run_task_hooks
 from common.tasks import iter_active_tasks, children_progress
 
@@ -62,11 +74,67 @@ from common.task_context import (
     cmd_validate,
     cmd_list_context,
 )
+from common.task_execution import configure_execution_parser, cmd_execution
 
 
 # =============================================================================
 # Command: start / finish
 # =============================================================================
+
+def _execution_plan_ready(
+    full_path: Path,
+    task_data: dict[str, object],
+    repo_root: Path,
+) -> bool:
+    """Enforce the creation-time DAG policy before planning becomes implementation."""
+    settings = get_execution_dag_settings(repo_root)
+    if not settings.enabled:
+        return True
+
+    plan_path = full_path / "execution.json"
+    if plan_path.is_file():
+        try:
+            load_execution_plan(full_path, allow_legacy=False)
+        except ExecutionPlanError as exc:
+            print(
+                colored(f"Error: execution plan is invalid: {exc}", Colors.RED),
+                file=sys.stderr,
+            )
+            print(
+                "Hint: run `python3 ./.suncode/scripts/task.py execution validate "
+                f"{full_path}` and fix execution.json before start.",
+                file=sys.stderr,
+            )
+            return False
+        return True
+
+    meta = task_data.get("meta")
+    execution_policy = meta.get("execution") if isinstance(meta, dict) else None
+    requires_explicit = (
+        isinstance(execution_policy, dict)
+        and execution_policy.get("policyVersion") == 1
+        and execution_policy.get("dagEnabled") is True
+        and execution_policy.get("requireForComplexTasks") is True
+    )
+    is_complex = (full_path / "design.md").is_file() and (
+        full_path / "implement.md"
+    ).is_file()
+    if requires_explicit and is_complex:
+        print(
+            colored(
+                "Error: this complex task requires an explicit execution.json before implementation",
+                Colors.RED,
+            ),
+            file=sys.stderr,
+        )
+        print(
+            "Hint: run `python3 ./.suncode/scripts/task.py execution scaffold "
+            f"{full_path}`, then review dependencies, scopes, resources, validation, and the final barrier.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
 
 def cmd_start(args: argparse.Namespace) -> int:
     """Set active task."""
@@ -94,6 +162,13 @@ def cmd_start(args: argparse.Namespace) -> int:
     task_json_path = full_path / FILE_TASK_JSON
 
     if task_json_path.is_file():
+        task_data = read_json(task_json_path) or {}
+        if task_data.get("status") == "planning" and not _execution_plan_ready(
+            full_path,
+            task_data,
+            repo_root,
+        ):
+            return 1
         if not run_task_hooks("before_start", task_json_path, repo_root, stop_on_failure=True):
             return 1
 
@@ -505,6 +580,13 @@ def main() -> int:
     p_listctx = subparsers.add_parser("list-context", help="List context entries")
     p_listctx.add_argument("dir", help="Task directory")
 
+    # execution DAG
+    p_execution = subparsers.add_parser(
+        "execution",
+        help="Validate, inspect, and scaffold task execution DAGs",
+    )
+    configure_execution_parser(p_execution)
+
     # start
     p_start = subparsers.add_parser("start", help="Set active task")
     p_start.add_argument("dir", help="Task directory")
@@ -570,6 +652,7 @@ def main() -> int:
         "add-context": cmd_add_context,
         "validate": cmd_validate,
         "list-context": cmd_list_context,
+        "execution": cmd_execution,
         "start": cmd_start,
         "current": cmd_current,
         "finish": cmd_finish,
