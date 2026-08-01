@@ -1151,6 +1151,78 @@ describe("execution DAG runtime template", () => {
     );
   });
 
+  it.each([
+    {
+      name: "content bytes",
+      mutate: (dispatch: { contentPath: string; manifestPath: string }) => {
+        fs.appendFileSync(dispatch.contentPath, "tampered\n", "utf-8");
+      },
+      expected: "context content hash mismatch",
+    },
+    {
+      name: "manifest fields",
+      mutate: (dispatch: { contentPath: string; manifestPath: string }) => {
+        const manifest = JSON.parse(
+          fs.readFileSync(dispatch.manifestPath, "utf-8"),
+        ) as Record<string, unknown>;
+        manifest.role = "research";
+        fs.writeFileSync(
+          dispatch.manifestPath,
+          `${JSON.stringify(manifest, null, 2)}\n`,
+          "utf-8",
+        );
+      },
+      expected: "context manifest hash mismatch",
+    },
+  ])("rejects tampered context $name", ({ name, mutate, expected }) => {
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "07-23-dag-test",
+      defaults: {},
+      nodes: [finalNode("tamper-context")],
+      barriers: { final: ["tamper-context"] },
+    });
+    const runId = `tamper-context-${name.replaceAll(" ", "-")}`;
+    expect(
+      runTask([
+        "execution",
+        "start-run",
+        taskDir,
+        "--executor",
+        "native-subagent",
+        "--run-id",
+        runId,
+        "--json",
+      ]).status,
+    ).toBe(0);
+    const claim = runTask([
+      "execution",
+      "claim",
+      taskDir,
+      "tamper-context",
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+    expect(claim.status).toBe(0);
+    const dispatch = JSON.parse(claim.stdout).dispatch as {
+      contentPath: string;
+      manifestPath: string;
+      manifestRef: string;
+    };
+    mutate(dispatch);
+
+    const pulled = runTask([
+      "execution",
+      "context",
+      dispatch.manifestRef,
+      "--json",
+    ]);
+
+    expect(pulled.status).toBe(1);
+    expect(JSON.parse(pulled.stdout).error).toContain(expected);
+  });
+
   it("keeps live workers active unless the coordinator explicitly forces orphaning", () => {
     writeJson(path.join(taskDir, "execution.json"), {
       version: 1,

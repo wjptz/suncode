@@ -10,38 +10,38 @@
 ## Phase 1：保护现场并建立 release 分支
 
 - [x] 记录主仓、docs-site、marketplace 的 branch、HEAD、dirty paths、submodule SHA 和远端差异快照。
-- [ ] 精确提交本任务规划/激活 artifacts；不暂存任何既有无关路径。
+- [x] 精确提交本任务规划/激活 artifacts；不暂存任何既有无关路径。
 - [x] fetch 主仓与两个子仓，重新确认 npm `latest`、`v0.6.11` tag 和远端 release 基线。
-- [ ] 从最新 `origin/main` 创建隔离 `release/v0.6.12` worktree/branch。
-- [ ] 普通 merge 本地 `main`，保留两侧历史；解决版本/gitlink/文档冲突后确认 CLI/Core 基线均为 `0.6.11`。
-- [ ] 审查 merge diff 与 ancestry，禁止 rebase、强推、历史丢失或把原工作树脏改带入 release 分支。
+- [x] 从最新 `origin/main` 创建隔离 `release/v0.6.12` worktree/branch。
+- [x] 普通 merge 本地 `main`，保留两侧历史；解决版本/gitlink/文档冲突后确认 CLI/Core 基线均为 `0.6.11`。
+- [x] 审查 merge diff 与 ancestry，禁止 rebase、强推、历史丢失或把原工作树脏改带入 release 分支。
 
 ## Phase 2：修复 context 哈希缺陷
 
-- [ ] 在 `execution_context.py::_write_text_atomic` 的 `os.fdopen` 调用中显式加入 `newline="\n"`，保持其余原子写入语义不变。
-- [ ] 在 `execution-runtime.test.ts` 增加 raw bytes SHA-256 和 `budget.usedBytes` 断言。
-- [ ] 增加 Linux 可执行的 Windows CRLF 默认转换 probe，证明旧写法失败、显式 newline 后通过。
-- [ ] 运行 content/manifest 篡改、pull、SubagentStart hook push 和 redaction 相关回归测试。
-- [ ] 核对 bundled workflow 默认 `shared-worktree`；审阅文档是否误称 worktree/sandbox transport 已支持。仅在发现默认静默失败时做最小 fail-fast 修复。
+- [x] 在 `execution_context.py::_write_text_atomic` 的 `os.fdopen` 调用中显式加入 `newline="\n"`，保持其余原子写入语义不变。
+- [x] 在 `execution-runtime.test.ts` 增加 raw bytes SHA-256 和 `budget.usedBytes` 断言。
+- [x] 增加 Linux 可执行的 Windows CRLF 默认转换 probe，证明旧写法失败、显式 newline 后通过。
+- [x] 运行 content/manifest 篡改、pull、SubagentStart hook push 和 redaction 相关回归测试。
+- [x] 核对 bundled workflow 默认 `shared-worktree`；审阅文档是否误称 worktree/sandbox transport 已支持。仅在发现默认静默失败时做最小 fail-fast 修复。
 
 ## Phase 3：发布产物整理
 
-- [ ] 按 `v0.6.11..release/v0.6.12` 的用户可观察 diff 复核 `0.6.12.json`；加入 Windows context hash bug fix，保持无迁移补丁语义。
-- [ ] 更新中英文 v0.6.12 changelog 的日期、Bug Fixes 和 Upgrade；保证章节/表格/代码块 1:1。
-- [ ] 审阅 docs-site 25 个 tracked 改动、2 个 changelog 和 `docs.json`，修正 role/隔离能力表述。
-- [ ] 审阅 marketplace `3a78f3e` 与实际 planning convergence workflow 一致性。
-- [ ] 对 docs-site 创建精确提交；marketplace 不产生无必要新提交。
-- [ ] 在主仓 release 分支更新已审查的子模块 gitlink，并创建精确发布准备提交。
+- [x] 按 `v0.6.11..release/v0.6.12` 的用户可观察 diff 复核 `0.6.12.json`；加入 Windows context hash bug fix，保持无迁移补丁语义。
+- [x] 更新中英文 v0.6.12 changelog 的日期、Bug Fixes 和 Upgrade；保证章节/表格/代码块 1:1。
+- [x] 审阅 docs-site 25 个 tracked 改动、2 个 changelog 和 `docs.json`，修正 role/隔离能力表述。
+- [x] 审阅 marketplace `3a78f3e` 与实际 planning convergence workflow 一致性。
+- [x] 对 docs-site 创建精确提交；marketplace 不产生无必要新提交。
+- [x] 在主仓 release 分支更新已审查的子模块 gitlink，并创建精确发布准备提交。
 
 ## Phase 4：本地质量门（不改变远端）
 
-- [ ] 运行 context 定向测试和相关 hook/platform 契约测试；后端测试使用 60 秒硬超时。
-- [ ] 运行 `pnpm --filter @wjptz/suncode lint:py`、root lint、typecheck、完整 test 和 build。
-- [ ] 运行 manifest continuity、版本一致性、publish plan 和 packed CLI/core 校验。
-- [ ] 构建两个 tarball，在全新临时目录安装并验证 CLI/Core 版本、精确依赖、init/update 和 DAG context smoke。
-- [ ] 运行双语 changelog/docs navigation 结构检查和三个仓库的 `git diff --check`。
-- [ ] 运行 GitNexus `detect_changes({scope: "compare", base_ref: "main"})`，核对受影响符号和执行流。
-- [ ] 对比 Phase 1 快照，确认原工作树无关 dirty paths 未被修改、暂存或提交。
+- [x] 运行 context 定向测试和相关 hook/platform 契约测试；后端测试使用 60 秒硬超时。
+- [x] 运行 `pnpm --filter @wjptz/suncode lint:py`、root lint、typecheck、完整 test 和 build。
+- [x] 运行 manifest continuity、版本一致性、publish plan 和 packed CLI/core 校验。
+- [x] 构建两个 tarball，在全新临时目录安装并验证 CLI/Core 版本、精确依赖、init/update 和 DAG context smoke。
+- [x] 运行双语 changelog/docs navigation 结构检查和三个仓库的 `git diff --check`。
+- [x] 运行 GitNexus `detect_changes({scope: "compare", base_ref: "main"})`，核对受影响符号和执行流。
+- [x] 对比 Phase 1 快照，确认原工作树无关 dirty paths 未被修改、暂存或提交。
 - [ ] 汇总本地提交 SHA、完整验证证据、未执行项、远端 ahead/reachability 和准确发布动作，向用户提供独立 go/no-go；停止等待批准。
 
 ## Phase 5：正式发布（必须另获 go/no-go 批准）
