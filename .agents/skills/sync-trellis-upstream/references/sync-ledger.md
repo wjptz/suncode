@@ -4,9 +4,101 @@ This append-only ledger explains every cursor recorded in `sync-state.json`. Add
 
 ## Current Resume Point
 
-The next upstream review starts exclusively after official Trellis `v0.6.8` commit `dc68f5a92a68489b681c511f4a784e413d724e85`.
+The next upstream review starts exclusively after official Trellis `v0.6.11` commit `a82d4d4c75abf85c6200c4528f750798d531a70f`.
 
-Do not restart from the fork baseline. Do not use Suncode's same-name local `v0.6.6`, `v0.6.7`, or `v0.6.8` tags as official refs.
+Do not restart from the fork baseline. Do not use Suncode's same-name local tags as official refs.
+
+<!-- sync-entry:2026-08-01-v0.6.9-v0.6.11 -->
+## 2026-08-01: Official v0.6.9 Through v0.6.11
+
+### Range And Evidence
+
+| Role | Version | Full commit |
+| --- | --- | --- |
+| Previous reviewed release | `v0.6.8` | `dc68f5a92a68489b681c511f4a784e413d724e85` |
+| Intermediate release | `v0.6.9` | `12e279a8af00456b1d0d4e3d0f7f59e7b702202e` |
+| Intermediate release | `v0.6.10` | `c94d6fc289b7a6fdd9480bdfae4d4639c9ac2d4c` |
+| Reviewed release | `v0.6.11` | `a82d4d4c75abf85c6200c4528f750798d531a70f` |
+
+Official repository: `https://github.com/mindfold-ai/Trellis.git`.
+
+The three official lightweight tags were fetched without overwriting local tags into
+`refs/remotes/upstream/releases/v0.6.9`, `v0.6.10`, and `v0.6.11`. Each ref resolves
+to the official remote commit above, and every release is a descendant of the prior
+checkpoint. The exact exclusive/inclusive range
+`dc68f5a92a68489b681c511f4a784e413d724e85..a82d4d4c75abf85c6200c4528f750798d531a70f`
+contains 43 commits.
+
+All 43 commits are enumerated in the task research matrix. Their commit-level
+classifications are 21 Suncode-specific adaptations, one already-equivalent final
+behavior, one same-release behavior excluded because upstream reverted it, and 20
+recorded product-neutral exclusions.
+
+### Adoption Outcome
+
+| IDs | Adopted behavior | Suncode-specific result |
+| --- | --- | --- |
+| A1-A4 | Context limits, per-turn injection escape, task/journal QoL, and Codex model persistence | Unified Python/OpenCode/Pi byte budgets, UTF-8 boundaries, binary references, and bounded terminal notices; kept live dogfood `no-trellis` separate from packaged `no-suncode`; added generic task metadata, orphan trees, structured journals, and preservation of user Codex model keys. |
+| A5-A8 | Snow, trusted roots, journal union merge, and Kimi research | Added Snow as a class-1 owned platform; applied realpath-contained explicit/automatic trust to channel agents and context; installed additive exact-identity journal merge rules; routed Kimi research through the writable built-in coder while retaining research-only boundaries. |
+| A9-A12 | Python 3.9 and session fixes, Pi model inheritance, Codex failures, and idle timeout | Added exact active-task cleanup, saved-hook fallback, Python 3.9 CI coverage, invoking Pi model and `max` thinking propagation, terminal failure/retry/dedup semantics, and post-terminal idle supervision. |
+| A13-A15 | Bounded polyrepo probes, UTF-8 hook stdin, and ownership detection | Limited automatic discovery to eight child repositories with bounded advisory Git probes, configured affected hooks for best-effort UTF-8 before their first stdin read, and changed shared platform detection from directory existence to Suncode hash/marker evidence. |
+
+Review follow-ups also fixed file-root handling in Snow update backups, exact
+Suncode/Trellis `.gitattributes` rule identity, context-notice budget growth, and the
+channel context read sequence (`lstat` → realpath containment → `stat/read` of the
+validated real path).
+
+### Equivalent, Reverted, And Excluded
+
+- The upstream per-task workflow-selection experiment was introduced and reverted
+  within `v0.6.11`; Suncode retained its existing stable workflow policy.
+- Upstream task archives, journals, release manifests, version bumps, package
+  identity, QR/assets, dogfood configuration, and raw docs-site/marketplace submodule
+  pointers were reviewed but not copied.
+- Suncode remains at package version `0.6.10`; no tag was created, overwritten, or
+  pushed, and no related repository commit was made.
+- Existing `.suncode`, `SUNCODE_*`, `@wjptz/suncode*`, Hub, channel/memory, planning,
+  and shared-root ownership contracts were preserved.
+
+### Local Commit
+
+- Suncode main repository implementation:
+  `313c6db3875fbc9d362ea0e2f20e0015fc9bb3ee`
+  (`feat(cli): align suncode with Trellis v0.6.11`).
+
+### Verification
+
+- Core: `332/332` tests passed; one existing environment-dependent parser case was
+  skipped. CLI: `1695/1695` tests passed. Both suites completed under the 60-second
+  hard gate.
+- Five focused context/trust files passed `109/109` tests.
+- Root lint, TypeScript typecheck, build, and changed-file whitespace checks passed.
+- uv-managed CPython 3.9.25 compiled every tracked Python file; BasedPyright reported
+  zero errors and 64 existing unused re-export warnings.
+- All 220 non-TypeScript source templates were byte-identical to built templates.
+- GitNexus compare review reported CRITICAL breadth (`163` changed symbols, `36`
+  affected flows, `81` indexed files); the final staged-only review reported `159`
+  changed symbols and the same `36` flows across the intended 107-file scope. The
+  high-fan-out runtime, update, platform, and task paths were covered by targeted
+  failure/ownership tests and the full suites above.
+- User-owned dirty files and the dirty `docs-site` and `marketplace` worktrees were
+  excluded from the implementation commit.
+
+### Detailed Sources
+
+- Task: `.trellis/tasks/archive/2026-08/08-01-sync-trellis-upstream-latest/`
+- Official release evidence:
+  `.trellis/tasks/archive/2026-08/08-01-sync-trellis-upstream-latest/research/release-evidence.md`
+- Complete 43-commit classification:
+  `.trellis/tasks/archive/2026-08/08-01-sync-trellis-upstream-latest/research/upstream-v0.6.9-v0.6.11-adoption.md`
+- Implementation and verification:
+  `.trellis/tasks/archive/2026-08/08-01-sync-trellis-upstream-latest/research/implementation-result.md`
+
+### Next Review
+
+Start after `a82d4d4c75abf85c6200c4528f750798d531a70f`. Query official tags again,
+fetch newer stable releases into `refs/remotes/upstream/releases/`, and review only
+the new exclusive range.
 
 <!-- sync-entry:2026-07-22-v0.6.8 -->
 ## 2026-07-22: Official v0.6.8
