@@ -726,7 +726,10 @@ def _write_text_atomic(path: Path, value: str) -> None:
             suffix=".tmp",
         )
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            # Keep the persisted bytes identical to the UTF-8 bytes hashed above.
+            # Text mode otherwise expands \n to \r\n on Windows and invalidates
+            # every immutable execution context immediately after it is created.
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(value)
             os.replace(temporary, path)
         except BaseException:

@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -975,9 +976,11 @@ describe("execution DAG runtime template", () => {
       };
       sources: { path: string; redacted: boolean }[];
       budget: { usedBytes: number; totalBytes: number };
+      content: { path: string; sha256: string };
       manifestHash: string;
     };
-    const content = fs.readFileSync(dispatch.contentPath, "utf-8");
+    const contentBytes = fs.readFileSync(dispatch.contentPath);
+    const content = contentBytes.toString("utf-8");
     expect(manifest.task).toMatchObject({
       id: "07-23-dag-test",
       path: ".suncode/tasks/07-23-dag-test",
@@ -1009,6 +1012,10 @@ describe("execution DAG runtime template", () => {
     expect(content).toContain("Idempotent: yes");
     expect(manifest.budget.usedBytes).toBeLessThanOrEqual(
       manifest.budget.totalBytes,
+    );
+    expect(manifest.budget.usedBytes).toBe(contentBytes.byteLength);
+    expect(createHash("sha256").update(contentBytes).digest("hex")).toBe(
+      manifest.content.sha256,
     );
     expect(manifest.manifestHash).toMatch(/^[a-f0-9]{64}$/);
 
@@ -1051,6 +1058,39 @@ describe("execution DAG runtime template", () => {
     );
     expect(injected.hookSpecificOutput.updatedInput.prompt).not.toContain(
       "super-secret-value",
+    );
+  });
+
+  it("writes immutable context bytes without platform newline translation", () => {
+    const scriptRoot = path.join(cwd, ".suncode", "scripts");
+    const target = path.join(cwd, "atomic-context.md");
+    const probe = [
+      "from pathlib import Path",
+      "import sys",
+      `sys.path.insert(0, ${JSON.stringify(scriptRoot)})`,
+      "from common import execution_context",
+      "real_fdopen = execution_context.os.fdopen",
+      "def windows_text_fdopen(fd, mode, **kwargs):",
+      "    if 'b' not in mode and 'newline' not in kwargs:",
+      "        kwargs['newline'] = '\\r\\n'",
+      "    return real_fdopen(fd, mode, **kwargs)",
+      "execution_context.os.fdopen = windows_text_fdopen",
+      "value = 'alpha\\nbeta\\n'",
+      "target = Path(sys.argv[1])",
+      "execution_context._write_text_atomic(target, value)",
+      "actual = target.read_bytes()",
+      "expected = value.encode('utf-8')",
+      "assert actual == expected, (actual, expected)",
+    ].join("\n");
+
+    const result = spawnSync(pythonCommand, ["-c", probe, target], {
+      cwd,
+      encoding: "utf-8",
+    });
+
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    expect(fs.readFileSync(target)).toEqual(
+      Buffer.from("alpha\nbeta\n", "utf-8"),
     );
   });
 
