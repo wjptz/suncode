@@ -123,7 +123,7 @@ def make_capabilities(
     """Validate CLI capability input and apply inline invariants."""
     if kind not in EXECUTOR_KINDS:
         raise ExecutionRuntimeError(f"executor kind must be one of {sorted(EXECUTOR_KINDS)}")
-    if isinstance(max_concurrency, bool) or max_concurrency <= 0:
+    if type(max_concurrency) is not int or max_concurrency <= 0:
         raise ExecutionRuntimeError("max concurrency must be a positive integer")
     unknown_roles = sorted(set(roles) - NODE_ROLES)
     if unknown_roles:
@@ -754,6 +754,10 @@ def _normalize_result_path(value: str, path: str) -> str:
 
 
 def _validate_capabilities(plan: ExecutionPlan, capabilities: ExecutorCapabilities) -> None:
+    if type(capabilities.max_concurrency) is not int or capabilities.max_concurrency <= 0:
+        raise ExecutionRuntimeError(
+            "executor max concurrency must be a positive integer"
+        )
     if (
         type(capabilities.result_protocol_version) is not int
         or capabilities.result_protocol_version != RESULT_VERSION
@@ -780,7 +784,7 @@ def _select_ready(plan: ExecutionPlan, state: dict[str, Any]) -> list[ExecutionN
     if not isinstance(executor, dict):
         raise ExecutionRuntimeError("runtime state has no executor capabilities")
     max_concurrency = executor.get("maxConcurrency")
-    if not isinstance(max_concurrency, int) or max_concurrency <= 0:
+    if type(max_concurrency) is not int or max_concurrency <= 0:
         raise ExecutionRuntimeError("runtime executor maxConcurrency is invalid")
     active_ids = [
         node.id
@@ -1083,6 +1087,12 @@ def _load_run(
         raise ExecutionRuntimeError("runtime run id is invalid")
     run_dir = runtime_root / actual_run_id
     state = _read_state(run_dir)
+    _validate_runtime_identity(
+        repo_root=repo_root,
+        task_dir=task_dir,
+        run_id=actual_run_id,
+        state=state,
+    )
     return run_dir, state
 
 
@@ -1094,6 +1104,33 @@ def _read_state(run_dir: Path) -> dict[str, Any]:
     if type(version) is not int or version != RUNTIME_VERSION:
         raise ExecutionRuntimeError(f"unsupported runtime state version: {version!r}")
     return state
+
+
+def _validate_runtime_identity(
+    *,
+    repo_root: Path,
+    task_dir: Path,
+    run_id: str,
+    state: dict[str, Any],
+) -> None:
+    expected_task_id = task_dir.name
+    expected_task_path = _relative_posix(task_dir, repo_root)
+    if state.get("taskId") != expected_task_id:
+        raise ExecutionRuntimeError(
+            f"runtime state taskId does not match task directory {expected_task_id!r}"
+        )
+    if state.get("taskPath") != expected_task_path:
+        raise ExecutionRuntimeError(
+            f"runtime state taskPath does not match task directory {expected_task_path!r}"
+        )
+    if state.get("runId") != run_id:
+        raise ExecutionRuntimeError(
+            f"runtime state runId does not match runtime directory {run_id!r}"
+        )
+    executor = state.get("executor")
+    max_concurrency = executor.get("maxConcurrency") if isinstance(executor, dict) else None
+    if type(max_concurrency) is not int or max_concurrency <= 0:
+        raise ExecutionRuntimeError("runtime executor maxConcurrency is invalid")
 
 
 def _write_state(run_dir: Path, state: dict[str, Any]) -> None:

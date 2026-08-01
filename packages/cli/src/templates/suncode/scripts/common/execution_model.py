@@ -512,7 +512,13 @@ def read_explicit_execution_plan(task_dir: Path) -> ExecutionPlan | None:
         ) from exc
     except OSError as exc:
         raise ExecutionPlanError(f"execution.json: could not be read: {exc}") from exc
-    return parse_execution_plan(parsed)
+    plan = parse_execution_plan(parsed)
+    if plan.task != task_dir.name:
+        _fail(
+            "execution.json.task",
+            f"must match task directory {task_dir.name!r}",
+        )
+    return plan
 
 
 def load_execution_plan(task_dir: Path, *, allow_legacy: bool = True) -> ExecutionPlan:

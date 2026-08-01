@@ -17,7 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .execution_model import ExecutionNode, ExecutionPlan
+from .execution_model import (
+    EXECUTOR_KINDS,
+    ISOLATION_KINDS,
+    PLAN_VERSION,
+    ExecutionNode,
+    ExecutionPlan,
+)
 from .io import write_json
 
 
@@ -155,6 +161,7 @@ def build_node_context(
         "task": {
             "id": plan.task,
             "path": task_path,
+            "planVersion": plan.version,
             "planHash": plan.plan_hash,
         },
         "run": {
@@ -165,6 +172,13 @@ def build_node_context(
         },
         "role": node.role,
         "objective": node.description,
+        "execution": {
+            "allowed": list(node.execution.allowed),
+            "isolation": node.execution.isolation,
+            "timeoutSeconds": node.execution.timeout_seconds,
+            "maxAttempts": node.execution.max_attempts,
+            "idempotent": node.execution.idempotent,
+        },
         "boundaries": {
             "reads": list(node.reads),
             "writes": list(node.writes),
@@ -239,6 +253,54 @@ def read_node_context_manifest(
         task_path.relative_to(tasks_root)
     except ValueError as exc:
         raise ContextBuildError("context manifest task.path is outside .suncode/tasks") from exc
+    task_id = task_record.get("id") if isinstance(task_record, dict) else None
+    plan_version = task_record.get("planVersion") if isinstance(task_record, dict) else None
+    plan_hash = task_record.get("planHash") if isinstance(task_record, dict) else None
+    if (
+        not isinstance(task_id, str)
+        or task_id != task_path.name
+        or type(plan_version) is not int
+        or plan_version != PLAN_VERSION
+        or not isinstance(plan_hash, str)
+        or not plan_hash
+    ):
+        raise ContextBuildError("context manifest task identity is invalid")
+
+    run_record = manifest.get("run")
+    run_id = run_record.get("id") if isinstance(run_record, dict) else None
+    node_id = run_record.get("nodeId") if isinstance(run_record, dict) else None
+    attempt = run_record.get("attempt") if isinstance(run_record, dict) else None
+    if (
+        not isinstance(run_id, str)
+        or not run_id
+        or not isinstance(node_id, str)
+        or not node_id
+        or type(attempt) is not int
+        or attempt <= 0
+    ):
+        raise ContextBuildError("context manifest run identity is invalid")
+
+    execution = manifest.get("execution")
+    allowed = execution.get("allowed") if isinstance(execution, dict) else None
+    isolation = execution.get("isolation") if isinstance(execution, dict) else None
+    timeout_seconds = (
+        execution.get("timeoutSeconds") if isinstance(execution, dict) else None
+    )
+    max_attempts = execution.get("maxAttempts") if isinstance(execution, dict) else None
+    idempotent = execution.get("idempotent") if isinstance(execution, dict) else None
+    if (
+        not isinstance(allowed, list)
+        or not allowed
+        or any(not isinstance(item, str) or item not in EXECUTOR_KINDS for item in allowed)
+        or len(set(allowed)) != len(allowed)
+        or isolation not in ISOLATION_KINDS
+        or type(timeout_seconds) is not int
+        or timeout_seconds <= 0
+        or type(max_attempts) is not int
+        or max_attempts <= 0
+        or type(idempotent) is not bool
+    ):
+        raise ContextBuildError("context manifest execution policy is invalid")
 
     content_record = manifest.get("content")
     if not isinstance(content_record, dict):
@@ -265,8 +327,8 @@ def read_node_context_manifest(
     total_bytes = budget.get("totalBytes")
     used_bytes = budget.get("usedBytes")
     if (
-        not isinstance(total_bytes, int)
-        or not isinstance(used_bytes, int)
+        type(total_bytes) is not int
+        or type(used_bytes) is not int
         or used_bytes != len(content_bytes)
         or used_bytes > total_bytes
     ):
@@ -279,9 +341,12 @@ def _render_contract(plan: ExecutionPlan, node: ExecutionNode) -> str:
     reads = "\n".join(f"- {item}" for item in node.reads) or "- none"
     writes = "\n".join(f"- {item}" for item in node.writes) or "- none (read-only)"
     validation = "\n".join(f"- {item}" for item in node.validation)
+    allowed_executors = ", ".join(node.execution.allowed)
+    idempotent = "yes" if node.execution.idempotent else "no"
     return (
         "# Suncode execution node\n\n"
         f"Task: {plan.task}\n"
+        f"Execution plan version: {plan.version}\n"
         f"Node: {node.id} ({node.role}, {node.priority})\n"
         f"Name: {node.name}\n"
         f"Objective: {node.description}\n"
@@ -292,6 +357,12 @@ def _render_contract(plan: ExecutionPlan, node: ExecutionNode) -> str:
         "Return the structured NodeResult v1 object; transcript text does not unlock dependents.\n\n"
         f"Reads:\n{reads}\n\n"
         f"Writes:\n{writes}\n\n"
+        "## Execution policy\n\n"
+        f"Allowed executors: {allowed_executors}\n"
+        f"Isolation: {node.execution.isolation}\n"
+        f"Timeout: {node.execution.timeout_seconds} seconds\n"
+        f"Maximum attempts: {node.execution.max_attempts}\n"
+        f"Idempotent: {idempotent}\n\n"
         f"Validation:\n{validation}\n"
     )
 

@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -415,7 +421,10 @@ function setupSuncodeProject(): string {
   const taskDir = join(dir, ".suncode", "tasks", "demo-task");
   mkdirSync(taskDir, { recursive: true });
   mkdirSync(join(dir, ".suncode", ".runtime", "sessions"), { recursive: true });
-  writeFileSync(join(taskDir, "prd.md"), "# Demo PRD\n\nGoal: verify injection.");
+  writeFileSync(
+    join(taskDir, "prd.md"),
+    "# Demo PRD\n\nGoal: verify injection.",
+  );
   writeFileSync(join(taskDir, "implement.jsonl"), "");
   writeFileSync(join(taskDir, "check.jsonl"), "");
   writeFileSync(
@@ -628,9 +637,9 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     expect(output.args.prompt).toContain("do the implementation");
     // Marker must be at the top so generated agent definitions can detect
     // successful injection via a prefix check.
-    expect(output.args.prompt.startsWith("<!-- suncode-hook-injected -->")).toBe(
-      true,
-    );
+    expect(
+      output.args.prompt.startsWith("<!-- suncode-hook-injected -->"),
+    ).toBe(true);
   });
 
   it("inlines JSONL-referenced spec content into the implement prompt", async () => {
@@ -727,8 +736,9 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     const manifestBase = {
       version: 1,
       task: {
-        id: "manifest-task",
+        id: "demo-task",
         path: ".suncode/tasks/demo-task",
+        planVersion: 1,
         planHash: "plan-hash",
       },
       run: {
@@ -738,6 +748,13 @@ describe("opencode inject-subagent-context (issue #264)", () => {
         parentSession: "stranger",
       },
       role: "implement",
+      execution: {
+        allowed: ["inline", "native-subagent", "channel"],
+        isolation: "shared-worktree",
+        timeoutSeconds: 900,
+        maxAttempts: 2,
+        idempotent: true,
+      },
       budget: {
         perSourceBytes: 65_536,
         totalBytes: 262_144,
@@ -750,11 +767,15 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     };
     const manifest = {
       ...manifestBase,
-      manifestHash: sha256ForTest(JSON.stringify(canonicalizeForTest(manifestBase))),
+      manifestHash: sha256ForTest(
+        JSON.stringify(canonicalizeForTest(manifestBase)),
+      ),
     };
     const manifestPath = join(attemptDir, "manifest.json");
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
-    const manifestRef = manifestPath.slice(dir.length + 1).replaceAll("\\", "/");
+    const manifestRef = manifestPath
+      .slice(dir.length + 1)
+      .replaceAll("\\", "/");
     const output: TaskToolOutput = {
       args: {
         subagent_type: "suncode-implement",
@@ -776,6 +797,120 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     expect(output.args.prompt).toContain("UNIQUE_MANIFEST_CONTEXT_73");
     expect(output.args.prompt).not.toContain("Demo PRD");
   });
+
+  it.each([
+    {
+      name: "boolean top-level version",
+      target: '"version": 1',
+      replacement: '"version": true',
+    },
+    {
+      name: "float top-level version",
+      target: '"version": 1',
+      replacement: '"version": 1.0',
+    },
+    {
+      name: "exponent top-level version",
+      target: '"version": 1',
+      replacement: '"version": 1e0',
+    },
+    {
+      name: "string top-level version",
+      target: '"version": 1',
+      replacement: '"version": "1"',
+    },
+    {
+      name: "float nested plan version",
+      target: '"planVersion": 1',
+      replacement: '"planVersion": 1.0',
+    },
+    {
+      name: "float nested attempt",
+      target: '"attempt": 1',
+      replacement: '"attempt": 1e0',
+    },
+  ])(
+    "rejects an execution manifest with a raw $name token",
+    async ({ target, replacement }) => {
+      const attemptDir = join(
+        dir,
+        ".suncode",
+        ".runtime",
+        "execution",
+        "manifest-task",
+        "run-invalid-version",
+        "contexts",
+        "node-a",
+        "1",
+      );
+      mkdirSync(attemptDir, { recursive: true });
+      const content = "# Suncode execution node\n\nINVALID_VERSION_CONTEXT\n";
+      writeFileSync(join(attemptDir, "content.md"), content, "utf-8");
+      const manifestBase = {
+        version: 1,
+        task: {
+          id: "demo-task",
+          path: ".suncode/tasks/demo-task",
+          planVersion: 1,
+          planHash: "plan-hash",
+        },
+        run: {
+          id: "run-invalid-version",
+          nodeId: "node-a",
+          attempt: 1,
+          parentSession: "stranger",
+        },
+        role: "implement",
+        execution: {
+          allowed: ["inline", "native-subagent", "channel"],
+          isolation: "shared-worktree",
+          timeoutSeconds: 900,
+          maxAttempts: 2,
+          idempotent: true,
+        },
+        budget: {
+          perSourceBytes: 65_536,
+          totalBytes: 262_144,
+          usedBytes: Buffer.byteLength(content),
+        },
+        content: {
+          path: "content.md",
+          sha256: sha256ForTest(content),
+        },
+      };
+      const manifest = {
+        ...manifestBase,
+        manifestHash: sha256ForTest(
+          JSON.stringify(canonicalizeForTest(manifestBase)),
+        ),
+      };
+      const serialized = JSON.stringify(manifest, null, 2).replace(
+        target,
+        replacement,
+      );
+      expect(serialized).not.toBe(JSON.stringify(manifest, null, 2));
+      const manifestPath = join(attemptDir, "manifest.json");
+      writeFileSync(manifestPath, serialized, "utf-8");
+      const manifestRef = manifestPath
+        .slice(dir.length + 1)
+        .replaceAll("\\", "/");
+      const output: TaskToolOutput = {
+        args: {
+          subagent_type: "suncode-implement",
+          prompt: `Suncode context manifest: ${manifestRef}\n\nrun the node`,
+        },
+      };
+      const originalPrompt = output.args.prompt;
+
+      await hooks["tool.execute.before"](
+        { tool: "task", sessionID: "stranger" },
+        output,
+      );
+
+      expect(output.args.prompt).toBe(originalPrompt);
+      expect(output.args.prompt).not.toContain("INVALID_VERSION_CONTEXT");
+    },
+  );
 
   it("emits the suncode-hook-injected marker for research agent too", async () => {
     const output: TaskToolOutput = {

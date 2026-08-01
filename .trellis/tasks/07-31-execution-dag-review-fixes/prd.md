@@ -23,6 +23,10 @@
 9. 所有版本号及 attempt 等整数协议字段必须拒绝 boolean、float 和 string 等 Python 中可能与整数相等的值。
 10. NodeResult v1 的嵌套对象必须执行字段白名单与可选字段类型检查，不能静默接受未版本化 metadata；重复 validation command 必须拒绝。
 11. cycle 检测与 final barrier 祖先闭包不得依赖 Python 递归栈，超过默认递归深度的合法 DAG 和 cycle 都必须产生协议定义的结果。
+12. JavaScript 消费端必须基于原始 JSON token 拒绝 `version: 1.0` / `1e0`，不能因 `JSON.parse()` 和规范化哈希丢失词法类型。
+13. `execution.json.task`、runtime `taskId/taskPath/runId` 必须绑定实际任务和 run 目录身份，身份不一致时失败关闭。
+14. executor `maxConcurrency` 必须在 factory、直接 adapter 和持久化 state 三个边界只接受精确正整数，且非法值不能留下 runtime 目录或 latest 指针。
+15. context manifest 和实际注入内容必须携带 DAG version 及完整 node execution policy。
 
 ## 验收标准
 
@@ -40,6 +44,10 @@
 - [x] NodeResult 的 `changes/findings/validation/artifacts` 拒绝未知字段；`location/evidence/hash` 一旦出现必须为字符串；重复 validation command 被拒绝。
 - [x] 1200 层以上的合法串行 DAG 通过校验，深层 cycle 返回结构化错误而不是 `RecursionError`。
 - [x] worktree 与 sandbox 两种隔离下，writable final check 均有失败回归测试。
+- [x] OpenCode manifest 和 Hub execution projection 对 raw `true`、`1.0`、`1e0`、`"1"` version 失败关闭，规范化哈希不能绕过词法门禁。
+- [x] plan task mismatch 在创建 run 前失败；被篡改的 runtime taskId/taskPath 在所有公共载入入口失败。
+- [x] capability factory 与直接构造 adapter 均拒绝 bool/float/string maxConcurrency，且不创建 runtime 状态。
+- [x] manifest 与 worker content 同时包含 planVersion、allowed、isolation、timeoutSeconds、maxAttempts 和 idempotent。
 - [x] CLI 定向测试、完整测试、lint、typecheck、Python 检查与 build 通过。
 
 ## 约束

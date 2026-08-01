@@ -14,7 +14,11 @@
 - [x] [P0] 对 plan/result/runtime/context/capability 的版本与 attempt 执行精确整数校验。
 - [x] [P0] 收紧 NodeResult v1 嵌套 schema，拒绝未知字段、错误可选字段类型与重复 validation command。
 - [x] [P0] 增加 1205 节点深链/深 cycle、精确整数矩阵、嵌套 schema 及 sandbox final check 回归测试。
-- [x] [P1] 运行 CLI 完整测试、lint、typecheck、BasedPyright 与 build，随后执行全范围 Trellis 检查。
+- [x] [P0] 修复 OpenCode/Hub 的 raw JSON 整数词法门禁，并覆盖顶层/嵌套 `1.0` 与 `1e0`。
+- [x] [P0] 绑定 plan/runtime 的 task、path、run identity，身份不一致时在公共入口失败。
+- [x] [P0] 在 capability factory、直接 adapter 和 state load 边界拒绝非精确正整数 maxConcurrency。
+- [x] [P1] 把 planVersion 与完整 execution policy 写入 manifest 和实际 worker content。
+- [x] [P1] 重跑第四轮定向测试、CLI 完整测试、lint、typecheck、BasedPyright、Prettier 与 build，并执行全范围 Trellis 检查。
 
 ## 验证命令
 
@@ -33,14 +37,15 @@ pnpm --dir packages/cli run build
 
 ## 本轮验证证据
 
-- 定向 DAG 测试：`50/50` 通过。
-- CLI 完整测试：`65` 个测试文件、`1570/1570` 通过，受 60 秒硬超时保护。
+- 第四轮定向回归：`3` 个测试文件、`208/208` 通过，受 60 秒硬超时保护。
+- CLI 完整测试：`65` 个测试文件、`1590/1590` 通过，受 60 秒硬超时保护。
 - ESLint：通过。
 - TypeScript typecheck：通过。
 - BasedPyright：`0 error`；保留 `64` 个既有 unused re-export warning。
 - Python `py_compile`：execution model/runtime/context 通过。
 - CLI build：通过。
-- Prettier：目标测试文件通过。
+- Prettier：Hub submission 源文件及 3 个目标测试文件通过。
+- `git diff --check`：通过。
 
 ## 复审门
 

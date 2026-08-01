@@ -80,6 +80,33 @@ runtime state、context manifest 和 executor capability 的版本/attempt 字�
 的结构化 metadata 被持久化或随 succeeded 结果解锁后继，同时保留已声明的
 `location`、`evidence` 和 `hash` 扩展点。
 
+## 第四轮复审加固
+
+### 跨语言 JSON 整数词法
+
+Python `json.loads` 保留 `1` 与 `1.0` 的 int/float 差异，但 JavaScript
+`JSON.parse` 会把两者都转换成 `Number 1`。OpenCode manifest reader 和 Hub
+execution projection 因此在结构解析之外读取原始 JSON token：顶层 version
+必须恰好写成 `1`；manifest 中所有数字字段还必须是无小数点、无指数的整数
+token。该门禁独立于 canonical hash，因为 parse/stringify 会让 `1.0` 重新变成
+`1` 并继续匹配原哈希。
+
+### 目录身份与 runtime 原子性
+
+显式计划的 `task` 在公共计划加载边界绑定 `task_dir.name`。已有 run 每次载入时
+再核对 state 的 taskId、taskPath 和 runId，防止审计身份与物理目录分裂。
+
+`maxConcurrency` 在 capability factory 和 `start_execution_run` 最终校验中都
+使用精确正整数语义，后者位于任何 runtime mkdir/latest 写入之前。state reader
+再次验证持久化值，避免手工篡改后只在首次 ready 时失败。
+
+### Manifest 权威执行策略
+
+manifest 的 task record 增加 `planVersion`，并新增完整 `execution` record：
+allowed、isolation、timeoutSeconds、maxAttempts、idempotent。相同字段会渲染进
+`content.md` 的 mandatory contract，确保只得到注入文本的 worker 也能看到约束。
+Python/OpenCode reader 同时验证身份、策略类型和哈希。
+
 ## 兼容与回滚
 
 - legacy normalization 已把最后节点设为 integration，继续合法。

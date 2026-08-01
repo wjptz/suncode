@@ -458,13 +458,20 @@ hub:
   it("does not require SUNCODE_HUB_TOKEN while hub is disabled", () => {
     writeProjectConfig(tmpDir, "hub:\n  enabled: false\n");
 
-    const config = resolveHubConfig({ cwd: tmpDir, env: {}, requireAuth: true });
+    const config = resolveHubConfig({
+      cwd: tmpDir,
+      env: {},
+      requireAuth: true,
+    });
 
     expect(config.enabled).toBe(false);
   });
 
   it("uses global apiBaseUrl and login session, ignoring SUNCODE_HUB_TOKEN", () => {
-    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeProjectConfig(
+      tmpDir,
+      "hub:\n  enabled: true\n  projectId: proj_123\n",
+    );
     writeGlobalHubConfig(homeDir, "https://hub.example.test/");
     writeHubAuth(homeDir, "https://hub.example.test", "login-token");
 
@@ -535,7 +542,10 @@ hub:
       }),
     ).toThrow(HubConfigError);
 
-    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeProjectConfig(
+      tmpDir,
+      "hub:\n  enabled: true\n  projectId: proj_123\n",
+    );
     expect(() =>
       resolveHubConfig({ cwd: tmpDir, homeDir, env: {}, requireAuth: true }),
     ).toThrow("Hub apiBaseUrl is required");
@@ -719,7 +729,10 @@ describe("hub init login logout state", () => {
   });
 
   it("login stores a session by apiBaseUrl and logout removes only that session", async () => {
-    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeProjectConfig(
+      tmpDir,
+      "hub:\n  enabled: true\n  projectId: proj_123\n",
+    );
     writeGlobalHubConfig(homeDir, "https://hub.example.test");
     const fetch = vi.fn(async () =>
       jsonResponse({
@@ -820,7 +833,10 @@ describe("hub init login logout state", () => {
   });
 
   it("state reports missing login before service probing", async () => {
-    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeProjectConfig(
+      tmpDir,
+      "hub:\n  enabled: true\n  projectId: proj_123\n",
+    );
     writeGlobalHubConfig(homeDir, "https://hub.example.test");
     const fetch = vi.fn();
 
@@ -838,7 +854,10 @@ describe("hub init login logout state", () => {
   });
 
   it("state checks service/work and marks an active ordinary task as local-only", async () => {
-    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeProjectConfig(
+      tmpDir,
+      "hub:\n  enabled: true\n  projectId: proj_123\n",
+    );
     writeGlobalHubConfig(homeDir, "https://hub.example.test");
     writeHubAuth(homeDir);
     const taskDir = path.join(tmpDir, ".suncode", "tasks", "07-01-local-work");
@@ -848,13 +867,7 @@ describe("hub init login logout state", () => {
       meta: {},
     });
     writeJson(
-      path.join(
-        tmpDir,
-        ".suncode",
-        ".runtime",
-        "sessions",
-        "session-a.json",
-      ),
+      path.join(tmpDir, ".suncode", ".runtime", "sessions", "session-a.json"),
       { current_task: ".suncode/tasks/07-01-local-work" },
     );
     const fetch = vi.fn(async (url: unknown) => {
@@ -896,7 +909,10 @@ describe("hub init login logout state", () => {
   });
 
   it("state omits Hub spec sync summary and does not fetch service-side specs", async () => {
-    writeProjectConfig(tmpDir, "hub:\n  enabled: true\n  projectId: proj_123\n");
+    writeProjectConfig(
+      tmpDir,
+      "hub:\n  enabled: true\n  projectId: proj_123\n",
+    );
     writeGlobalHubConfig(homeDir, "https://hub.example.test");
     writeHubAuth(homeDir);
     fs.mkdirSync(path.join(tmpDir, ".suncode", "spec", "local"), {
@@ -934,7 +950,8 @@ describe("hub init login logout state", () => {
       ],
     });
     const fetch = vi.fn(async (url: unknown) => {
-      if (String(url).endsWith("/health")) return jsonResponse({ status: "ok" });
+      if (String(url).endsWith("/health"))
+        return jsonResponse({ status: "ok" });
       if (String(url).includes("/requirements?")) {
         return jsonResponse({ requirements: [] });
       }
@@ -1036,7 +1053,11 @@ describe("hub artifacts and hashing", () => {
       "raw provider output\n",
       "utf-8",
     );
-    fs.writeFileSync(path.join(roundDir, "diff.patch"), "diff --git\n", "utf-8");
+    fs.writeFileSync(
+      path.join(roundDir, "diff.patch"),
+      "diff --git\n",
+      "utf-8",
+    );
     fs.writeFileSync(path.join(roundDir, "prompt.md"), "# Prompt\n", "utf-8");
     fs.mkdirSync(path.join(taskDir, "reviews", "round-002"), {
       recursive: true,
@@ -1053,10 +1074,12 @@ describe("hub artifacts and hashing", () => {
       round: 1,
     });
 
-    expect(artifacts.map((artifact) => [artifact.path, artifact.type])).toEqual([
-      ["reviews/round-001/prompt.md", "review"],
-      ["reviews/round-001/result.md", "review"],
-    ]);
+    expect(artifacts.map((artifact) => [artifact.path, artifact.type])).toEqual(
+      [
+        ["reviews/round-001/prompt.md", "review"],
+        ["reviews/round-001/result.md", "review"],
+      ],
+    );
   });
 
   it("collects project spec artifacts while ignoring task documents", () => {
@@ -1077,17 +1100,17 @@ describe("hub artifacts and hashing", () => {
     fs.mkdirSync(siblingDir, { recursive: true });
     fs.writeFileSync(path.join(siblingDir, "prd.md"), "# Wrong PRD\n");
 
-    expect(collectSpecArtifacts(tmpDir).map((artifact) => artifact.path)).toEqual(
-      [".suncode/spec/cli/contract.md"],
-    );
+    expect(
+      collectSpecArtifacts(tmpDir).map((artifact) => artifact.path),
+    ).toEqual([".suncode/spec/cli/contract.md"]);
     expect(
       collectSpecArtifacts(tmpDir, [".suncode/spec/cli/contract.md"]).map(
         (artifact) => artifact.path,
       ),
     ).toEqual([".suncode/spec/cli/contract.md"]);
-    expect(collectPlanArtifacts({ cwd: tmpDir, taskJsonPath }).map((a) => a.path)).toEqual([
-      "prd.md",
-    ]);
+    expect(
+      collectPlanArtifacts({ cwd: tmpDir, taskJsonPath }).map((a) => a.path),
+    ).toEqual(["prd.md"]);
   });
 });
 
@@ -1242,9 +1265,7 @@ describe("hub spec sync", () => {
     expect(result.actions.deleted).toEqual([
       ".suncode/spec/cli/backend/old-rule.md",
     ]);
-    expect(result.localOnly).toEqual([
-      ".suncode/spec/local/debugging.md",
-    ]);
+    expect(result.localOnly).toEqual([".suncode/spec/local/debugging.md"]);
     expect(result.deletionCandidates).toHaveLength(1);
     expect(fs.readFileSync(stalePath, "utf-8")).toBe(remoteIndex);
     expect(fs.existsSync(deletedPath)).toBe(false);
@@ -1366,9 +1387,9 @@ describe("hub spec sync", () => {
       });
     });
 
-    await expect(
-      pullHubSpecs({ cwd: tmpDir, homeDir, fetch }),
-    ).rejects.toThrow("sha256");
+    await expect(pullHubSpecs({ cwd: tmpDir, homeDir, fetch })).rejects.toThrow(
+      "sha256",
+    );
 
     expect(
       fs.existsSync(
@@ -1425,7 +1446,11 @@ describe("hub spec sync", () => {
     const skippedFetch = vi.fn();
 
     await expect(
-      pullHubSpecs({ cwd: tmpDir, homeDir: missingLoginHome, fetch: skippedFetch }),
+      pullHubSpecs({
+        cwd: tmpDir,
+        homeDir: missingLoginHome,
+        fetch: skippedFetch,
+      }),
     ).rejects.toThrow("login");
     expect(skippedFetch).not.toHaveBeenCalled();
     expect(
@@ -1549,13 +1574,7 @@ describe("hub task resolution", () => {
     const taskJsonPath = makeTask(tmpDir);
     makeTask(tmpDir, "06-30-unrelated");
     writeJson(
-      path.join(
-        tmpDir,
-        ".suncode",
-        ".runtime",
-        "sessions",
-        "session-a.json",
-      ),
+      path.join(tmpDir, ".suncode", ".runtime", "sessions", "session-a.json"),
       { current_task: ".suncode/tasks/06-30-payment-retry" },
     );
 
@@ -1571,23 +1590,11 @@ describe("hub task resolution", () => {
   it("refuses --task current when multiple sessions exist and no context key is available", () => {
     makeTask(tmpDir);
     writeJson(
-      path.join(
-        tmpDir,
-        ".suncode",
-        ".runtime",
-        "sessions",
-        "session-a.json",
-      ),
+      path.join(tmpDir, ".suncode", ".runtime", "sessions", "session-a.json"),
       { current_task: ".suncode/tasks/06-30-payment-retry" },
     );
     writeJson(
-      path.join(
-        tmpDir,
-        ".suncode",
-        ".runtime",
-        "sessions",
-        "session-b.json",
-      ),
+      path.join(tmpDir, ".suncode", ".runtime", "sessions", "session-b.json"),
       { current_task: ".suncode/tasks/06-30-other" },
     );
 
@@ -1890,7 +1897,11 @@ describe("hub commands", () => {
   it("skill-push uploads every local .agents skill file through presign, PUT, and finalize", async () => {
     const skillDir = path.join(tmpDir, ".agents", "skills", "code-review");
     fs.mkdirSync(path.join(skillDir, "references"), { recursive: true });
-    fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# Code Review\n", "utf-8");
+    fs.writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "# Code Review\n",
+      "utf-8",
+    );
     fs.writeFileSync(
       path.join(skillDir, "references", "rules.md"),
       "# Rules\n",
@@ -2212,9 +2223,11 @@ describe("hub commands", () => {
     expect(
       fs.readFileSync(path.join(skillDir, "references", "rules.md"), "utf-8"),
     ).toBe("# Rules\n");
-    expect(calls.every((call) => call.headers.authorization === "Bearer login-token")).toBe(
-      true,
-    );
+    expect(
+      calls.every(
+        (call) => call.headers.authorization === "Bearer login-token",
+      ),
+    ).toBe(true);
   });
 
   it("skill-pull rejects Hub file paths that would escape the local skill directory", async () => {
@@ -2252,9 +2265,9 @@ describe("hub commands", () => {
         fetch,
       }),
     ).rejects.toThrow("Invalid skill package file path");
-    expect(fs.existsSync(path.join(tmpDir, ".agents", "skills", "escape.md"))).toBe(
-      false,
-    );
+    expect(
+      fs.existsSync(path.join(tmpDir, ".agents", "skills", "escape.md")),
+    ).toBe(false);
   });
 
   it("agent-pull downloads a Hub agent package into .suncode/agents and overwrites the default markdown file", async () => {
@@ -2603,7 +2616,10 @@ describe("hub commands", () => {
       bindingStatus: "bound",
     });
     expect(
-      fs.readFileSync(path.join(tasksDir, taskDirName ?? "", "prd.md"), "utf-8"),
+      fs.readFileSync(
+        path.join(tasksDir, taskDirName ?? "", "prd.md"),
+        "utf-8",
+      ),
     ).toContain("识别用户登录状态。");
   });
 
@@ -2650,7 +2666,8 @@ describe("hub commands", () => {
     });
     const createTaskCall = calls.find(
       (call) =>
-        call.method === "POST" && call.url.includes("/requirements/REQ-1001/tasks"),
+        call.method === "POST" &&
+        call.url.includes("/requirements/REQ-1001/tasks"),
     );
     expect(JSON.parse(createTaskCall?.body ?? "{}")).toMatchObject({
       localTaskId: "07-07-existing-task",
@@ -2729,7 +2746,9 @@ describe("hub commands", () => {
     );
     expect(prd).toContain("跳过计划审核和 Hub start preflight");
     expect(prd).toContain("`validation-summary.md` 必须写明 `未执行` 及原因");
-    expect(prd).toContain("仍需生成并通过 `suncode hub finish --task current` 上传完成产物");
+    expect(prd).toContain(
+      "仍需生成并通过 `suncode hub finish --task current` 上传完成产物",
+    );
   });
 
   it("hub intake accepts Hub requirement kind as the task type", async () => {
@@ -2832,7 +2851,9 @@ describe("hub commands", () => {
       "utf-8",
     );
     const taskJson = JSON.parse(taskJsonText) as {
-      meta: { hub: { taskType?: string; sourceTask?: Record<string, unknown> } };
+      meta: {
+        hub: { taskType?: string; sourceTask?: Record<string, unknown> };
+      };
     };
     expect(taskJson.meta.hub.taskType).toBe("change");
     expect(taskJson.meta.hub.sourceTask).toMatchObject({
@@ -2904,7 +2925,10 @@ describe("hub commands", () => {
     expect(taskJson.meta.hub.sourceTask).not.toHaveProperty("summary");
     expect(taskJsonText).not.toContain("SECRET-SHOULD-NOT-PERSIST");
     expect(
-      fs.readFileSync(path.join(taskDir, "research", "source-task.md"), "utf-8"),
+      fs.readFileSync(
+        path.join(taskDir, "research", "source-task.md"),
+        "utf-8",
+      ),
     ).not.toContain("SECRET-SHOULD-NOT-PERSIST");
   });
 
@@ -3052,7 +3076,9 @@ describe("hub commands", () => {
       const urlText = String(url);
       if (method === "GET" && urlText.includes("/requirements?")) {
         return jsonResponse({
-          requirements: [{ id: "REQ-1001", title: "登录状态识别", revision: 7 }],
+          requirements: [
+            { id: "REQ-1001", title: "登录状态识别", revision: 7 },
+          ],
         });
       }
       if (
@@ -3290,7 +3316,9 @@ describe("hub commands", () => {
       "utf-8",
     );
     expect(manifestText).not.toContain("uploadUrl");
-    expect(manifestText).not.toContain("artifact-upload-sessions/UPLOAD-9001/uploads");
+    expect(manifestText).not.toContain(
+      "artifact-upload-sessions/UPLOAD-9001/uploads",
+    );
   });
 
   it("submit-spec treats .suncode/spec as project-level artifacts", async () => {
@@ -3645,6 +3673,89 @@ describe("hub commands", () => {
     expect(submission?.body).not.toContain("Wrong fallback");
   });
 
+  it.each([
+    { name: "boolean", literal: "true" },
+    { name: "float", literal: "1.0" },
+    { name: "exponent", literal: "1e0" },
+    { name: "string", literal: '"1"' },
+  ])(
+    "submit-subtasks rejects execution.json with a raw $name version token",
+    async ({ literal }) => {
+      const taskJsonPath = makeTask(tmpDir);
+      const taskDir = path.dirname(taskJsonPath);
+      const plan = {
+        version: 1,
+        task: "06-30-payment-retry",
+        defaults: {},
+        nodes: [
+          {
+            id: "integration",
+            priority: "P1",
+            name: "Integrate",
+            description: "Run the global quality gate.",
+            dependsOn: [],
+          },
+        ],
+        barriers: { final: ["integration"] },
+      };
+      const serialized = JSON.stringify(plan, null, 2).replace(
+        '"version": 1',
+        `"version": ${literal}`,
+      );
+      fs.writeFileSync(
+        path.join(taskDir, "execution.json"),
+        `${serialized}\n`,
+        "utf-8",
+      );
+
+      const { fetch } = createMockFetch();
+      await hubCreateTask({ cwd: tmpDir, homeDir, taskJsonPath, fetch });
+
+      await expect(
+        submitSubtasks({
+          cwd: tmpDir,
+          homeDir,
+          taskJsonPath,
+          fetch,
+        }),
+      ).rejects.toThrow("execution.json version must be the exact integer 1");
+    },
+  );
+
+  it("submit-subtasks rejects execution.json whose task differs from its directory", async () => {
+    const taskJsonPath = makeTask(tmpDir);
+    const taskDir = path.dirname(taskJsonPath);
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "different-task",
+      defaults: {},
+      nodes: [
+        {
+          id: "integration",
+          priority: "P1",
+          name: "Integrate",
+          description: "Run the global quality gate.",
+          dependsOn: [],
+        },
+      ],
+      barriers: { final: ["integration"] },
+    });
+
+    const { fetch } = createMockFetch();
+    await hubCreateTask({ cwd: tmpDir, homeDir, taskJsonPath, fetch });
+
+    await expect(
+      submitSubtasks({
+        cwd: tmpDir,
+        homeDir,
+        taskJsonPath,
+        fetch,
+      }),
+    ).rejects.toThrow(
+      "execution.json task must match task directory '06-30-payment-retry'",
+    );
+  });
+
   it("hub plan-ready submits plan, generated subtasks, and preflight start", async () => {
     const taskJsonPath = makeTask(tmpDir);
     const taskDir = path.dirname(taskJsonPath);
@@ -3703,23 +3814,25 @@ describe("hub commands", () => {
     });
 
     const { fetch: baseFetch } = createMockFetch();
-    const trackedFetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
-      if (String(url).endsWith("/preflight-start")) {
-        throw new TypeError("fetch failed");
-      }
-      const response = await baseFetch(url, init);
-      if (String(url).endsWith("/artifact-upload-sessions")) {
-        const data = (await response.json()) as {
-          uploads: { uploadUrl: string }[];
-        };
-        data.uploads = data.uploads.map((upload) => ({
-          ...upload,
-          uploadUrl: `${upload.uploadUrl}?X-Amz-Signature=secret-query&token=jwt-token`,
-        }));
-        return jsonResponse(data);
-      }
-      return response;
-    });
+    const trackedFetch = vi.fn(
+      async (url: string | URL, init?: RequestInit) => {
+        if (String(url).endsWith("/preflight-start")) {
+          throw new TypeError("fetch failed");
+        }
+        const response = await baseFetch(url, init);
+        if (String(url).endsWith("/artifact-upload-sessions")) {
+          const data = (await response.json()) as {
+            uploads: { uploadUrl: string }[];
+          };
+          data.uploads = data.uploads.map((upload) => ({
+            ...upload,
+            uploadUrl: `${upload.uploadUrl}?X-Amz-Signature=secret-query&token=jwt-token`,
+          }));
+          return jsonResponse(data);
+        }
+        return response;
+      },
+    );
     const logs: string[] = [];
 
     await expect(
@@ -3738,7 +3851,9 @@ describe("hub commands", () => {
 
     expect(logs).toContain("[hub plan-ready] start");
     expect(logs).toContain("[hub plan-ready] step submit-plan start");
-    expect(logs).toContain("[hub plan-ready] step submit-subtasks ok: submitted");
+    expect(logs).toContain(
+      "[hub plan-ready] step submit-subtasks ok: submitted",
+    );
     expect(logs).toContain("[hub plan-ready] step preflight-start start");
     expect(logs).toContain(
       "[hub plan-ready] request POST https://hub.example.test/api/v1/projects/proj_123/tasks/TASK-2001/preflight-start",
@@ -3813,12 +3928,12 @@ describe("hub commands", () => {
     });
 
     expect(result.status).toBe("updated");
-    expect(
-      calls.some((call) => call.url.endsWith("/plan-submissions")),
-    ).toBe(true);
-    expect(
-      calls.some((call) => call.url.endsWith("/preflight-start")),
-    ).toBe(false);
+    expect(calls.some((call) => call.url.endsWith("/plan-submissions"))).toBe(
+      true,
+    );
+    expect(calls.some((call) => call.url.endsWith("/preflight-start"))).toBe(
+      false,
+    );
     const uploadSession = calls.find(
       (call) =>
         call.url.endsWith("/artifact-upload-sessions") &&
@@ -4470,8 +4585,13 @@ describe("hub commands", () => {
     expect(rawOutput).toContain("Review complete.");
     expect(
       calls
-        .filter((call) => call.method === "PATCH" && call.url.endsWith("/status"))
-        .map((call) => (JSON.parse(call.body ?? "{}") as { status: string }).status),
+        .filter(
+          (call) => call.method === "PATCH" && call.url.endsWith("/status"),
+        )
+        .map(
+          (call) =>
+            (JSON.parse(call.body ?? "{}") as { status: string }).status,
+        ),
     ).toEqual(["in_review", "in_progress"]);
     const uploadSession = calls.find((call) =>
       call.url.endsWith("/artifact-upload-sessions"),
@@ -4483,9 +4603,9 @@ describe("hub commands", () => {
       submissionKind: "review",
       artifactScope: "current_task",
     });
-    expect(uploadSessionPayload.artifacts?.map((artifact) => artifact.path)).toEqual(
-      ["reviews/round-001/prompt.md", "reviews/round-001/result.md"],
-    );
+    expect(
+      uploadSessionPayload.artifacts?.map((artifact) => artifact.path),
+    ).toEqual(["reviews/round-001/prompt.md", "reviews/round-001/result.md"]);
     const reviewSubmission = calls.find((call) =>
       call.url.endsWith("/review-submissions"),
     );
@@ -4506,9 +4626,12 @@ describe("hub commands", () => {
 
   it("hub review keeps the provider prompt lightweight and preserves provider-selected findings", async () => {
     initGitRepo(tmpDir);
-    fs.mkdirSync(path.join(tmpDir, "packages", "cli", "src", "commands", "hub"), {
-      recursive: true,
-    });
+    fs.mkdirSync(
+      path.join(tmpDir, "packages", "cli", "src", "commands", "hub"),
+      {
+        recursive: true,
+      },
+    );
     fs.writeFileSync(
       path.join(
         tmpDir,
@@ -4667,8 +4790,12 @@ describe("hub commands", () => {
     expect(promptText).not.toContain("```json");
     expect(promptText).not.toContain("Review Boundary");
     expect(promptText).not.toContain("Changed Files:");
-    expect(promptText).not.toContain("- packages/cli/src/commands/hub/current.ts");
-    expect(promptText).not.toContain("- packages/cli/src/commands/hub/legacy.ts");
+    expect(promptText).not.toContain(
+      "- packages/cli/src/commands/hub/current.ts",
+    );
+    expect(promptText).not.toContain(
+      "- packages/cli/src/commands/hub/legacy.ts",
+    );
     expect(promptText).not.toContain("## Diff");
     expect(promptText).not.toContain("export const current = 2");
     expect(promptText).not.toContain("git diff");
@@ -4677,7 +4804,9 @@ describe("hub commands", () => {
     expect(promptText).not.toContain("One concise review summary.");
     expect(promptText).not.toContain("FULL PRD BODY SHOULD NOT BE EMBEDDED");
     expect(promptText).not.toContain("FULL DESIGN BODY SHOULD NOT BE EMBEDDED");
-    expect(promptText).not.toContain("FULL IMPLEMENT BODY SHOULD NOT BE EMBEDDED");
+    expect(promptText).not.toContain(
+      "FULL IMPLEMENT BODY SHOULD NOT BE EMBEDDED",
+    );
     const review = JSON.parse(
       fs.readFileSync(
         path.join(taskDir, "reviews", "round-001", "review.json"),
@@ -4794,8 +4923,13 @@ describe("hub commands", () => {
     expect(resultMd).not.toContain("示例结果，不应被采用。");
     expect(
       calls
-        .filter((call) => call.method === "PATCH" && call.url.endsWith("/status"))
-        .map((call) => (JSON.parse(call.body ?? "{}") as { status: string }).status),
+        .filter(
+          (call) => call.method === "PATCH" && call.url.endsWith("/status"),
+        )
+        .map(
+          (call) =>
+            (JSON.parse(call.body ?? "{}") as { status: string }).status,
+        ),
     ).toEqual(["in_review", "in_review"]);
   });
 
@@ -4845,7 +4979,10 @@ describe("hub commands", () => {
     const review = JSON.parse(
       fs.readFileSync(path.join(roundDir, "review.json"), "utf-8"),
     ) as { status: string; summary: string };
-    const rawOutput = fs.readFileSync(path.join(roundDir, "raw-output.md"), "utf-8");
+    const rawOutput = fs.readFileSync(
+      path.join(roundDir, "raw-output.md"),
+      "utf-8",
+    );
     expect(review).toMatchObject({
       status: "approved",
       summary: "大输出审查通过。",
@@ -4918,8 +5055,8 @@ describe("hub commands", () => {
     expect(
       reviewSubmissions.map(
         (call) =>
-          (JSON.parse(call.body ?? "{}") as { review: { round: number } }).review
-            .round,
+          (JSON.parse(call.body ?? "{}") as { review: { round: number } })
+            .review.round,
       ),
     ).toEqual([1, 2]);
     expect(
@@ -5135,9 +5272,9 @@ describe("hub commands", () => {
     });
 
     expect(result.status).toBe("submitted");
-    expect(calls.some((call) => call.url.endsWith("/completion-submissions"))).toBe(
-      true,
-    );
+    expect(
+      calls.some((call) => call.url.endsWith("/completion-submissions")),
+    ).toBe(true);
   });
 
   it("submit-completion accepts a required review approved before committing the staged diff", async () => {

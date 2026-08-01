@@ -8,7 +8,7 @@
 
 import { createHash } from "crypto"
 import { existsSync, readFileSync, readdirSync } from "fs"
-import { isAbsolute, join, relative, resolve } from "path"
+import { basename, isAbsolute, join, relative, resolve } from "path"
 import { SuncodeContext, debugLog } from "../lib/suncode-context.js"
 
 // Supported subagent types
@@ -25,6 +25,8 @@ const MANIFEST_ROLES_BY_AGENT = {
   check: ["check"],
   research: ["research"],
 }
+const EXECUTOR_KINDS = ["inline", "native-subagent", "channel"]
+const ISOLATION_KINDS = ["shared-worktree", "worktree", "sandbox"]
 
 function extractActiveTaskHint(prompt) {
   if (typeof prompt !== "string" || !prompt) return null
@@ -59,6 +61,121 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex")
 }
 
+function skipJsonWhitespace(source, index) {
+  while (index < source.length && /[\t\n\r ]/.test(source[index])) index += 1
+  return index
+}
+
+function scanJsonStringEnd(source, start) {
+  let escaped = false
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index]
+    if (escaped) {
+      escaped = false
+    } else if (character === "\\") {
+      escaped = true
+    } else if (character === '"') {
+      return index + 1
+    }
+  }
+  return -1
+}
+
+function scanTopLevelValueEnd(source, start) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === "\\") {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+    } else if (character === "{" || character === "[") {
+      depth += 1
+    } else if (character === "}" || character === "]") {
+      if (depth === 0) return index
+      depth -= 1
+    } else if (character === "," && depth === 0) {
+      return index
+    }
+  }
+  return -1
+}
+
+function hasExactTopLevelIntegerField(source, field, expected) {
+  let index = skipJsonWhitespace(source, 0)
+  if (source[index] !== "{") return false
+  index += 1
+  let matches = 0
+  while (index < source.length) {
+    index = skipJsonWhitespace(source, index)
+    if (source[index] === "}") {
+      index = skipJsonWhitespace(source, index + 1)
+      return index === source.length && matches === 1
+    }
+    if (source[index] !== '"') return false
+    const keyStart = index
+    const keyEnd = scanJsonStringEnd(source, keyStart)
+    if (keyEnd < 0) return false
+    const key = JSON.parse(source.slice(keyStart, keyEnd))
+    index = skipJsonWhitespace(source, keyEnd)
+    if (source[index] !== ":") return false
+    const valueStart = skipJsonWhitespace(source, index + 1)
+    const valueEnd = scanTopLevelValueEnd(source, valueStart)
+    if (valueEnd < 0) return false
+    if (key === field) {
+      matches += 1
+      if (source.slice(valueStart, valueEnd).trim() !== String(expected)) {
+        return false
+      }
+    }
+    index = skipJsonWhitespace(source, valueEnd)
+    if (source[index] === ",") {
+      index += 1
+      continue
+    }
+    if (source[index] === "}") continue
+    return false
+  }
+  return false
+}
+
+function hasOnlyExactJsonIntegerNumbers(source) {
+  let inString = false
+  let escaped = false
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === "\\") {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+      continue
+    }
+    if (character !== "-" && !/[0-9]/.test(character)) continue
+    const match = source.slice(index).match(/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/)
+    if (!match || /[.eE]/.test(match[0])) return false
+    index += match[0].length - 1
+  }
+  return true
+}
+
 function readExecutionContext(projectRoot, prompt, subagentType, sessionId) {
   const manifestRef = extractContextManifestHint(prompt)
   if (!manifestRef) return null
@@ -68,8 +185,15 @@ function readExecutionContext(projectRoot, prompt, subagentType, sessionId) {
   if (!isWithin(runtimeRoot, manifestPath) || !manifestPath.endsWith("manifest.json")) {
     throw new Error(`Execution context manifest is outside runtime: ${manifestRef}`)
   }
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"))
-  if (!manifest || manifest.version !== 1 || typeof manifest.manifestHash !== "string") {
+  const manifestSource = readFileSync(manifestPath, "utf-8")
+  const manifest = JSON.parse(manifestSource)
+  if (
+    !manifest ||
+    manifest.version !== 1 ||
+    !hasExactTopLevelIntegerField(manifestSource, "version", 1) ||
+    !hasOnlyExactJsonIntegerNumbers(manifestSource) ||
+    typeof manifest.manifestHash !== "string"
+  ) {
     throw new Error("Execution context manifest version/hash is invalid")
   }
   const hashInput = { ...manifest }
@@ -81,12 +205,11 @@ function readExecutionContext(projectRoot, prompt, subagentType, sessionId) {
   if (!MANIFEST_ROLES_BY_AGENT[subagentType]?.includes(manifest.role)) {
     throw new Error(`Execution context role ${manifest.role} does not match ${subagentType}`)
   }
-  if (
-    manifest.run?.parentSession &&
-    sessionId &&
-    manifest.run.parentSession !== sessionId
-  ) {
+  if (manifest.run?.parentSession && sessionId && manifest.run.parentSession !== sessionId) {
     throw new Error("Execution context parent session mismatch")
+  }
+  if (!Number.isInteger(manifest.run?.attempt) || manifest.run.attempt <= 0) {
+    throw new Error("Execution context run attempt is invalid")
   }
   const contentRef = manifest.content?.path
   if (typeof contentRef !== "string" || !contentRef) {
@@ -115,6 +238,31 @@ function readExecutionContext(projectRoot, prompt, subagentType, sessionId) {
   const resolvedTaskPath = resolve(root, taskPath)
   if (!isWithin(resolve(root, ".suncode", "tasks"), resolvedTaskPath)) {
     throw new Error("Execution context task path is outside .suncode/tasks")
+  }
+  if (
+    typeof manifest.task?.id !== "string" ||
+    manifest.task.id !== basename(resolvedTaskPath) ||
+    !Number.isInteger(manifest.task?.planVersion) ||
+    manifest.task.planVersion !== 1 ||
+    typeof manifest.task?.planHash !== "string" ||
+    !manifest.task.planHash
+  ) {
+    throw new Error("Execution context task identity is invalid")
+  }
+  const execution = manifest.execution
+  if (
+    !execution ||
+    !Array.isArray(execution.allowed) ||
+    execution.allowed.length === 0 ||
+    execution.allowed.some(kind => !EXECUTOR_KINDS.includes(kind)) ||
+    !ISOLATION_KINDS.includes(execution.isolation) ||
+    !Number.isInteger(execution.timeoutSeconds) ||
+    execution.timeoutSeconds <= 0 ||
+    !Number.isInteger(execution.maxAttempts) ||
+    execution.maxAttempts <= 0 ||
+    typeof execution.idempotent !== "boolean"
+  ) {
+    throw new Error("Execution context policy is invalid")
   }
   return {
     taskPath,
@@ -196,7 +344,6 @@ function getFinishContext(ctx, taskDir) {
   return getCheckContext(ctx, taskDir)
 }
 
-
 /**
  * Get context for research agent
  */
@@ -240,14 +387,17 @@ function getResearchContext(ctx) {
   }
   structureLines.push("```")
 
-  parts.push(structureLines.join("\n") + `
+  parts.push(
+    structureLines.join("\n") +
+      `
 
 ## Search Tips
 
 - Spec files: \`.suncode/spec/**/*.md\`
 - Known issues: \`.suncode/big-question/\`
 - Code search: Use Glob and Grep tools
-- Tech solutions: Use mcp__exa__web_search_exa or mcp__exa__get_code_context_exa`)
+- Tech solutions: Use mcp__exa__web_search_exa or mcp__exa__get_code_context_exa`,
+  )
 
   return parts.join("\n\n")
 }
@@ -287,7 +437,8 @@ ${originalPrompt}
 - Follow all dev specs injected above
 - Report list of modified/created files when done`,
 
-    check: isFinish ? `<!-- suncode-hook-injected -->
+    check: isFinish
+      ? `<!-- suncode-hook-injected -->
 # Finish Agent Task
 
 You are performing the final check before creating a PR.
@@ -322,8 +473,8 @@ ${originalPrompt}
 - Do NOT update specs for trivial changes (typos, formatting, obvious fixes)
 - If critical CODE issues found, report them clearly (fix specs, not code)
 - Verify all acceptance criteria in prd.md are met
-- Verify design.md and implement.md constraints when those files are present` :
-      `<!-- suncode-hook-injected -->
+- Verify design.md and implement.md constraints when those files are present`
+      : `<!-- suncode-hook-injected -->
 # Check Agent Task
 
 You are the Check Agent in the Multi-Agent Pipeline.
@@ -384,7 +535,7 @@ ${originalPrompt}
 
 **Only allowed**: Describe what exists, where it is, how it works
 
-**Forbidden**: Suggest improvements, criticize implementation, modify files`
+**Forbidden**: Suggest improvements, criticize implementation, modify files`,
   }
 
   return templates[agentType] || originalPrompt
@@ -490,147 +641,139 @@ export default async ({ directory, platform: hostPlatform = process.platform, en
   debugLog("inject", "Plugin loaded, directory:", directory)
 
   return {
-      "tool.execute.before": async (input, output) => {
-        try {
-          if (process.env.SUNCODE_HOOKS === "0" || process.env.SUNCODE_DISABLE_HOOKS === "1") {
-            return
-          }
-          debugLog("inject", "tool.execute.before called, tool:", input?.tool)
-
-          const toolName = input?.tool?.toLowerCase()
-          if (toolName === "bash") {
-            if (injectSuncodeContextIntoBash(ctx, input, output, hostPlatform, env)) {
-              debugLog("inject", "Injected SUNCODE_CONTEXT_ID into Bash command")
-            }
-            return
-          }
-
-          if (toolName !== "task") {
-            return
-          }
-
-          const args = output?.args
-          if (!args) return
-
-          const rawSubagentType = args.subagent_type
-          // Strip Suncode's interaction namespace before matching role names.
-          const subagentType = (rawSubagentType || "").replace(/^suncode-/, "")
-          const originalPrompt = args.prompt || ""
-
-          debugLog("inject", "Task tool called, subagent_type:", rawSubagentType)
-
-          if (!AGENTS_ALL.includes(subagentType)) {
-            debugLog("inject", "Skipping - unsupported subagent_type")
-            return
-          }
-
-          // Resolve active task in this priority order (only later steps
-          // run when earlier ones miss):
-          //   1. Exact session runtime context lookup for input.sessionID
-          //   2. `Active task: <path>` hint in the dispatch prompt
-          //      (explicit per-dispatch override — beats single-session
-          //      inference so multi-window users can disambiguate)
-          //   3. Single-session fallback — only when exactly 1 session
-          //      runtime file exists locally
-          const executionContext = readExecutionContext(
-            ctx.directory,
-            originalPrompt,
-            subagentType,
-            input?.sessionID,
-          )
-          let taskDir = executionContext?.taskPath || null
-          let taskSource = executionContext ? "execution-manifest" : null
-
-          const contextKey = ctx.getContextKey(input)
-          if (!taskDir && contextKey) {
-            const context = ctx.readContext(contextKey)
-            const exactRef = ctx.normalizeTaskRef(context?.current_task || "")
-            if (exactRef) {
-              taskDir = exactRef
-              taskSource = `session:${contextKey}`
-            }
-          }
-
-          if (!taskDir) {
-            const hintRef = extractActiveTaskHint(originalPrompt)
-            if (hintRef) {
-              const hintNormalized = ctx.normalizeTaskRef(hintRef)
-              if (hintNormalized) {
-                const hintDir = ctx.resolveTaskDir(hintNormalized)
-                if (hintDir && existsSync(hintDir)) {
-                  taskDir = hintNormalized
-                  taskSource = "prompt-hint"
-                  debugLog("inject", "Resolved task from Active task: hint:", hintNormalized)
-                }
-              }
-            }
-          }
-
-          if (!taskDir) {
-            const fallback = ctx._resolveSingleSessionFallback()
-            if (fallback?.taskPath) {
-              const fallbackDir = ctx.resolveTaskDir(fallback.taskPath)
-              if (fallbackDir && existsSync(fallbackDir)) {
-                taskDir = fallback.taskPath
-                taskSource = fallback.source
-                debugLog("inject", "Resolved task via single-session fallback:", taskDir, "source:", taskSource)
-              }
-            }
-          }
-
-          // Agents requiring task directory
-          if (AGENTS_REQUIRE_TASK.includes(subagentType)) {
-            // subagentType is already stripped of the "suncode-" prefix above.
-            if (!taskDir) {
-              debugLog("inject", "Skipping - no current task")
-              return
-            }
-            const taskDirFull = ctx.resolveTaskDir(taskDir)
-            if (!taskDirFull || !existsSync(taskDirFull)) {
-              debugLog("inject", "Skipping - task directory not found")
-              return
-            }
-          }
-
-          // Check for [finish] marker
-          const isFinish = originalPrompt.toLowerCase().includes("[finish]")
-
-          // Get context based on agent type
-          let context = executionContext?.content || ""
-          if (!executionContext) {
-            switch (subagentType) {
-              case "implement":
-                context = getImplementContext(ctx, taskDir)
-                break
-              case "check":
-                context = isFinish
-                  ? getFinishContext(ctx, taskDir)
-                  : getCheckContext(ctx, taskDir)
-                break
-              case "research":
-                context = getResearchContext(ctx, taskDir)
-                break
-            }
-          }
-
-          if (!context) {
-            debugLog("inject", "No context to inject")
-            return
-          }
-
-          const newPrompt = executionContext
-            ? buildExecutionPrompt(originalPrompt, context)
-            : buildPrompt(subagentType, originalPrompt, context, isFinish)
-
-          // Mutate args in-place — whole-object replacement does NOT work for the task tool
-          // because the runtime holds a local reference to the same args object.
-          args.prompt = newPrompt
-
-          debugLog("inject", "Injected context for", subagentType, "prompt length:", newPrompt.length)
-
-        } catch (error) {
-          debugLog("inject", "Error in tool.execute.before:", error.message, error.stack)
+    "tool.execute.before": async (input, output) => {
+      try {
+        if (process.env.SUNCODE_HOOKS === "0" || process.env.SUNCODE_DISABLE_HOOKS === "1") {
+          return
         }
+        debugLog("inject", "tool.execute.before called, tool:", input?.tool)
+
+        const toolName = input?.tool?.toLowerCase()
+        if (toolName === "bash") {
+          if (injectSuncodeContextIntoBash(ctx, input, output, hostPlatform, env)) {
+            debugLog("inject", "Injected SUNCODE_CONTEXT_ID into Bash command")
+          }
+          return
+        }
+
+        if (toolName !== "task") {
+          return
+        }
+
+        const args = output?.args
+        if (!args) return
+
+        const rawSubagentType = args.subagent_type
+        // Strip Suncode's interaction namespace before matching role names.
+        const subagentType = (rawSubagentType || "").replace(/^suncode-/, "")
+        const originalPrompt = args.prompt || ""
+
+        debugLog("inject", "Task tool called, subagent_type:", rawSubagentType)
+
+        if (!AGENTS_ALL.includes(subagentType)) {
+          debugLog("inject", "Skipping - unsupported subagent_type")
+          return
+        }
+
+        // Resolve active task in this priority order (only later steps
+        // run when earlier ones miss):
+        //   1. Exact session runtime context lookup for input.sessionID
+        //   2. `Active task: <path>` hint in the dispatch prompt
+        //      (explicit per-dispatch override — beats single-session
+        //      inference so multi-window users can disambiguate)
+        //   3. Single-session fallback — only when exactly 1 session
+        //      runtime file exists locally
+        const executionContext = readExecutionContext(ctx.directory, originalPrompt, subagentType, input?.sessionID)
+        let taskDir = executionContext?.taskPath || null
+        let taskSource = executionContext ? "execution-manifest" : null
+
+        const contextKey = ctx.getContextKey(input)
+        if (!taskDir && contextKey) {
+          const context = ctx.readContext(contextKey)
+          const exactRef = ctx.normalizeTaskRef(context?.current_task || "")
+          if (exactRef) {
+            taskDir = exactRef
+            taskSource = `session:${contextKey}`
+          }
+        }
+
+        if (!taskDir) {
+          const hintRef = extractActiveTaskHint(originalPrompt)
+          if (hintRef) {
+            const hintNormalized = ctx.normalizeTaskRef(hintRef)
+            if (hintNormalized) {
+              const hintDir = ctx.resolveTaskDir(hintNormalized)
+              if (hintDir && existsSync(hintDir)) {
+                taskDir = hintNormalized
+                taskSource = "prompt-hint"
+                debugLog("inject", "Resolved task from Active task: hint:", hintNormalized)
+              }
+            }
+          }
+        }
+
+        if (!taskDir) {
+          const fallback = ctx._resolveSingleSessionFallback()
+          if (fallback?.taskPath) {
+            const fallbackDir = ctx.resolveTaskDir(fallback.taskPath)
+            if (fallbackDir && existsSync(fallbackDir)) {
+              taskDir = fallback.taskPath
+              taskSource = fallback.source
+              debugLog("inject", "Resolved task via single-session fallback:", taskDir, "source:", taskSource)
+            }
+          }
+        }
+
+        // Agents requiring task directory
+        if (AGENTS_REQUIRE_TASK.includes(subagentType)) {
+          // subagentType is already stripped of the "suncode-" prefix above.
+          if (!taskDir) {
+            debugLog("inject", "Skipping - no current task")
+            return
+          }
+          const taskDirFull = ctx.resolveTaskDir(taskDir)
+          if (!taskDirFull || !existsSync(taskDirFull)) {
+            debugLog("inject", "Skipping - task directory not found")
+            return
+          }
+        }
+
+        // Check for [finish] marker
+        const isFinish = originalPrompt.toLowerCase().includes("[finish]")
+
+        // Get context based on agent type
+        let context = executionContext?.content || ""
+        if (!executionContext) {
+          switch (subagentType) {
+            case "implement":
+              context = getImplementContext(ctx, taskDir)
+              break
+            case "check":
+              context = isFinish ? getFinishContext(ctx, taskDir) : getCheckContext(ctx, taskDir)
+              break
+            case "research":
+              context = getResearchContext(ctx, taskDir)
+              break
+          }
+        }
+
+        if (!context) {
+          debugLog("inject", "No context to inject")
+          return
+        }
+
+        const newPrompt = executionContext
+          ? buildExecutionPrompt(originalPrompt, context)
+          : buildPrompt(subagentType, originalPrompt, context, isFinish)
+
+        // Mutate args in-place — whole-object replacement does NOT work for the task tool
+        // because the runtime holds a local reference to the same args object.
+        args.prompt = newPrompt
+
+        debugLog("inject", "Injected context for", subagentType, "prompt length:", newPrompt.length)
+      } catch (error) {
+        debugLog("inject", "Error in tool.execute.before:", error.message, error.stack)
       }
-    }
+    },
+  }
 }

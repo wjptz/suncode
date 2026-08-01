@@ -466,7 +466,9 @@ async function uploadAllArtifacts(
       (candidate) => candidate.path === artifact.path,
     );
     if (!upload) {
-      throw new Error(`Hub upload session did not return URL for ${artifact.path}`);
+      throw new Error(
+        `Hub upload session did not return URL for ${artifact.path}`,
+      );
     }
     uploaded.push(
       await uploadArtifactToMinio(
@@ -802,14 +804,117 @@ function readStructuredSubtasks(taskDir: string): HubStructuredSubtask[] {
   return readGeneratedSubtasks(taskDir);
 }
 
+function skipJsonWhitespace(source: string, index: number): number {
+  while (index < source.length && /[\t\n\r ]/.test(source[index])) index += 1;
+  return index;
+}
+
+function scanJsonStringEnd(source: string, start: number): number {
+  let escaped = false;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      return index + 1;
+    }
+  }
+  return -1;
+}
+
+function scanTopLevelValueEnd(source: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+    } else if (character === "{" || character === "[") {
+      depth += 1;
+    } else if (character === "}" || character === "]") {
+      if (depth === 0) return index;
+      depth -= 1;
+    } else if (character === "," && depth === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function hasExactTopLevelIntegerField(
+  source: string,
+  field: string,
+  expected: number,
+): boolean {
+  let index = skipJsonWhitespace(source, 0);
+  if (source[index] !== "{") return false;
+  index += 1;
+  let matches = 0;
+  while (index < source.length) {
+    index = skipJsonWhitespace(source, index);
+    if (source[index] === "}") {
+      index = skipJsonWhitespace(source, index + 1);
+      return index === source.length && matches === 1;
+    }
+    if (source[index] !== '"') return false;
+    const keyStart = index;
+    const keyEnd = scanJsonStringEnd(source, keyStart);
+    if (keyEnd < 0) return false;
+    const key = JSON.parse(source.slice(keyStart, keyEnd)) as unknown;
+    index = skipJsonWhitespace(source, keyEnd);
+    if (source[index] !== ":") return false;
+    const valueStart = skipJsonWhitespace(source, index + 1);
+    const valueEnd = scanTopLevelValueEnd(source, valueStart);
+    if (valueEnd < 0) return false;
+    if (key === field) {
+      matches += 1;
+      if (source.slice(valueStart, valueEnd).trim() !== String(expected)) {
+        return false;
+      }
+    }
+    index = skipJsonWhitespace(source, valueEnd);
+    if (source[index] === ",") {
+      index += 1;
+      continue;
+    }
+    if (source[index] === "}") continue;
+    return false;
+  }
+  return false;
+}
+
 function readExecutionSubtasks(filePath: string): HubStructuredSubtask[] {
-  const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+  const source = fs.readFileSync(filePath, "utf-8");
+  const parsed = JSON.parse(source) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("execution.json must be an object.");
   }
   const plan = parsed as Record<string, unknown>;
-  if (plan.version !== 1) {
-    throw new Error("execution.json version must equal 1.");
+  if (
+    plan.version !== 1 ||
+    !hasExactTopLevelIntegerField(source, "version", 1)
+  ) {
+    throw new Error("execution.json version must be the exact integer 1.");
+  }
+  const task = requiredExecutionString(plan.task, "task");
+  const expectedTask = path.basename(path.dirname(filePath));
+  if (task !== expectedTask) {
+    throw new Error(
+      `execution.json task must match task directory '${expectedTask}'.`,
+    );
   }
   if (!Array.isArray(plan.nodes) || plan.nodes.length === 0) {
     throw new Error("execution.json must contain a non-empty nodes array.");
@@ -824,7 +929,9 @@ function readExecutionSubtasks(filePath: string): HubStructuredSubtask[] {
     const dependsOn = record.dependsOn;
     if (
       !Array.isArray(dependsOn) ||
-      dependsOn.some((dependency) => typeof dependency !== "string" || !dependency.trim())
+      dependsOn.some(
+        (dependency) => typeof dependency !== "string" || !dependency.trim(),
+      )
     ) {
       throw new Error(
         `execution.json nodes[${index}].dependsOn must be an array of non-empty strings.`,
@@ -842,7 +949,9 @@ function readExecutionSubtasks(filePath: string): HubStructuredSubtask[] {
     throw new Error("execution.json contains duplicate node ids.");
   }
   const followers = new Map(nodes.map((node) => [node.id, [] as string[]]));
-  const indegree = new Map(nodes.map((node) => [node.id, node.dependsOn.length]));
+  const indegree = new Map(
+    nodes.map((node) => [node.id, node.dependsOn.length]),
+  );
   for (const node of nodes) {
     for (const dependency of node.dependsOn) {
       if (!nodeMap.has(dependency)) {
@@ -968,7 +1077,9 @@ function normalizeSubtask(value: unknown): HubStructuredSubtask {
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Each structured subtask must include a non-empty ${field}.`);
+    throw new Error(
+      `Each structured subtask must include a non-empty ${field}.`,
+    );
   }
   return value.trim();
 }

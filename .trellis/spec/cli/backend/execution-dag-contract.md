@@ -49,6 +49,23 @@ normalize_execution_scope(value, path, *, allow_glob=True)
 
 `planning`、缺失/损坏的 `task.json` 或其他状态都必须失败。调用者必须先通过 `task.py start` 完成 preflight、session 激活和 `planning -> in_progress` 转换；不得从其他入口绕过。
 
+任务身份以任务目录 basename 为 runtime 权威值。例如目录
+`.suncode/tasks/07-31-review-fixes/` 只接受：
+
+```json
+{ "task": "07-31-review-fixes" }
+```
+
+`execution.json.task` 不得使用 `task.json.id`、标题、无日期 slug 或其他别名。
+显式计划在公共加载边界就必须拒绝身份不一致，不能等到结果提交时再发现。
+已有 runtime 每次载入时还必须重新核对：
+
+- `state.taskId == task_dir.name`；
+- `state.taskPath == repo-relative task_dir`；
+- `state.runId == runtime directory basename`。
+
+任一不一致都必须失败关闭，不能用调用参数覆盖持久化身份继续运行。
+
 ### 3.2 Scope canonicalization and conflict safety
 
 计划解析时，所有 `reads` / `writes` scope 必须转换为稳定的 POSIX 逻辑路径：
@@ -139,7 +156,40 @@ NodeResult 的嵌套对象同样属于 v1 协议，不是可随意扩展的 meta
 
 多个 final 可以并行，但不能通过“多个 final 的祖先并集”拼出全图覆盖；每个 final 自己都必须是全局质量门。
 
-### 3.7 Claim dispatch envelope
+### 3.7 Context manifest identity and execution policy
+
+每次 claim 产生的 `manifest.json` 是 worker 的可哈希权威契约，至少包含：
+
+```json
+{
+  "version": 1,
+  "task": {
+    "id": "07-31-review-fixes",
+    "path": ".suncode/tasks/07-31-review-fixes",
+    "planVersion": 1,
+    "planHash": "sha256"
+  },
+  "run": {
+    "id": "run-id",
+    "nodeId": "implementation",
+    "attempt": 1
+  },
+  "execution": {
+    "allowed": ["inline", "native-subagent", "channel"],
+    "isolation": "shared-worktree",
+    "timeoutSeconds": 900,
+    "maxAttempts": 2,
+    "idempotent": true
+  }
+}
+```
+
+manifest reader 必须校验 task id/path/plan version、run id/node id/attempt 和完整
+execution policy；不能只校验文件哈希。worker 实际收到的 `content.md` 也必须渲染
+plan version、allowed executors、isolation、timeout、max attempts 和 idempotency，
+不能把约束只放在一个 adapter 不会展示的 JSON 字段里。
+
+### 3.8 Claim dispatch envelope
 
 claim 响应中的 `dispatch` 至少直接包含：
 
@@ -158,7 +208,7 @@ claim 响应中的 `dispatch` 至少直接包含：
 
 adapter 使用 `dispatch.role` 选择原生 agent，并把 `dispatch.prompt` 原样传递。manifest 仍是 objective、scope、validation、依赖结果和预算的完整权威来源。
 
-### 3.8 精确整数与深图安全
+### 3.9 精确整数、跨语言 JSON 词法与深图安全
 
 所有来自 JSON 或 adapter 的整数协议字段必须使用精确整数语义。Python 中
 `True == 1`、`1.0 == 1`，因此不能只用 `==` 或 `isinstance(value, int)` 判断：
@@ -172,6 +222,21 @@ adapter 使用 `dispatch.role` 选择原生 agent，并把 `dispatch.prompt` 原
 上述字段只接受 `type(value) is int` 且值满足对应契约；JSON `true`、`1.0`
 和 `"1"` 即使与整数 `1` 看起来等价，也必须拒绝。
 
+JavaScript 的 `JSON.parse()` 会把原始 `1.0` / `1e0` 丢失词法信息并转换成
+`Number 1`。因此 OpenCode manifest 和 Hub `execution.json` 消费端不能只使用
+`value === 1` 或 `Number.isInteger(value)`：
+
+- 先正常 `JSON.parse()` 验证 JSON 结构；
+- 再检查原始 JSON 中顶层 `version` token 恰好为 `1`；
+- context manifest 的所有数字字段都必须是无小数点、无指数的整数 token；
+- 规范化哈希不能代替词法检查，因为 `JSON.stringify(JSON.parse("1.0"))`
+  会重新得到 `1`，原哈希仍可能匹配。
+
+executor capability 的 `maxConcurrency` 同样只接受精确正整数。factory 和
+`start_execution_run` 的最终防御校验必须都在创建 runtime 目录之前执行；直接
+构造 `ExecutorCapabilities` 不能绕过该门禁。持久化 state 中的
+`executor.maxConcurrency` 每次载入也必须重新校验。
+
 计划图的 cycle 诊断和 final barrier 祖先闭包必须使用显式 stack/deque 等
 迭代算法。合法深链和深层 cycle 都不得受 Python 默认递归深度影响；cycle
 仍须通过 `ExecutionPlanError`/CLI JSON 返回可定位诊断，不能泄漏
@@ -182,6 +247,8 @@ adapter 使用 `dispatch.role` 选择原生 agent，并把 `dispatch.prompt` 原
 | 输入/状态 | 必须失败或保持的行为 | 诊断要点 |
 |---|---|---|
 | `task.json.status=planning` 后 `start-run` | 失败，不创建 runtime | `status == 'in_progress'` |
+| `execution.json.task` 与任务目录 basename 不同 | 失败，不创建 runtime | `execution.json.task` 身份不一致 |
+| runtime `taskId` / `taskPath` / `runId` 被篡改 | 所有 status/claim/recover 等入口失败 | 持久化身份不一致 |
 | active worker 无结果，普通 recover | 成功但保持 active | `executor liveness is unconfirmed` |
 | 非 active node 使用 `--force-orphan` | 失败 | 必须为 `dispatched/running` |
 | 同一 node 同时 force-orphan/retry | 失败 | 两种转换互斥 |
@@ -197,6 +264,10 @@ adapter 使用 `dispatch.role` 选择原生 agent，并把 `dispatch.prompt` 原
 | 任意 isolation 下 final check 声明非空 writes | 计划校验失败 | final check 必须只读 |
 | final 未汇聚任一 non-final | 计划校验失败 | 列出 missing nodes |
 | version/attempt 使用 `true`、`1.0` 或 `"1"` | 失败 | 必须是精确 JSON integer |
+| OpenCode manifest 顶层或嵌套整数使用 `1.0` / `1e0` | 不注入 context | 原始 JSON number token 非整数 |
+| Hub `execution.json.version` 原始 token 为 `1.0` | 不生成/提交 subtasks | 顶层 version 不是精确 token `1` |
+| capability `maxConcurrency` 为 bool/float/string | start 前失败，不创建 run/latest | 必须是精确正整数 |
+| manifest 缺少 planVersion 或 execution policy | 失败，不注入 context | manifest 权威契约不完整 |
 | NodeResult 嵌套对象包含未知键 | 失败 | 定位到数组索引并列出未知字段 |
 | `location`/`evidence`/`hash` 使用非字符串 | 失败 | 定位到具体可选字段 |
 | 1200 层以上合法串行 DAG | 校验成功 | 不得触发 `RecursionError` |
@@ -210,12 +281,15 @@ adapter 使用 `dispatch.role` 选择原生 agent，并把 `dispatch.prompt` 原
 - Good：`src/**` 可匹配超过 1000 个逻辑段的 concrete change path，不依赖递归调用栈。
 - Good：1200 层以上的串行 DAG 正常验证；同等深度的 cycle 返回结构化 cycle 诊断。
 - Good：NodeResult 的 `findings.location`、`validation.evidence`、`artifacts.hash` 使用字符串，且没有未知字段。
+- Good：manifest 同时携带并渲染 DAG 版本与完整 execution policy；三类 adapter 得到同一约束。
 - Bad：把“结果文件还没出现”等同于“worker 已死”，自动启动第二个 attempt。
 - Bad：接受 `status=succeeded`、`validation=[]` 或 `changes=[src/forbidden/x]` 并解锁 final。
 - Bad：用大小写折叠后的 matcher 让 `src/allowed/**` 接受 `SRC/ALLOWED/x`，把 Windows 冲突安全规则误当成 Linux 写权限。
 - Bad：允许 worktree/sandbox final `check` 声明 writes，使全局质量门不再只读。
 - Bad：让两个 final 分别覆盖不同分支，然后用祖先并集宣称全图已集成。
 - Bad：依赖 Python 的 `True == 1` 接受布尔 version/attempt，或让 `1.0` 冒充协议整数。
+- Bad：JavaScript 在 `JSON.parse()` 后只比较 `version === 1`，让原始 `1.0` 通过且继续匹配规范化哈希。
+- Bad：先创建 run/latest，再在第一次 `ready` 时才拒绝浮点 `maxConcurrency`。
 - Bad：把未知 NodeResult 嵌套字段原样持久化并解锁后继。
 
 ## 6. Tests Required
@@ -233,6 +307,11 @@ adapter 使用 `dispatch.role` 选择原生 agent，并把 `dispatch.prompt` 原
 - shared-worktree/worktree/sandbox 下，声明 writes 的 final check 均失败；
 - claim 的 `dispatch.role/name/contextProfile/isolation` 与 node 一致。
 - execution plan、NodeResult、runtime state、context manifest 和 executor capability 的 version/attempt 对 `true`、`1.0`、`"1"` 均失败；
+- OpenCode 对 manifest 顶层 version、嵌套 planVersion/attempt 的 `1.0` / `1e0` 均保持原 prompt、不注入 content；
+- Hub projection 对 raw `execution.json.version=1.0` 失败，并验证 plan task 等于目标任务目录；
+- plan task mismatch 和篡改后的 runtime taskId/taskPath/runId 均在公共入口失败；
+- capability factory 与直接构造 adapter 对 bool/float/string maxConcurrency 均在写盘前失败；
+- manifest 和注入 content 都断言 planVersion、allowed、isolation、timeout、maxAttempts、idempotent；
 - `changes/findings/validation/artifacts` 拒绝未知字段，并校验 `location/evidence/hash` 可选字段类型；
 - duplicate validation command 明确失败；
 - 1200 层以上合法串行 DAG 成功，1200 层以上 cycle 返回结构化错误且无 `RecursionError`；
@@ -322,3 +401,23 @@ while pending:
 
 协议类型检查和图遍历都必须对输入规模保持确定语义，不能依赖 Python 的隐式
 相等规则或进程级递归配置。
+
+### Wrong
+
+```javascript
+const manifest = JSON.parse(source)
+if (manifest.version === 1 && hashMatches(manifest)) accept(manifest)
+```
+
+`source` 中的 `1.0` 会变成 `Number 1`，规范化哈希也可能继续匹配。
+
+### Correct
+
+```javascript
+const manifest = JSON.parse(source)
+if (!hasExactTopLevelIntegerField(source, "version", 1)) reject(manifest)
+if (!hasOnlyExactJsonIntegerNumbers(source)) reject(manifest)
+if (manifest.version !== 1 || !hashMatches(manifest)) reject(manifest)
+```
+
+结构、原始词法和哈希是三个独立门禁，缺一不可。

@@ -1307,8 +1307,24 @@ Local source, scoped to the target task directory only:
 
 1. If `.suncode/tasks/<task>/subtasks.json` exists, treat it as the explicit
    override.
-2. Otherwise derive structured subtasks from parseable checklist lines in
+2. Otherwise, if `.suncode/tasks/<task>/execution.json` exists, project its
+   nodes into stable topological order.
+3. Otherwise derive structured subtasks from parseable checklist lines in
    `.suncode/tasks/<task>/implement.md`.
+
+Hub projection is not allowed to reinterpret an invalid DAG identity. Before
+projecting `execution.json` it must require:
+
+- raw top-level `version` token is exactly integer `1`，不能是 `true`、`1.0`、
+  `1e0` 或 `"1"`；
+- `task` equals the target task directory basename；
+- node IDs are unique，all dependencies exist，and the graph is acyclic；
+- output order is stable topological order with original node order as the
+  tie-breaker.
+
+JavaScript `JSON.parse()` 会把 `1.0` 变成 `Number 1`，所以 projection reader
+必须同时读取原始 JSON 文本并执行 version token 词法检查，不能只比较
+`plan.version === 1`。
 
 Every complex task `implement.md` must include this parseable checklist section:
 
@@ -1369,6 +1385,9 @@ Task manifest fields after success:
 | Hub disabled | Return `disabled`; no network |
 | Task has no remote Hub binding | Return `skipped`; no network |
 | `subtasks.json` missing and `implement.md` has parseable checklist items | Derive subtasks from `implement.md` and submit |
+| `subtasks.json` missing and valid `execution.json` exists | Project DAG nodes in stable topological order before considering `implement.md` |
+| `execution.json.version` raw token is `1.0` / `1e0` | Throw before any subtask request |
+| `execution.json.task` differs from target directory | Throw before any subtask request |
 | `subtasks.json` missing and `implement.md` has no parseable checklist items | Return `skipped`; no network |
 | `subtasks` empty | Return `skipped`; no network |
 | Entry missing `priority`, `name`, or `description` | Throw a user-facing error |
@@ -1382,12 +1401,16 @@ Task manifest fields after success:
   subtasks; command POSTs exactly those items and stores `lastSubtasksHash`.
 - Good: Current task has no override but `implement.md` contains a parseable
   `## 实施清单` checklist; command derives and POSTs those items.
+- Good: A diamond `execution.json` projects root, stable sibling order, then
+  integration barrier，and ignores the legacy checklist fallback.
 - Base: Local-only project has no Hub enabled; `after_start` does not add Hub
   hooks.
 - Bad: Command scans `.suncode/tasks/**/subtasks.json` and uploads sibling task
   work.
 - Bad: Command sends `prd.md`, `design.md`, or `implement.md` bodies in the
   subtask API payload.
+- Bad: Hub accepts `version: 1.0` because `JSON.parse()` converted it to `1`，
+  or projects a plan whose `task` belongs to a sibling directory.
 - Bad: Workflow template asks for subtasks in prose or an ordered list that is
   not parseable as checklist items.
 
@@ -1395,6 +1418,8 @@ Task manifest fields after success:
 
 - Unit/function-level test for `submitSubtasks`:
   - uses the target task's `subtasks.json` override when present
+  - projects `execution.json` before `implement.md` in stable topological order
+  - rejects raw boolean/float/string version tokens and task-directory mismatch
   - generates structured subtasks from the target task's `implement.md`
     `## 实施清单` checklist when no override exists
   - rejects or ignores sibling task `subtasks.json`

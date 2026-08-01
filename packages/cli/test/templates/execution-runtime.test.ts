@@ -604,6 +604,35 @@ describe("execution DAG runtime template", () => {
     );
   });
 
+  it("rejects an execution plan whose task does not match its directory", () => {
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "different-task",
+      defaults: {},
+      nodes: [finalNode("identity-gate")],
+      barriers: { final: ["identity-gate"] },
+    });
+
+    const result = runTask([
+      "execution",
+      "start-run",
+      taskDir,
+      "--run-id",
+      "mismatched-task-run",
+      "--json",
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout).error).toContain(
+      "execution.json.task: must match task directory '07-23-dag-test'",
+    );
+    expect(
+      fs.existsSync(
+        path.join(cwd, ".suncode", ".runtime", "execution", "07-23-dag-test"),
+      ),
+    ).toBe(false);
+  });
+
   it("fans out all safe ready nodes before wait and reaches the final barrier", () => {
     writeJson(path.join(taskDir, "execution.json"), diamondPlan());
 
@@ -935,13 +964,33 @@ describe("execution DAG runtime template", () => {
     const manifest = JSON.parse(
       fs.readFileSync(dispatch.manifestPath, "utf-8"),
     ) as {
+      task: { id: string; path: string; planVersion: number; planHash: string };
       run: { parentSession: string };
+      execution: {
+        allowed: string[];
+        isolation: string;
+        timeoutSeconds: number;
+        maxAttempts: number;
+        idempotent: boolean;
+      };
       sources: { path: string; redacted: boolean }[];
       budget: { usedBytes: number; totalBytes: number };
       manifestHash: string;
     };
     const content = fs.readFileSync(dispatch.contentPath, "utf-8");
+    expect(manifest.task).toMatchObject({
+      id: "07-23-dag-test",
+      path: ".suncode/tasks/07-23-dag-test",
+      planVersion: 1,
+    });
     expect(manifest.run.parentSession).toBe("parent-123");
+    expect(manifest.execution).toEqual({
+      allowed: ["inline", "native-subagent", "channel"],
+      isolation: "shared-worktree",
+      timeoutSeconds: 900,
+      maxAttempts: 2,
+      idempotent: true,
+    });
     expect(
       manifest.sources.find((source) => source.path === ".env"),
     ).toMatchObject({
@@ -950,6 +999,14 @@ describe("execution DAG runtime template", () => {
     expect(content).toContain("token=[REDACTED]");
     expect(content).not.toContain("super-secret-value");
     expect(content).not.toContain("do-not-read");
+    expect(content).toContain("Execution plan version: 1");
+    expect(content).toContain(
+      "Allowed executors: inline, native-subagent, channel",
+    );
+    expect(content).toContain("Isolation: shared-worktree");
+    expect(content).toContain("Timeout: 900 seconds");
+    expect(content).toContain("Maximum attempts: 2");
+    expect(content).toContain("Idempotent: yes");
     expect(manifest.budget.usedBytes).toBeLessThanOrEqual(
       manifest.budget.totalBytes,
     );
@@ -1833,6 +1890,140 @@ describe("execution DAG runtime template", () => {
   });
 
   it.each([
+    { field: "taskId", value: "different-task" },
+    { field: "taskPath", value: ".suncode/tasks/different-task" },
+  ])("rejects runtime state with a mismatched $field", ({ field, value }) => {
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "07-23-dag-test",
+      defaults: {},
+      nodes: [finalNode("runtime-identity")],
+      barriers: { final: ["runtime-identity"] },
+    });
+    const runId = `runtime-identity-${field}`;
+    const started = runTask([
+      "execution",
+      "start-run",
+      taskDir,
+      "--executor",
+      "channel",
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+    expect(started.status).toBe(0);
+    const runtimePath = JSON.parse(started.stdout).runtimePath as string;
+    const statePath = path.join(runtimePath, "state.json");
+    const state = JSON.parse(fs.readFileSync(statePath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+    state[field] = value;
+    writeJson(statePath, state);
+
+    const status = runTask([
+      "execution",
+      "status",
+      taskDir,
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+
+    expect(status.status).toBe(1);
+    expect(JSON.parse(status.stdout).error).toContain(
+      `runtime state ${field} does not match task directory`,
+    );
+  });
+
+  it("rejects runtime state whose runId differs from its runtime directory", () => {
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "07-23-dag-test",
+      defaults: {},
+      nodes: [finalNode("runtime-run-identity")],
+      barriers: { final: ["runtime-run-identity"] },
+    });
+    const runId = "runtime-run-identity";
+    const started = runTask([
+      "execution",
+      "start-run",
+      taskDir,
+      "--executor",
+      "channel",
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+    expect(started.status).toBe(0);
+    const runtimePath = JSON.parse(started.stdout).runtimePath as string;
+    const statePath = path.join(runtimePath, "state.json");
+    const state = JSON.parse(fs.readFileSync(statePath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+    state.runId = "different-run";
+    writeJson(statePath, state);
+
+    const status = runTask([
+      "execution",
+      "status",
+      taskDir,
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+
+    expect(status.status).toBe(1);
+    expect(JSON.parse(status.stdout).error).toContain(
+      "runtime state runId does not match runtime directory",
+    );
+  });
+
+  it("rejects a tampered non-integer runtime maxConcurrency", () => {
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "07-23-dag-test",
+      defaults: {},
+      nodes: [finalNode("runtime-concurrency")],
+      barriers: { final: ["runtime-concurrency"] },
+    });
+    const runId = "runtime-concurrency";
+    const started = runTask([
+      "execution",
+      "start-run",
+      taskDir,
+      "--executor",
+      "channel",
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+    expect(started.status).toBe(0);
+    const runtimePath = JSON.parse(started.stdout).runtimePath as string;
+    const statePath = path.join(runtimePath, "state.json");
+    const state = JSON.parse(fs.readFileSync(statePath, "utf-8")) as {
+      executor: Record<string, unknown>;
+    };
+    state.executor.maxConcurrency = 1.5;
+    writeJson(statePath, state);
+
+    const status = runTask([
+      "execution",
+      "status",
+      taskDir,
+      "--run-id",
+      runId,
+      "--json",
+    ]);
+
+    expect(status.status).toBe(1);
+    expect(JSON.parse(status.stdout).error).toContain(
+      "runtime executor maxConcurrency is invalid",
+    );
+  });
+
+  it.each([
     { name: "boolean", jsonValue: "true" },
     { name: "float", jsonValue: "1.0" },
     { name: "string", jsonValue: '"1"' },
@@ -1891,6 +2082,94 @@ describe("execution DAG runtime template", () => {
       expect(result.stdout).toContain("executor result protocol must equal 1");
     },
   );
+
+  it.each([
+    { name: "boolean", jsonValue: "true" },
+    { name: "float", jsonValue: "1.5" },
+    { name: "string", jsonValue: '"2"' },
+  ])(
+    "rejects a $name max concurrency at the capability factory boundary",
+    ({ jsonValue }) => {
+      const probe = [
+        "import json",
+        "import sys",
+        "sys.path.insert(0, sys.argv[1])",
+        "from common.execution_runtime import ExecutionRuntimeError, make_capabilities",
+        "try:",
+        "    make_capabilities(kind='channel', max_concurrency=json.loads(sys.argv[2]))",
+        "except ExecutionRuntimeError as exc:",
+        "    print(exc)",
+        "    raise SystemExit(1)",
+      ].join("\n");
+      const result = spawnSync(
+        pythonCommand,
+        ["-c", probe, path.join(cwd, ".suncode", "scripts"), jsonValue],
+        { cwd, encoding: "utf-8" },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain(
+        "max concurrency must be a positive integer",
+      );
+    },
+  );
+
+  it("rejects a direct adapter float max concurrency before creating runtime state", () => {
+    writeJson(path.join(taskDir, "execution.json"), {
+      version: 1,
+      task: "07-23-dag-test",
+      defaults: {},
+      nodes: [finalNode("adapter-concurrency")],
+      barriers: { final: ["adapter-concurrency"] },
+    });
+    const probe = [
+      "import sys",
+      "from pathlib import Path",
+      "sys.path.insert(0, sys.argv[1])",
+      "from common.execution_runtime import ExecutionRuntimeError, ExecutorCapabilities, start_execution_run",
+      "capabilities = ExecutorCapabilities(",
+      "    kind='channel',",
+      "    max_concurrency=1.5,",
+      "    roles=('implement', 'check', 'fix', 'integration', 'research'),",
+      "    supports_wait_any=True,",
+      "    supports_cancellation=False,",
+      "    supports_clean_context=True,",
+      "    isolation='shared-worktree',",
+      ")",
+      "try:",
+      "    start_execution_run(",
+      "        repo_root=Path(sys.argv[2]),",
+      "        task_dir=Path(sys.argv[3]),",
+      "        capabilities=capabilities,",
+      "        run_id='invalid-adapter-concurrency',",
+      "    )",
+      "except ExecutionRuntimeError as exc:",
+      "    print(exc)",
+      "    raise SystemExit(1)",
+    ].join("\n");
+    const result = spawnSync(
+      pythonCommand,
+      ["-c", probe, path.join(cwd, ".suncode", "scripts"), cwd, taskDir],
+      { cwd, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      "executor max concurrency must be a positive integer",
+    );
+    expect(
+      fs.existsSync(
+        path.join(
+          cwd,
+          ".suncode",
+          ".runtime",
+          "execution",
+          "07-23-dag-test",
+          "invalid-adapter-concurrency",
+        ),
+      ),
+    ).toBe(false);
+  });
 
   it("preserves a no-clean-context capability declaration in inline mode", () => {
     writeJson(path.join(taskDir, "execution.json"), {
