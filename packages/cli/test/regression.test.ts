@@ -4065,16 +4065,25 @@ print(len(entries))
     }
   });
 
-  it("[workflow-state-r2] template workflow.md [workflow-state:planning] mentions artifact gates + required jsonl curation", () => {
+  it("[workflow-state-r2] planning breadcrumbs gate one-time DAG finalization after artifact convergence", () => {
     const wf = templateWorkflowMd();
-    const match = wf.match(
-      /\[workflow-state:planning\]([\s\S]*?)\[\/workflow-state:planning\]/,
-    );
-    expect(match).toBeTruthy();
-    const body = match?.[1] ?? "";
-    expect(body).toMatch(/Lightweight: `prd\.md` can be enough/);
-    expect(body).toMatch(/Complex: finish `prd\.md`, `design\.md`, and `implement\.md`/);
-    expect(body).toContain(
+    for (const status of ["planning", "planning-inline"]) {
+      const match = new RegExp(
+        `^\\[workflow-state:${status}\\]\\r?\\n([\\s\\S]*?)\\r?\\n\\[/workflow-state:${status}\\]$`,
+        "m",
+      ).exec(wf);
+      expect(match).toBeTruthy();
+      const body = match?.[1] ?? "";
+      expect(body).toMatch(/Lightweight: `prd\.md` can be enough/);
+      expect(body).toMatch(
+        /Complex: finish `prd\.md`, `design\.md`, and `implement\.md`/,
+      );
+      expect(body).toContain("DAG finalization is not a per-turn action");
+      expect(body).toContain("do not scaffold or validate");
+      expect(body).toContain("reuse it without scaffold or validation");
+      expect(body).toContain("Never automatically run `scaffold --force`");
+    }
+    expect(wf).toContain(
       "curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start",
     );
   });

@@ -49,6 +49,27 @@ normalize_execution_scope(value, path, *, allow_glob=True)
 
 `planning`、缺失/损坏的 `task.json` 或其他状态都必须失败。调用者必须先通过 `task.py start` 完成 preflight、session 激活和 `planning -> in_progress` 转换；不得从其他入口绕过。
 
+#### Planning-finalization boundary
+
+`execution scaffold` / `execution validate` 是规划收敛后的 required-once
+finalization 工具，不是 `[workflow-state:planning*]` 每轮注入后都要执行的动作：
+
+- 阻塞性未决问题存在，或 PRD/design/implement 仍在实质变化时，不生成、
+  不验证 DAG；
+- 规划首次收敛且 `execution.json` 缺失时，只 scaffold 一次；review/edit
+  后 validate 一次；
+- 已有 DAG 仍匹配最新规划时直接复用，不重复 scaffold、validate 或整图审查；
+- 交付物、依赖、reads/writes/resources、executor constraint 或 validation
+  发生实质变化时，原地更新受影响的节点/边，再 validate 一次；不得自动
+  `scaffold --force` 覆盖 reviewed plan；
+- DAG 是 final planning summary 的组成部分；用户必须在该摘要之后批准。
+  DAG 发生实质变化时，旧批准失效。
+
+该判断由 Agent 对照权威 planning artifacts 完成，不向 execution v1 schema
+增加 freshness fingerprint、文档状态或 sidecar。`task.py start` 仍是最终
+lifecycle/结构门禁；activation step 不应为未变化 DAG 再显式调用一次
+`execution validate`。
+
 任务身份以任务目录 basename 为 runtime 权威值。例如目录
 `.suncode/tasks/07-31-review-fixes/` 只接受：
 

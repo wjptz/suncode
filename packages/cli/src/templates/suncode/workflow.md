@@ -215,7 +215,7 @@ Complex task: ask the user if you can create a Suncode task and enter the planni
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`. Present the latest final planning summary, stop, and wait for a subsequent user message that explicitly approves implementation before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
 Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the Hub display projected from `execution.json` (or `implement.md` fallback) needs an explicit override.
-Execution DAG: when `execution.dag.enabled`, create and validate `execution.json` before implementation. A lightweight task may use one node. A complex task must encode real dependencies, disjoint read/write scopes, resource locks, validation, node context, and a final integration/check barrier; do not serialize independent work merely because it is listed later in `implement.md`.
+Execution DAG: DAG finalization is not a per-turn action. When `execution.dag.enabled`, do not scaffold or validate while blocking questions remain or the PRD/design/implementation view is still changing. Once planning converges, if `execution.json` is missing, scaffold it once, review/edit it, and validate once; if the existing plan still matches, reuse it without scaffold or validation; if a material planning change affects deliverables, dependencies, scopes/resources, or validation, edit the existing plan in place and validate once. Never automatically run `scaffold --force`. Include the reviewed DAG in the latest final planning summary before asking for subsequent implementation approval. A lightweight task may use one node. A complex task must encode real dependencies, disjoint read/write scopes, resource locks, validation, node context, and a final integration/check barrier; do not serialize independent work merely because it is listed later in `implement.md`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; execution order is not implied by tree position. Put dependencies inside each task's `execution.json`.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
@@ -230,7 +230,7 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`. Present the latest final planning summary, stop, and wait for a subsequent user message that explicitly approves implementation before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
 Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the Hub display projected from `execution.json` (or `implement.md` fallback) needs an explicit override.
-Execution DAG: when `execution.dag.enabled`, create and validate `execution.json` before implementation. Inline uses the same graph with `maxConcurrency=1`; it does not use a separate serial plan. A lightweight task may use one node; a complex task must encode real dependencies, scopes, resources, validation, context, and a final integration/check barrier.
+Execution DAG: DAG finalization is not a per-turn action. When `execution.dag.enabled`, do not scaffold or validate while blocking questions remain or the PRD/design/implementation view is still changing. Once planning converges, if `execution.json` is missing, scaffold it once, review/edit it, and validate once; if the existing plan still matches, reuse it without scaffold or validation; if a material planning change affects deliverables, dependencies, scopes/resources, or validation, edit the existing plan in place and validate once. Never automatically run `scaffold --force`. Include the reviewed DAG in the latest final planning summary before asking for subsequent implementation approval. Inline uses the same graph with `maxConcurrency=1`; it does not use a separate serial plan. A lightweight task may use one node; a complex task must encode real dependencies, scopes, resources, validation, context, and a final integration/check barrier.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; execution order is not implied by tree position. Put dependencies inside each task's `execution.json`.
 Inline mode: skip jsonl curation; node execution reads the manifest plus relevant specs via `suncode-before-dev`.
 [/workflow-state:planning-inline]
@@ -463,13 +463,22 @@ Skip this step. Context is loaded directly by the `suncode-before-dev` skill in 
 
 #### 1.4 Plan execution DAG `[required · once when execution.dag.enabled]`
 
-Create the canonical graph after the PRD/design/implementation view has converged:
+This is a planning-finalization gate, not a per-turn action. Seeing the planning breadcrumb again does not authorize rerunning it. Enter this step only after blocking questions are empty, the PRD/design/implementation view is internally consistent, and node boundaries, dependencies, scopes/resources, and validation can be stated reliably.
 
-```bash
-python3 ./.suncode/scripts/task.py execution scaffold <task-dir>
-python3 ./.suncode/scripts/task.py execution validate <task-dir>
-python3 ./.suncode/scripts/task.py execution show <task-dir> --json
-```
+Choose exactly one branch:
+
+- If `execution.json` is missing, scaffold it once, review/edit the resulting graph, validate once, and then show it for the final planning summary:
+
+  ```bash
+  python3 ./.suncode/scripts/task.py execution scaffold <task-dir>
+  python3 ./.suncode/scripts/task.py execution validate <task-dir>
+  python3 ./.suncode/scripts/task.py execution show <task-dir> --json
+  ```
+
+- If the existing plan still matches the converged artifacts, reuse it without scaffold or validation. Ordinary discussion, wording changes, explanations, commit-message edits, and explicitly deferred future work do not invalidate it.
+- If a material planning change affects the DAG (deliverables, dependencies, reads/writes/resources, executor constraints, or validation), edit the affected nodes and edges in place, run `execution validate` once, show the changed graph, and present a new final planning summary. Any earlier implementation approval is no longer current.
+
+Never automatically run `scaffold --force`; an existing reviewed graph is not disposable generated output.
 
 `scaffold` is only a conservative starting point. For a complex task, review and edit every node before approval:
 
@@ -519,15 +528,16 @@ Rules:
 
 #### 1.6 Activate task `[required · once]`
 
-After planning artifact review, prepare Hub-bound tasks and then flip the task status to `in_progress`:
+Phase 1.4 has already finalized and validated the reviewed graph. Do not re-run `execution validate` here for an unchanged reviewed DAG. If planning artifacts changed materially after the latest final summary, stop, return to Phase 1.4, update and validate the existing graph once, present the new summary, and wait for fresh implementation approval.
+
+After the user approves the latest summary, prepare Hub-bound tasks and then flip the task status to `in_progress`:
 
 ```bash
-python3 ./.suncode/scripts/task.py execution validate <task-dir>
 suncode hub plan-ready --task current
 python3 ./.suncode/scripts/task.py start <task-dir>
 ```
 
-When DAG is disabled or an old task intentionally uses compatibility fallback, replace strict validation with `execution show --json` to inspect the conservative normalized serial graph. `suncode hub plan-ready` submits planning artifacts and structured subtasks from `subtasks.json`, `execution.json`, or `implement.md`. For standard/change tasks it also runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound standard/change tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Quick, Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
+When DAG is disabled or an old task intentionally uses compatibility fallback, inspect the conservative normalized serial graph with `execution show --json` during Phase 1.4. `task.py start` remains the final lifecycle and structural gate; do not bypass it. `suncode hub plan-ready` submits planning artifacts and structured subtasks from `subtasks.json`, `execution.json`, or `implement.md`. For standard/change tasks it also runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound standard/change tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Quick, Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
 
 For quick Hub tasks (meta.hub.taskType == `quick`), use the minimal PRD generated by intake, run `suncode hub plan-ready --task current` to upload the plan artifacts, skip Hub start preflight/plan approval, then run `python3 ./.suncode/scripts/task.py start <task-dir>` directly and keep the completion path focused on minimal validation plus `suncode hub finish --task current`. Quick tasks still skip Hub code review.
 

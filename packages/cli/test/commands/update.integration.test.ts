@@ -1328,6 +1328,10 @@ describe("update() integration", () => {
     expect(updated).toContain(
       "For Codex, `SubagentStart` supplies native context injection",
     );
+    expect(updated).toContain("DAG finalization is not a per-turn action");
+    expect(updated).toContain(
+      "Do not re-run `execution validate` here for an unchanged reviewed DAG",
+    );
     expect(updated).toContain("[codex-inline, Kilo, Antigravity, Devin]");
     expect(updated).not.toContain("[Codex]");
     expect(updated).not.toContain("[Kilo, Antigravity, Windsurf]");
