@@ -827,3 +827,26 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Status
 
 [OK] **Completed**
+
+
+## Session 25: 归档 Suncode v0.6.11 发布任务
+
+**Date**: 2026-08-02
+**Task**: 归档 Suncode v0.6.11 发布任务
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+核验 v0.6.11 远端 tag、GitHub Actions 与 npm 双包发布结果，采纳 canonical 发布记录和 release-process 经验，并归档本地遗留的发布任务副本。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `275618c6` | (see git log) |
+| `ce00c1ee` | (see git log) |
+
+### Status
+
+[OK] **Completed**

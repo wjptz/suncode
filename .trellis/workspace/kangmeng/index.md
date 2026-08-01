@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 24
+- **Total Sessions**: 25
 - **Last Active**: 2026-08-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~829 | Active |
+| `journal-1.md` | ~852 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 25 | 2026-08-02 | 归档 Suncode v0.6.11 发布任务 | `275618c6`, `ce00c1ee` | `main` |
 | 24 | 2026-08-02 | DAG 规划收敛门禁 | `f19ab6ba` | `main` |
 | 23 | 2026-08-01 | 同步 Trellis v0.6.9-v0.6.11 | `313c6db3`, `681bc559` | `main` |
 | 22 | 2026-08-01 | Complete universal execution DAG | `d62ba4f3`, `10620d3b` | `main` |
