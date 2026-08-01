@@ -699,3 +699,37 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Harden execution DAG contracts
+
+**Date**: 2026-08-01
+**Task**: Harden execution DAG contracts
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+修复执行 DAG 复审阻断项，收紧恢复、scope、重试、结果验证、生命周期、final barrier、dispatch、JSON 整数词法、runtime 身份、并发上限与 context manifest 契约；定向 208/208、CLI 全量 1590/1590 通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `10620d3b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
