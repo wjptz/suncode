@@ -1,0 +1,15 @@
+{
+  "beforeSubAgentStart": [
+    {
+      "description": "Inject Suncode active-task context before sub-agent buildInitialMessages",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python -X utf8 .snow/hooks/write-suncode-context.py subagent",
+          "timeout": 15000,
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

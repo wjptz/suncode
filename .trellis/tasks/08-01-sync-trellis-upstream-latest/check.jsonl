@@ -1,0 +1,11 @@
+{"file":".trellis/tasks/08-01-sync-trellis-upstream-latest/research/release-evidence.md","reason":"Re-verify official release identity, scope, checkpoint safety, and excluded dirty work."}
+{"file":".trellis/tasks/08-01-sync-trellis-upstream-latest/research/upstream-v0.6.9-v0.6.11-adoption.md","reason":"Check implementation and exclusions against every one of the 43 official commits."}
+{"file":".trellis/spec/cli/backend/platform-integration.md","reason":"Review all platform surfaces, generated templates, hooks, agents, and identity transformations."}
+{"file":".trellis/spec/cli/backend/suncode-runtime-identity.md","reason":"Review Suncode identity, ownership, persistence, and template-hash boundaries."}
+{"file":".trellis/spec/cli/backend/filesystem-safety.md","reason":"Review trusted-root parsing, containment, symlink, JSONL, and agent file-read boundaries."}
+{"file":".trellis/spec/cli/backend/script-conventions.md","reason":"Review Python compatibility and live/generated script parity."}
+{"file":".trellis/spec/cli/backend/directory-structure.md","reason":"Review journal union and worktree behavior."}
+{"file":".trellis/spec/cli/backend/commands-update.md","reason":"Review preservation and update-time ownership semantics."}
+{"file":".trellis/spec/cli/backend/commands-platforms.md","reason":"Review platform detection and stable JSON/human output."}
+{"file":".trellis/spec/cli/backend/commands-channel.md","reason":"Review Codex errors, idle cleanup, trusted context, and supervisor behavior."}
+{"file":".trellis/spec/cli/unit-test/index.md","reason":"Enforce full CI, test, lint, typecheck, and build gates."}

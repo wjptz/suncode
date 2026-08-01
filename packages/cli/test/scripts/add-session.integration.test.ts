@@ -125,10 +125,14 @@ function setCurrentTask(repo: string, taskName: string): void {
   );
 }
 
-function runAddSession(repo: string, title: string): void {
+function runAddSession(
+  repo: string,
+  title: string,
+  extraArgs: string[] = [],
+): void {
   const r = spawnSync(
     "python3",
-    [".suncode/scripts/add_session.py", "--title", title],
+    [".suncode/scripts/add_session.py", "--title", title, ...extraArgs],
     { cwd: repo, encoding: "utf-8" },
   );
   if (r.status !== 0) {
@@ -226,6 +230,56 @@ describe.skipIf(!hasPython())("add_session.py auto-commit", () => {
     const status = git(tmp, "status", "--porcelain");
     expect(status).toMatch(/\.suncode\/tasks\/task-a\/prd\.md/);
     expect(status).toMatch(/\.suncode\/tasks\/task-b\/prd\.md/);
+  });
+
+  it("omits optional structured sections for a legacy call", () => {
+    makeTask(tmp, "task-a", "task A prd\n");
+    setCurrentTask(tmp, "task-a");
+    git(tmp, "add", "-A");
+    git(tmp, "commit", "-q", "-m", "initial");
+
+    runAddSession(tmp, "legacy work");
+
+    const journal = fs.readFileSync(
+      path.join(tmp, ".suncode", "workspace", DEVELOPER, "journal-1.md"),
+      "utf-8",
+    );
+    expect(journal).toContain("### Summary");
+    expect(journal).toContain("### Git Commits");
+    expect(journal).toContain("### Status");
+    expect(journal).not.toContain("### Main Changes");
+    expect(journal).not.toContain("### Testing");
+    expect(journal).not.toContain("### Next Steps");
+  });
+
+  it("renders repeatable structured journal flags", () => {
+    makeTask(tmp, "task-a", "task A prd\n");
+    setCurrentTask(tmp, "task-a");
+    git(tmp, "add", "-A");
+    git(tmp, "commit", "-q", "-m", "initial");
+
+    runAddSession(tmp, "structured work", [
+      "--change",
+      "Added feature X",
+      "--change",
+      "Fixed bug Y",
+      "--test",
+      "Ran unit tests",
+      "--next-step",
+      "Ship it",
+    ]);
+
+    const journal = fs.readFileSync(
+      path.join(tmp, ".suncode", "workspace", DEVELOPER, "journal-1.md"),
+      "utf-8",
+    );
+    expect(journal).toContain("### Main Changes");
+    expect(journal).toContain("- Added feature X");
+    expect(journal).toContain("- Fixed bug Y");
+    expect(journal).toContain("### Testing");
+    expect(journal).toContain("- [OK] Ran unit tests");
+    expect(journal).toContain("### Next Steps");
+    expect(journal).toContain("- Ship it");
   });
 
   it("falls back to the current branch when task.json points to a stale branch", () => {

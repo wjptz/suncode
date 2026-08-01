@@ -23,6 +23,7 @@ Usage:
     python3 task.py set-branch <dir> <branch>   # Set git branch
     python3 task.py set-base-branch <dir> <branch>  # Set PR target branch
     python3 task.py set-scope <dir> <scope>     # Set scope for PR title
+    python3 task.py set-meta <dir> <key> <value>  # Set a task metadata key
     python3 task.py archive <task-dir>          # Archive completed task
     python3 task.py list                        # List active tasks
     python3 task.py list-archive [month]        # List archived tasks
@@ -66,6 +67,7 @@ from common.task_store import (
     cmd_set_branch,
     cmd_set_base_branch,
     cmd_set_scope,
+    cmd_set_meta,
     cmd_add_subtask,
     cmd_remove_subtask,
 )
@@ -386,9 +388,10 @@ def cmd_list(args: argparse.Namespace) -> int:
             if child_name in all_tasks:
                 _print_task(child_name, indent + 1)
 
-    # Display only top-level tasks (those without a parent)
+    # Orphans with a missing active parent remain visible as top-level tasks.
     for dir_name in sorted(all_tasks.keys()):
-        if not all_tasks[dir_name].parent:
+        parent = all_tasks[dir_name].parent
+        if not parent or parent not in all_tasks:
             _print_task(dir_name)
 
     if count == 0:
@@ -458,6 +461,7 @@ Usage:
   python3 task.py set-branch <dir> <branch>          Set git branch
   python3 task.py set-base-branch <dir> <branch>     Set PR target branch
   python3 task.py set-scope <dir> <scope>            Set scope for PR title
+  python3 task.py set-meta <dir> <key> <value>       Set/overwrite a task metadata key
   python3 task.py archive <task-dir>                 Archive completed task
   python3 task.py add-subtask <parent> <child>       Link child task to parent
   python3 task.py remove-subtask <parent> <child>    Unlink child from parent
@@ -477,6 +481,7 @@ List options:
 Examples:
   python3 task.py create "Add login feature" --slug add-login
   python3 task.py create "Add login feature" --slug add-login --package cli
+  python3 task.py create "Add login feature" --meta linear=ENG-123 --meta epic=auth
   python3 task.py create "Hub feature" --slug hub-feature --hub-requirement-id REQ-1001 --hub-requirement-revision 7
   python3 task.py create "Child task" --slug child --parent .suncode/tasks/01-21-parent
   python3 task.py add-context <dir> implement .suncode/spec/cli/backend/auth.md "Auth guidelines"
@@ -549,6 +554,11 @@ def main() -> int:
         help="PR target branch (overrides origin/HEAD detection and the checked-out-branch fallback)",
     )
     p_create.add_argument(
+        "--meta",
+        action="append",
+        help="Task metadata key=value (repeatable)",
+    )
+    p_create.add_argument(
         "--no-start",
         action="store_true",
         help="Create the task without making it active in this session",
@@ -616,6 +626,14 @@ def main() -> int:
     p_scope.add_argument("dir", help="Task directory")
     p_scope.add_argument("scope", help="Scope name")
 
+    # set-meta
+    p_setmeta = subparsers.add_parser(
+        "set-meta", help="Set/overwrite a task metadata key"
+    )
+    p_setmeta.add_argument("dir", help="Task directory")
+    p_setmeta.add_argument("key", help="Metadata key")
+    p_setmeta.add_argument("value", help="Metadata value")
+
     # archive
     p_archive = subparsers.add_parser("archive", help="Archive task")
     p_archive.add_argument("name", help="Task directory or name")
@@ -659,6 +677,7 @@ def main() -> int:
         "set-branch": cmd_set_branch,
         "set-base-branch": cmd_set_base_branch,
         "set-scope": cmd_set_scope,
+        "set-meta": cmd_set_meta,
         "archive": cmd_archive,
         "add-subtask": cmd_add_subtask,
         "remove-subtask": cmd_remove_subtask,

@@ -2,7 +2,7 @@
 name: suncode-research
 description: |
   Suncode researcher for Kimi Code. The main session passes these instructions
-  to Kimi's built-in explore agent; findings must be persisted to the task.
+  to Kimi's built-in coder agent; findings must be persisted to the task.
 ---
 # Research Agent
 
@@ -10,7 +10,9 @@ Find, explain, and persist information for the active Suncode task.
 
 ## Kimi Dispatch Contract
 
-The main session gives Kimi's built-in `explore` agent these instructions and starts its prompt with `Active task: <path from task.py current>`.
+The main session gives Kimi's built-in `coder` agent these instructions and starts its prompt with `Active task: <path from task.py current>`.
+
+You are already the `suncode-research` agent. You may write only under the active task's `research/` directory.
 
 ## Workflow
 

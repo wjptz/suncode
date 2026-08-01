@@ -93,6 +93,7 @@ program
   .option("--trae", "Include Trae IDE commands")
   .option("--grok", "Include Grok Build commands, skills, and agents")
   .option("--kimi", "Include Kimi Code skills")
+  .option("--snow", "Include Snow CLI skills, commands, agents, and hooks")
   .option(
     "--with-statusline",
     "Install the Suncode statusLine for Claude Code (off by default)",

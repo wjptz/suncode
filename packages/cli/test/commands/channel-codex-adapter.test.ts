@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCodexThreadStartParams,
   createCodexCtx,
+  encodeCodexUserMessage,
   parseCodexLine,
   parseCodexSandboxMode,
 } from "../../src/commands/channel/adapters/codex.js";
@@ -193,6 +194,81 @@ describe("Codex channel adapter", () => {
 
     const completed = parse({ method: "turn/completed", params: {} }, ctx);
     expect(completed.events).toEqual([{ kind: "done", payload: {} }]);
+  });
+
+  it("emits an error when a turn fails without a final answer", () => {
+    const result = parse({
+      method: "turn/completed",
+      params: {
+        turn: {
+          status: "failed",
+          error: { message: "Model is not available" },
+        },
+      },
+    });
+
+    expect(result.events).toEqual([
+      { kind: "error", payload: { message: "Model is not available" } },
+    ]);
+  });
+
+  it("does not emit duplicate errors for the same failed turn", () => {
+    const ctx = createCodexCtx();
+    const notification = parse(
+      {
+        method: "error",
+        params: {
+          error: { message: "Request failed with status 400" },
+          willRetry: false,
+        },
+      },
+      ctx,
+    );
+    const completed = parse(
+      {
+        method: "turn/completed",
+        params: {
+          turn: {
+            status: "failed",
+            error: { message: "Request failed with status 400" },
+          },
+        },
+      },
+      ctx,
+    );
+
+    expect(notification.events).toHaveLength(1);
+    expect(notification.events[0]?.kind).toBe("error");
+    expect(completed.events).toEqual([]);
+  });
+
+  it("resets terminal error deduplication for the next turn", () => {
+    const ctx = createCodexCtx();
+    const failure = {
+      method: "error",
+      params: { error: "request failed", willRetry: false },
+    };
+
+    expect(parse(failure, ctx).events).toHaveLength(1);
+    expect(parse(failure, ctx).events).toEqual([]);
+
+    ctx.threadId = "thread-1";
+    encodeCodexUserMessage(ctx, "try again");
+    expect(parse(failure, ctx).events).toHaveLength(1);
+  });
+
+  it("keeps retryable app-server errors non-terminal", () => {
+    const result = parse({
+      method: "error",
+      params: { error: { message: "temporary" }, willRetry: true },
+    });
+
+    expect(result.events).toEqual([
+      {
+        kind: "progress",
+        payload: { detail: { kind: "warning", message: "temporary" } },
+      },
+    ]);
   });
 
   describe("sandbox override", () => {

@@ -279,6 +279,85 @@ Init has no notion of "what was here before" — it always assumes a fresh slate
 
 ---
 
+## 场景：平台所有权与根协作规则回填
+
+### 1. 范围 / 触发条件
+
+修改 `getConfiguredPlatforms()`、`.template-hashes.json`、平台 collector、
+update 的 early-return 或根 `.gitattributes` 写入时适用。该路径决定 update
+是否有权接管宿主平台目录，以及“Already up to date”是否真的完成所有
+additive-only 维护。
+
+### 2. 签名
+
+```typescript
+function getConfiguredPlatforms(cwd: string): Set<AITool>;
+function ensureGitattributes(cwd: string): void;
+async function update(options: UpdateOptions): Promise<void>;
+```
+
+### 3. 契约
+
+- 当前平台所有权来自两类证据：其 `collectPlatformTemplates(id)` 返回的
+  `configDir` 内路径存在于 `.suncode/.template-hashes.json`，或命中该平台
+  明确注册的 `ownershipMarkers`。
+- 裸宿主目录不是证据；update 不得因 `.codex/`、`.snow/`、`.omp/` 等
+  目录存在就生成 Suncode 资产。
+- tracked 文件被用户删除后 hash 仍保留，因此平台仍参与 collection；
+  `analyzeChanges()` 必须把缺失文件归入 `userDeletedFiles` 并尊重删除。
+- collector 与 configurator 必须路径、placeholder resolution、换行和字节
+  完全一致；否则第一次 update 会产生 churn。
+- legacy Windsurf 只接受 hash 或磁盘上以 `suncode-` 命名的 workflow 作为
+  兼容 ownership，不能因为 `.windsurf/workflows` 存在就接管。
+- 在 change analysis 和 summary 之后、任何“nothing to do” early-return
+  之前，非 dry-run update 必须调用 `ensureGitattributes(cwd)`。
+- `--dry-run` 在所有分支都不得创建或修改 `.gitattributes`。
+- `.gitattributes` 不进入 template hash/冲突覆盖流程；它是 additive-only
+  项目协作文件，已有用户内容始终保留。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 预期行为 |
+|---|---|
+| bare platform directory、无 hash/marker | 平台不参与 update |
+| hash-owned 平台、文件仍存在 | 正常 collect/analyze |
+| hash-owned 平台、tracked 文件已删除 | 保持 ownership，归为 user-deleted，不重建 |
+| shared root 只有 Trellis/user marker | 不识别为 Suncode platform |
+| same-version、无模板变化、缺 Suncode gitattributes rule | 非 dry-run 回填 rule 后再完成 |
+| 同上但 `--dry-run` | 零写入 |
+| collector 返回 unresolved placeholder | parity/idempotency test 失败 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：Snow guide 被删但 hash 仍在；update 识别 Snow，却尊重删除且不碰
+  `.snow/user-notes.md`。
+- Base：全新 Suncode 项目 init 后立即 update，文件与 hash 均无变化。
+- Bad：用 `configDir` 目录存在判断 ownership，给用户已有 OMP/Snow 配置
+  注入 Suncode 文件。
+- Bad：在 no-op early-return 之后调用 `ensureGitattributes`，导致旧项目永远
+  无法回填 journal merge rule。
+
+### 6. 必需测试
+
+- configured-platform unit：bare dirs、hash-owned、user-deleted、marker-owned、
+  shared-root false positive、legacy Windsurf。
+- 每个平台 configure/collect byte parity；新增平台必须显式生命周期测试。
+- update integration：same-version no-op、tracked user deletion、Snow update
+  与用户文件保留。
+- gitattributes integration：缺失回填、用户内容保留、dry-run no-op。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: host installation is not Suncode ownership.
+if (fs.existsSync(path.join(cwd, config.configDir))) configured.add(id);
+
+// Correct: use Suncode hash or a namespaced ownership marker.
+if (hasTrackedTemplate || hasOwnershipMarker) configured.add(id);
+```
+
+---
+
 ## Boundaries with `migrations.md`
 
 `migrations.md` is the canonical reference for: manifest schema (all fields including `breaking` / `recommendMigrate` / `migrationGuide` / `aiInstructions` / `configSectionsAdded`), migration types (`rename` / `rename-dir` / `delete` / `safe-file-delete`), classification rules per type, hash relationships (`allowed_hashes` vs `.template-hashes.json`), `update.skip` config, protected paths, and walk-table helpers (`getMigrationsForVersion` / `getAllMigrations` / `getMigrationMetadata` / `getConfigSectionsAddedBetween`).

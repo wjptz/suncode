@@ -17,6 +17,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+_stdin_reconfigure = getattr(sys.stdin, "reconfigure", None)
+if callable(_stdin_reconfigure):
+    try:
+        _stdin_reconfigure(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
+        pass
+
 
 DIR_WORKFLOW = ".suncode"
 DIR_RUNTIME = ".runtime"

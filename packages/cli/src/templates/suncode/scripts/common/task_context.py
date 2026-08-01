@@ -21,11 +21,30 @@ import argparse
 import json
 from pathlib import Path
 
+from .config import get_context_injection_limits
 from .git import branch_exists_locally
 from .io import read_json
 from .log import Colors, colored
 from .paths import FILE_TASK_JSON, get_repo_root
 from .task_utils import resolve_task_dir
+
+_CODE_FILE_EXTENSIONS = {
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".py",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".c",
+    ".cc",
+    ".cpp",
+    ".h",
+}
 
 
 # =============================================================================
@@ -116,7 +135,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     total_errors = 0
     for jsonl_name in ["implement.jsonl", "check.jsonl"]:
         jsonl_file = target_dir / jsonl_name
-        errors = _validate_jsonl(jsonl_file, repo_root)
+        errors = _validate_jsonl(jsonl_file, repo_root, target_dir)
         total_errors += errors
 
     print()
@@ -128,7 +147,23 @@ def cmd_validate(args: argparse.Namespace) -> int:
         return 1
 
 
-def _validate_jsonl(jsonl_file: Path, repo_root: Path) -> int:
+def _is_exempt_from_code_file_warning(file_path: str, task_rel: str) -> bool:
+    """Return whether a context entry may intentionally look like code."""
+    posix_path = file_path.replace("\\", "/").lstrip("/")
+    exempt_prefixes = (".suncode/spec/", "docs/", "docs-site/")
+    if posix_path.startswith(exempt_prefixes):
+        return True
+    return bool(
+        task_rel
+        and (posix_path == task_rel or posix_path.startswith(f"{task_rel}/"))
+    )
+
+
+def _validate_jsonl(
+    jsonl_file: Path,
+    repo_root: Path,
+    task_dir: Path | None = None,
+) -> int:
     """Validate a single JSONL file.
 
     Seed rows (no ``file`` field — typically ``{"_example": "..."}``) are
@@ -140,6 +175,15 @@ def _validate_jsonl(jsonl_file: Path, repo_root: Path) -> int:
     if not jsonl_file.is_file():
         print(f"  {colored(f'{file_name}: not found (skipped)', Colors.YELLOW)}")
         return 0
+
+    task_rel = ""
+    if task_dir is not None:
+        try:
+            task_rel = task_dir.resolve().relative_to(repo_root.resolve()).as_posix()
+        except ValueError:
+            task_rel = ""
+
+    max_file_bytes = get_context_injection_limits(repo_root).get("max_file_bytes", 0)
 
     line_num = 0
     real_entries = 0
@@ -168,10 +212,33 @@ def _validate_jsonl(jsonl_file: Path, repo_root: Path) -> int:
             if not full_path.is_dir():
                 print(f"  {colored(f'{file_name}:{line_num}: Directory not found: {file_path}', Colors.RED)}")
                 errors += 1
-        else:
-            if not full_path.is_file():
-                print(f"  {colored(f'{file_name}:{line_num}: File not found: {file_path}', Colors.RED)}")
-                errors += 1
+            continue
+
+        if not full_path.is_file():
+            print(f"  {colored(f'{file_name}:{line_num}: File not found: {file_path}', Colors.RED)}")
+            errors += 1
+            continue
+
+        extension = Path(file_path).suffix.lower()
+        if extension in _CODE_FILE_EXTENSIONS and not _is_exempt_from_code_file_warning(
+            file_path, task_rel
+        ):
+            warning = (
+                f"{file_name}:{line_num}: Warning: {file_path} looks like a code file — "
+                "implement/check.jsonl should reference spec/research docs; "
+                "agents read code themselves"
+            )
+            print(f"  {colored(warning, Colors.YELLOW)}")
+
+        if max_file_bytes:
+            size = full_path.stat().st_size
+            if size > max_file_bytes:
+                warning = (
+                    f"{file_name}:{line_num}: Warning: {file_path} is {size} bytes, "
+                    "exceeds context_injection.max_file_bytes "
+                    f"({max_file_bytes}); injection will truncate it"
+                )
+                print(f"  {colored(warning, Colors.YELLOW)}")
 
     if errors == 0:
         print(f"  {colored(f'{file_name}: ✓ ({real_entries} entries)', Colors.GREEN)}")

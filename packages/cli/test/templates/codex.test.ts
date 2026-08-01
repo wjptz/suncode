@@ -9,6 +9,10 @@ import {
   getHooksConfig,
 } from "../../src/templates/codex/index.js";
 import { resolveAllAsSkills } from "../../src/configurators/shared.js";
+import {
+  applyCodexAgentModelKeys,
+  extractCodexAgentModelKeys,
+} from "../../src/configurators/codex.js";
 import { AI_TOOLS } from "../../src/types/ai-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -56,6 +60,47 @@ describe("codex getAllAgents", () => {
       expect(agent.content).toContain("description = ");
       expect(agent.content).toContain("developer_instructions = ");
     }
+  });
+
+  it("ships commented model override hints without forcing a model", () => {
+    for (const agent of getAllAgents()) {
+      expect(agent.content).toContain('# model = "gpt-5.6-terra"');
+      expect(agent.content).toContain('# model_reasoning_effort = "high"');
+      expect(agent.content).not.toMatch(/^model\s*=/m);
+    }
+  });
+});
+
+describe("codex agent model key preservation", () => {
+  it("extracts only top-level model keys, not prompt examples", () => {
+    const existing = `name = "suncode-implement"
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+developer_instructions = """
+model = "do-not-read"
+"""
+`;
+
+    expect(extractCodexAgentModelKeys(existing)).toEqual({
+      model: "gpt-5.6-sol",
+      model_reasoning_effort: "xhigh",
+    });
+  });
+
+  it("reapplies preserved keys immediately after sandbox_mode", () => {
+    const fresh = `name = "suncode-check"
+sandbox_mode = "workspace-write"
+# model = "gpt-5.6-terra"
+developer_instructions = """body"""
+`;
+    const result = applyCodexAgentModelKeys(fresh, {
+      model: "custom-model",
+      model_reasoning_effort: "max",
+    });
+
+    expect(result).toContain(
+      'sandbox_mode = "workspace-write"\nmodel = "custom-model"\nmodel_reasoning_effort = "max"\n',
+    );
   });
 });
 
@@ -160,10 +205,14 @@ describe("codex two-channel sub-agent context (native SubagentStart)", () => {
       const content = fs.readFileSync(tomlPath, "utf-8");
 
       expect(content).toContain("<!-- suncode-hook-injected -->");
+      expect(content).toContain("Full hook output saved to: <path>");
       expect(content).toContain("Active task: <path>");
       expect(content).toContain("Suncode context manifest: <path>");
       expect(content).toContain("task.py execution context <path>");
       expect(content).toContain("multi_agent = false");
+      expect(content.indexOf("Full hook output saved to: <path>")).toBeLessThan(
+        content.indexOf("<!-- suncode-hook-injected -->"),
+      );
     });
   }
 

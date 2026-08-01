@@ -5,6 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { collectPlatformTemplates } from "../../src/configurators/index.js";
+import { AI_TOOLS, type AITool } from "../../src/types/ai-tools.js";
+import { saveHashes } from "../../src/utils/template-hash.js";
+
 const CLI_BIN = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../bin/suncode.js",
@@ -15,6 +19,25 @@ function runCli(cwd: string, args: string[]) {
     cwd,
     encoding: "utf-8",
   });
+}
+
+function markTracked(cwd: string, ...ids: AITool[]): void {
+  fs.mkdirSync(path.join(cwd, ".suncode"), { recursive: true });
+  saveHashes(
+    cwd,
+    Object.fromEntries(
+      ids.map((id) => {
+        const configDir = AI_TOOLS[id].configDir;
+        const relativePath = [
+          ...(collectPlatformTemplates(id)?.keys() ?? []),
+        ].find(
+          (entry) => entry === configDir || entry.startsWith(`${configDir}/`),
+        );
+        if (!relativePath) throw new Error(`missing ${id} ownership template`);
+        return [relativePath, "hash"];
+      }),
+    ),
+  );
 }
 
 describe("suncode platforms", () => {
@@ -29,8 +52,7 @@ describe("suncode platforms", () => {
   });
 
   it("--json reports the stable configured-platform schema", () => {
-    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
-    fs.mkdirSync(path.join(tmpDir, ".kimi-code"), { recursive: true });
+    markTracked(tmpDir, "claude-code", "kimi", "snow");
 
     const result = runCli(tmpDir, ["platforms", "--json"]);
 
@@ -41,6 +63,7 @@ describe("suncode platforms", () => {
     expect(parsed.platforms).toEqual([
       { id: "claude-code", displayName: "Claude Code", configDir: ".claude" },
       { id: "kimi", displayName: "Kimi Code", configDir: ".kimi-code" },
+      { id: "snow", displayName: "Snow CLI", configDir: ".snow/skills" },
     ]);
   });
 
@@ -54,7 +77,7 @@ describe("suncode platforms", () => {
   });
 
   it("human output lists configured platforms", () => {
-    fs.mkdirSync(path.join(tmpDir, ".grok"), { recursive: true });
+    markTracked(tmpDir, "grok");
 
     const result = runCli(tmpDir, ["platforms"]);
 

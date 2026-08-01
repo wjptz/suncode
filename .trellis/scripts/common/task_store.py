@@ -9,6 +9,7 @@ Provides:
     cmd_set_branch     - Set git branch for task
     cmd_set_base_branch - Set PR target branch
     cmd_set_scope      - Set scope for PR title
+    cmd_set_meta       - Set/overwrite a task metadata key
     cmd_add_subtask    - Link child task to parent
     cmd_remove_subtask - Unlink child task from parent
 """
@@ -162,6 +163,24 @@ def _write_seed_jsonl(path: Path) -> None:
     path.write_text(json.dumps(seed, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _parse_meta_pairs(pairs: list[str] | None) -> dict[str, str] | None:
+    """Parse repeatable ``--meta key=value`` pairs, failing on malformed input."""
+    meta: dict[str, str] = {}
+    for pair in pairs or []:
+        key, separator, value = pair.partition("=")
+        if not separator or not key:
+            print(
+                colored(
+                    f"Error: malformed --meta value '{pair}' (expected key=value)",
+                    Colors.RED,
+                ),
+                file=sys.stderr,
+            )
+            return None
+        meta[key] = value
+    return meta
+
+
 def _default_prd_content(title: str, description: str | None = None) -> str:
     """Return the default PRD skeleton created with every task."""
     goal = (description or "").strip() or "TBD."
@@ -198,6 +217,10 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     if not args.title:
         print(colored("Error: title is required", Colors.RED), file=sys.stderr)
+        return 1
+
+    meta = _parse_meta_pairs(getattr(args, "meta", None))
+    if meta is None:
         return 1
 
     # Validate --package (CLI source: fail-fast)
@@ -304,7 +327,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "parent": None,
         "relatedFiles": [],
         "notes": "",
-        "meta": {},
+        "meta": meta,
     }
 
     write_json(task_json_path, task_data)
@@ -773,4 +796,38 @@ def cmd_set_scope(args: argparse.Namespace) -> int:
     write_json(task_json, data)
 
     print(colored(f"✓ Scope set to: {scope}", Colors.GREEN))
+    return 0
+
+
+# =============================================================================
+# Command: set-meta
+# =============================================================================
+
+def cmd_set_meta(args: argparse.Namespace) -> int:
+    """Set or overwrite one key without rebuilding the task metadata object."""
+    repo_root = get_repo_root()
+    target_dir = resolve_task_dir(args.dir, repo_root)
+    key = args.key
+    value = args.value
+
+    if not key:
+        print(colored("Error: Missing arguments", Colors.RED))
+        print("Usage: python3 task.py set-meta <task-dir> <key> <value>")
+        return 1
+
+    task_json = target_dir / FILE_TASK_JSON
+    if not task_json.is_file():
+        print(colored(f"Error: task.json not found at {target_dir}", Colors.RED))
+        return 1
+
+    data = read_json(task_json)
+    if not data:
+        return 1
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+    meta[key] = value
+    data["meta"] = meta
+    write_json(task_json, data)
+    print(colored(f"✓ Meta set: {key} = {value}", Colors.GREEN))
     return 0

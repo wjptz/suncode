@@ -10,6 +10,7 @@ import {
 } from "../../src/configurators/index.js";
 import { AI_TOOLS, type AITool } from "../../src/types/ai-tools.js";
 import { setWriteMode } from "../../src/utils/file-writer.js";
+import { saveHashes } from "../../src/utils/template-hash.js";
 import {
   getAllAgents as getAllCodexAgents,
   getConfigTemplate as getCodexConfigTemplate,
@@ -68,11 +69,30 @@ function readConfiguredFile(root: string, relativePath: string): string {
 }
 
 // =============================================================================
-// getConfiguredPlatforms — detects existing platform directories
+// getConfiguredPlatforms — detects Suncode ownership evidence
 // =============================================================================
 
 describe("getConfiguredPlatforms", () => {
   let tmpDir: string;
+
+  function trackedTemplatePath(id: AITool): string {
+    const templates = collectPlatformTemplates(id);
+    const configDir = AI_TOOLS[id].configDir;
+    const owned = [...(templates?.keys() ?? [])].find(
+      (relativePath) =>
+        relativePath === configDir || relativePath.startsWith(`${configDir}/`),
+    );
+    if (!owned) throw new Error(`${id} has no template under ${configDir}`);
+    return owned;
+  }
+
+  function markTracked(...ids: AITool[]): void {
+    fs.mkdirSync(path.join(tmpDir, ".suncode"), { recursive: true });
+    saveHashes(
+      tmpDir,
+      Object.fromEntries(ids.map((id) => [trackedTemplatePath(id), "hash"])),
+    );
+  }
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "suncode-platforms-"));
@@ -87,106 +107,45 @@ describe("getConfiguredPlatforms", () => {
     expect(result.size).toBe(0);
   });
 
-  it("detects .claude directory as claude-code", () => {
-    fs.mkdirSync(path.join(tmpDir, ".claude"));
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("claude-code")).toBe(true);
+  it("does not claim bare native config directories", () => {
+    for (const id of PLATFORM_IDS) {
+      fs.mkdirSync(path.join(tmpDir, AI_TOOLS[id].configDir), {
+        recursive: true,
+      });
+    }
+    expect(getConfiguredPlatforms(tmpDir).size).toBe(0);
   });
 
-  it("detects .cursor directory as cursor", () => {
-    fs.mkdirSync(path.join(tmpDir, ".cursor"));
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("cursor")).toBe(true);
+  it.each([
+    "claude-code",
+    "cursor",
+    "opencode",
+    "codex",
+    "kimi",
+    "snow",
+  ] as AITool[])("detects %s from its own tracked template", (id) => {
+    markTracked(id);
+    expect(getConfiguredPlatforms(tmpDir).has(id)).toBe(true);
   });
 
-  it("detects .opencode directory as opencode", () => {
-    fs.mkdirSync(path.join(tmpDir, ".opencode"));
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("opencode")).toBe(true);
+  it("keeps ownership when a tracked managed file was user-deleted", () => {
+    markTracked("claude-code");
+    expect(fs.existsSync(path.join(tmpDir, ".claude"))).toBe(false);
+    expect(getConfiguredPlatforms(tmpDir)).toEqual(new Set(["claude-code"]));
   });
 
-  it("detects .engineer directory as engineer", () => {
-    fs.mkdirSync(path.join(tmpDir, ".engineer"));
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("engineer" as AITool)).toBe(true);
-  });
-
-  it("detects .codex directory as codex", () => {
-    fs.mkdirSync(path.join(tmpDir, ".codex"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("codex")).toBe(true);
-  });
-
-  it(".agents/skills alone does NOT detect as codex (shared standard)", () => {
+  it("does not infer Codex from the shared .agents/skills root", () => {
     fs.mkdirSync(path.join(tmpDir, ".agents", "skills"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("codex")).toBe(false);
+    expect(getConfiguredPlatforms(tmpDir).has("codex")).toBe(false);
   });
 
-  it("detects .agent/workflows directory as antigravity", () => {
-    fs.mkdirSync(path.join(tmpDir, ".agent", "workflows"), {
-      recursive: true,
-    });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("antigravity")).toBe(true);
-  });
-
-  it("detects .devin/workflows directory as devin", () => {
-    fs.mkdirSync(path.join(tmpDir, ".devin", "workflows"), {
-      recursive: true,
-    });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("devin")).toBe(true);
-  });
-
-  it("detects legacy .windsurf/workflows directory as devin (back-compat)", () => {
-    fs.mkdirSync(path.join(tmpDir, ".windsurf", "workflows"), {
-      recursive: true,
-    });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("devin")).toBe(true);
-  });
-
-  it("detects .kiro/skills directory as kiro", () => {
-    fs.mkdirSync(path.join(tmpDir, ".kiro", "skills"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("kiro")).toBe(true);
-  });
-
-  it("detects .gemini directory as gemini", () => {
-    fs.mkdirSync(path.join(tmpDir, ".gemini"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("gemini")).toBe(true);
-  });
-
-  it("detects .qoder directory as qoder", () => {
-    fs.mkdirSync(path.join(tmpDir, ".qoder"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("qoder")).toBe(true);
-  });
-
-  it("detects .codebuddy directory as codebuddy", () => {
-    fs.mkdirSync(path.join(tmpDir, ".codebuddy"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("codebuddy")).toBe(true);
-  });
-
-  it("detects .github/copilot directory as copilot", () => {
-    fs.mkdirSync(path.join(tmpDir, ".github", "copilot"), { recursive: true });
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("copilot")).toBe(true);
-  });
-
-  it("detects .factory directory as droid", () => {
-    fs.mkdirSync(path.join(tmpDir, ".factory"));
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("droid")).toBe(true);
-  });
-
-  it("detects .pi directory as pi", () => {
-    fs.mkdirSync(path.join(tmpDir, ".pi"));
-    const result = getConfiguredPlatforms(tmpDir);
-    expect(result.has("pi")).toBe(true);
+  it("detects legacy Windsurf only from a Suncode-named workflow", () => {
+    const workflows = path.join(tmpDir, ".windsurf", "workflows");
+    fs.mkdirSync(workflows, { recursive: true });
+    fs.writeFileSync(path.join(workflows, "user-workflow.md"), "user\n");
+    expect(getConfiguredPlatforms(tmpDir).has("devin")).toBe(false);
+    fs.writeFileSync(path.join(workflows, "suncode-continue.md"), "owned\n");
+    expect(getConfiguredPlatforms(tmpDir).has("devin")).toBe(true);
   });
 
   it("does not claim a bare or Trellis-only .omp directory", () => {
@@ -214,6 +173,7 @@ describe("getConfiguredPlatforms", () => {
   });
 
   it("detects multiple platforms simultaneously", () => {
+    const tracked: AITool[] = [];
     for (const id of PLATFORM_IDS) {
       const config = AI_TOOLS[id];
       if (config.ownershipMarkers?.length) {
@@ -221,11 +181,10 @@ describe("getConfiguredPlatforms", () => {
         fs.mkdirSync(path.dirname(marker), { recursive: true });
         fs.writeFileSync(marker, "owned\n");
       } else {
-        fs.mkdirSync(path.join(tmpDir, config.configDir), {
-          recursive: true,
-        });
+        tracked.push(id);
       }
     }
+    markTracked(...tracked);
     const result = getConfiguredPlatforms(tmpDir);
     expect(result.size).toBe(PLATFORM_IDS.length);
     for (const id of PLATFORM_IDS) {
@@ -482,10 +441,7 @@ describe("configurePlatform", () => {
     }
 
     // IDE `.kiro.hook` written with PYTHON_CMD resolved and valid schema.
-    const ideHookPath = path.join(
-      hooksDir,
-      "suncode-workflow-state.kiro.hook",
-    );
+    const ideHookPath = path.join(hooksDir, "suncode-workflow-state.kiro.hook");
     expect(fs.existsSync(ideHookPath)).toBe(true);
     const ideRaw = fs.readFileSync(ideHookPath, "utf-8");
     expect(ideRaw).not.toContain("{{PYTHON_CMD}}");
@@ -719,13 +675,7 @@ describe("configurePlatform", () => {
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(
-          tmpDir,
-          ".zcode",
-          "skills",
-          "suncode-continue",
-          "SKILL.md",
-        ),
+        path.join(tmpDir, ".zcode", "skills", "suncode-continue", "SKILL.md"),
       ),
     ).toBe(false);
 
@@ -945,9 +895,9 @@ describe("configurePlatform", () => {
     for (const file of walk(tmpDir)) {
       expect(path.basename(file)).not.toBe("statusline.py");
       if (path.basename(file) === "settings.json") {
-        expect(
-          JSON.parse(fs.readFileSync(file, "utf-8")),
-        ).not.toHaveProperty("statusLine");
+        expect(JSON.parse(fs.readFileSync(file, "utf-8"))).not.toHaveProperty(
+          "statusLine",
+        );
       }
     }
   });

@@ -1029,6 +1029,7 @@ interface InitOptions {
   trae?: boolean;
   grok?: boolean;
   kimi?: boolean;
+  snow?: boolean;
   yes?: boolean;
   user?: string;
   force?: boolean;

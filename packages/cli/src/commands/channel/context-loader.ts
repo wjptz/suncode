@@ -27,14 +27,21 @@ const MAX_PER_FILE_BYTES = 1_000_000; // 1MB hard cap per file
 const WARN_PER_FILE_BYTES = 200_000; // stderr warn at 200KB
 const WARN_TOTAL_BYTES = 500_000; // stderr warn when assembled context > 500KB
 
+function isUnderRoot(real: string, root: string): boolean {
+  return real === root || real.startsWith(root + path.sep);
+}
+
 /**
  * Path-traversal guard: resolve `target` and `cwd` to realpaths and
- * verify `target` is `cwd` or a descendant. Refuses absolute paths
- * outside cwd, `..`-escapes, and symlinks pointing outside.
+ * verify `target` is under `cwd` or an explicitly trusted realpath root.
  *
  * Returns the resolved realpath, or null if blocked (with stderr warning).
  */
-function jailedRealpath(target: string, cwd: string): string | null {
+function jailedRealpath(
+  target: string,
+  cwd: string,
+  trustedRoots: string[] = [],
+): string | null {
   const cwdReal = fs.realpathSync(cwd);
   let real: string;
   try {
@@ -45,9 +52,13 @@ function jailedRealpath(target: string, cwd: string): string | null {
     // form is inside the jail.
     real = path.resolve(target);
   }
-  if (real !== cwdReal && !real.startsWith(cwdReal + path.sep)) {
+  if (
+    !isUnderRoot(real, cwdReal) &&
+    !trustedRoots.some((root) => isUnderRoot(real, root))
+  ) {
     process.stderr.write(
-      `[channel spawn] context path escapes cwd, refusing: ${path.relative(cwd, target) || target}\n`,
+      `[channel spawn] context path escapes cwd, refusing: ${path.relative(cwd, target) || target} ` +
+        `(add its real directory to channel.trusted_context_dirs in .suncode/config.yaml to allow)\n`,
     );
     return null;
   }
@@ -75,21 +86,26 @@ export function assembleContext(
   cwd: string,
   files: string[] = [],
   jsonls: string[] = [],
+  trustedRoots: string[] = [],
 ): AssembledContext {
   const blocks: ContextBlock[] = [];
   const manifestPaths: string[] = [];
 
   for (const spec of files) {
     for (const resolved of expandGlob(cwd, spec)) {
-      const jailed = jailedRealpath(resolved, cwd);
+      const jailed = jailedRealpath(resolved, cwd, trustedRoots);
       if (!jailed) continue;
-      const block = readFileBlock(jailed, cwd, "file");
+      const block = readFileBlock(jailed, cwd, "file", undefined, trustedRoots);
       if (block) blocks.push(block);
     }
   }
 
   for (const jsonlPath of jsonls) {
-    const jailedJsonl = jailedRealpath(path.resolve(cwd, jsonlPath), cwd);
+    const jailedJsonl = jailedRealpath(
+      path.resolve(cwd, jsonlPath),
+      cwd,
+      trustedRoots,
+    );
     if (!jailedJsonl) continue;
     if (!fs.existsSync(jailedJsonl)) {
       process.stderr.write(
@@ -116,9 +132,19 @@ export function assembleContext(
       }
       if (obj._example !== undefined) continue;
       if (!obj.file) continue;
-      const jailed = jailedRealpath(path.resolve(cwd, obj.file), cwd);
+      const jailed = jailedRealpath(
+        path.resolve(cwd, obj.file),
+        cwd,
+        trustedRoots,
+      );
       if (!jailed) continue;
-      const block = readFileBlock(jailed, cwd, "jsonl", obj.reason);
+      const block = readFileBlock(
+        jailed,
+        cwd,
+        "jsonl",
+        obj.reason,
+        trustedRoots,
+      );
       if (block) blocks.push(block);
     }
   }
@@ -268,6 +294,7 @@ function readFileBlock(
   cwd: string,
   source: "file" | "jsonl",
   reason?: string,
+  trustedRoots: string[] = [],
 ): ContextBlock | null {
   if (!fs.existsSync(absPath)) {
     process.stderr.write(
@@ -275,27 +302,32 @@ function readFileBlock(
     );
     return null;
   }
-  // lstat first: if it's a symlink, the realpath inside jailedRealpath
-  // has already verified the target stays inside cwd. Defense-in-depth:
-  // explicitly note symlinks so we never read through one we didn't
-  // realpath-check.
-  let lstat: fs.Stats;
+  // Re-check after jailedRealpath: a local path may have been replaced
+  // between the initial containment check and this read.
   try {
-    lstat = fs.lstatSync(absPath);
+    fs.lstatSync(absPath);
   } catch {
     return null;
   }
-  if (lstat.isSymbolicLink()) {
-    // Should be impossible — jailedRealpath replaced absPath with the
-    // resolved realpath. Be defensive anyway.
+  let real: string;
+  try {
+    real = fs.realpathSync(absPath);
+  } catch {
+    return null;
+  }
+  const cwdReal = fs.realpathSync(cwd);
+  if (
+    !isUnderRoot(real, cwdReal) &&
+    !trustedRoots.some((root) => isUnderRoot(real, root))
+  ) {
     process.stderr.write(
-      `[channel spawn] --${source}: refusing unresolved symlink: ${path.relative(cwd, absPath)}\n`,
+      `[channel spawn] --${source}: refusing untrusted realpath: ${path.relative(cwd, absPath)}\n`,
     );
     return null;
   }
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(absPath);
+    stat = fs.statSync(real);
   } catch {
     return null;
   }
@@ -311,7 +343,7 @@ function readFileBlock(
       `[channel spawn] warning: large file (${Math.round(stat.size / 1024)}KB) included: ${path.relative(cwd, absPath)}\n`,
     );
   }
-  const content = fs.readFileSync(absPath, "utf-8");
+  const content = fs.readFileSync(real, "utf-8");
   return {
     path: path.relative(cwd, absPath),
     source,
