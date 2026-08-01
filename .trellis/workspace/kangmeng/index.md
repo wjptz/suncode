@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-08-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~735 | Active |
+| `journal-1.md` | ~770 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-08-01 | Complete universal execution DAG | `d62ba4f3`, `10620d3b` | `main` |
 | 21 | 2026-08-01 | Harden execution DAG contracts | `10620d3b` | `main` |
 | 20 | 2026-07-23 | Align with Trellis v0.6.8 | `a7b2ff82e83ed024230428684b9ee1dd48b45cfc`, `4c0571777b065ebab7a92b071d115f4e5838961f`, `0a9164501cbb87624b9e7a0edd80b1ce3ec5257c` | `main` |
 | 19 | 2026-07-20 | 建立 Trellis 上游持续同步 Skill | `b4d62c4` | `main` |
