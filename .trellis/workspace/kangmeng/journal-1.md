@@ -805,3 +805,25 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - 后续稳定版审查从官方 a82d4d4c75abf85c6200c4528f750798d531a70f 之后开始；发布 v0.6.11 任务保持独立进行。
+
+
+## Session 24: DAG 规划收敛门禁
+
+**Date**: 2026-08-02
+**Task**: DAG 规划收敛门禁
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+修复启用 DAG 后每轮沟通都会重复生成和验证的问题：仅在规划收敛后完成一次 DAG finalization，匹配计划直接复用，实质变化才原地更新并重新验证；同步 marketplace workflow、补充回归测试与执行契约。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f19ab6ba` | (see git log) |
+
+### Status
+
+[OK] **Completed**
