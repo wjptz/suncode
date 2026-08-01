@@ -768,3 +768,40 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: 同步 Trellis v0.6.9-v0.6.11
+
+**Date**: 2026-08-01
+**Task**: 同步 Trellis v0.6.9-v0.6.11
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+语义采纳官方 Trellis v0.6.9-v0.6.11 的 15 个行为包，完成验证与独立实现提交，推进检查点后归档任务。
+
+### Main Changes
+
+- 按 Suncode identity 与 ownership contract 采纳 A1-A15，包括上下文安全、Snow、任务 QoL、Codex/Pi/channel 与平台检测。
+- 记录完整 43-commit 分类矩阵，并将同步 ledger/checkpoint 从官方 v0.6.8 前移至 v0.6.11。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `313c6db3` | (see git log) |
+| `681bc559` | (see git log) |
+
+### Testing
+
+- [OK] Core 332/332 通过，1 个既有环境依赖用例跳过；CLI 1695/1695 通过，均满足 60 秒硬门。
+- [OK] Root lint、typecheck、build、Python 3.9 编译门、BasedPyright 0 error、模板字节一致性与 diff check 通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 后续稳定版审查从官方 a82d4d4c75abf85c6200c4528f750798d531a70f 之后开始；发布 v0.6.11 任务保持独立进行。
