@@ -23,9 +23,11 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Release Process](./release-process.md) | CI-only publishing, package versioning, release tracks, manifest continuity, submodule ordering | Done |
 | [Suncode Core SDK](./trellis-core-sdk.md) | `@wjptz/suncode-core` / CLI package boundary, public exports, build and versioning contracts | Done |
 | [Suncode Runtime Identity](./suncode-runtime-identity.md) | Runtime namespace contract for `.suncode`, `SUNCODE_*`, Suncode protocol markers, package names, and no Trellis compatibility bridge | Done |
+| [文件系统安全契约](./filesystem-safety.md) | Channel 上下文、JSONL、agent 文件的 realpath containment、可信根与符号链接边界 | Done |
 | [Suncode Hub Collaboration](./suncode-hub-collaboration.md) | Optional Hub team collaboration commands, hooks, payloads, idempotency, and current-task ownership boundaries | Done |
 | [Platform Integration](./platform-integration.md) | How to add support for new AI CLI platforms | Done |
 | [Workflow-State Contract](./workflow-state-contract.md) | Per-turn breadcrumb subsystem: marker syntax, status writers, lifecycle events, reachability | Done |
+| [Execution DAG Runtime Contract](./execution-dag-contract.md) | `execution.json`、recovery、scope、NodeResult、final barrier 与 dispatch envelope 的可执行安全契约 | Done |
 | [Configurator Shared Helpers](./configurator-shared.md) | `configurators/shared.ts` public surface: placeholder substitution, write helpers, pull-based prelude, cross-configurator invariants | Done |
 | [`tl mem` Command](./commands-mem.md) | Cross-platform AI session memory: subcommands, schemas, indexing, cleaning pipeline, search relevance | Done |
 | [`trellis upgrade` Command](./commands-upgrade.md) | Global CLI self-upgrade wrapper: channel inference, npm invocation, failure behavior | Done |
@@ -50,9 +52,11 @@ Before writing backend code, read the relevant guidelines based on your task:
 - Cutting a release / cross-branch submodule coordination / manifest continuity / npm publishing → [release-process.md](./release-process.md)
 - Editing `packages/core/**`, moving reusable CLI logic into core, or changing CLI imports from `@wjptz/suncode-core` → [trellis-core-sdk.md](./trellis-core-sdk.md)
 - Editing runtime path/env/protocol naming, generated workflow assets, channel persistence, update/uninstall ownership, or template hashing → [suncode-runtime-identity.md](./suncode-runtime-identity.md)
+- Editing channel context/agent file reads, trusted roots, or `.suncode/tasks` / `.suncode/workspace` symlinks → [filesystem-safety.md](./filesystem-safety.md)
 - Editing `packages/cli/src/commands/hub/**`, Hub lifecycle hooks, Hub payloads, or Hub workflow steps → [suncode-hub-collaboration.md](./suncode-hub-collaboration.md)
 - Adding any native (`.node` / C++ / `node-gyp`) dependency → [quality-guidelines.md "Native dependency policy"](./quality-guidelines.md)
 - Editing `[workflow-state:STATUS]` breadcrumb blocks / `task.json.status` writers / lifecycle hooks → [workflow-state-contract.md](./workflow-state-contract.md)
+- Editing execution DAG plans, scheduler state, recovery, NodeResult, final barriers, or claim dispatch → [execution-dag-contract.md](./execution-dag-contract.md)
 - Editing `configurators/shared.ts` (placeholder substitution, write helpers, prelude injection) → [configurator-shared.md](./configurator-shared.md)
 - Editing `commands/mem.ts` (subcommands, platform indexers, search/cleaning pipeline) → [commands-mem.md](./commands-mem.md)
 - Editing `commands/upgrade.ts` (global CLI self-upgrade behavior) → [commands-upgrade.md](./commands-upgrade.md)

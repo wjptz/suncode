@@ -9,6 +9,7 @@ Provides:
     cmd_set_branch     - Set git branch for task
     cmd_set_base_branch - Set PR target branch
     cmd_set_scope      - Set scope for PR title
+    cmd_set_meta       - Set/overwrite a task metadata key
     cmd_add_subtask    - Link child task to parent
     cmd_remove_subtask - Unlink child task from parent
 """
@@ -24,6 +25,7 @@ from pathlib import Path
 
 from .config import (
     get_codex_dispatch_mode,
+    get_execution_dag_settings,
     get_packages,
     get_session_auto_commit,
     is_monorepo,
@@ -171,6 +173,24 @@ def _write_seed_jsonl(path: Path) -> None:
     path.write_text(json.dumps(seed, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _parse_meta_pairs(pairs: list[str] | None) -> dict[str, str] | None:
+    """Parse repeatable ``--meta key=value`` pairs, failing on malformed input."""
+    meta: dict[str, str] = {}
+    for pair in pairs or []:
+        key, separator, value = pair.partition("=")
+        if not separator or not key:
+            print(
+                colored(
+                    f"Error: malformed --meta value '{pair}' (expected key=value)",
+                    Colors.RED,
+                ),
+                file=sys.stderr,
+            )
+            return None
+        meta[key] = value
+    return meta
+
+
 def _default_prd_content(title: str, description: str | None = None) -> str:
     """Return the default PRD skeleton created with every task."""
     goal = (description or "").strip() or "待补充。"
@@ -277,6 +297,10 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     if not args.title:
         print(colored("Error: title is required", Colors.RED), file=sys.stderr)
+        return 1
+
+    meta = _parse_meta_pairs(getattr(args, "meta", None))
+    if meta is None:
         return 1
 
     # Validate --package (CLI source: fail-fast)
@@ -397,6 +421,17 @@ def cmd_create(args: argparse.Namespace) -> int:
         )
 
     hub_meta = _hub_meta_from_args(args)
+    execution_settings = get_execution_dag_settings(repo_root)
+    task_meta: dict[str, object] = {
+        **meta,
+        "execution": {
+            "policyVersion": 1,
+            "dagEnabled": execution_settings.enabled,
+            "requireForComplexTasks": execution_settings.require_for_complex_tasks,
+        }
+    }
+    if hub_meta:
+        task_meta["hub"] = hub_meta
     task_data = {
         "id": slug,
         "name": args.title,
@@ -421,7 +456,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "parent": None,
         "relatedFiles": [],
         "notes": "",
-        "meta": {"hub": hub_meta} if hub_meta else {},
+        "meta": task_meta,
     }
 
     write_json(task_json_path, task_data)
@@ -504,7 +539,14 @@ def cmd_create(args: argparse.Namespace) -> int:
     print(colored("后续步骤:", Colors.BLUE), file=sys.stderr)
     print("  - 补充 prd.md 的需求、约束和验收标准，优先使用简体中文", file=sys.stderr)
     print("  - 轻量任务可以只保留 PRD", file=sys.stderr)
-    print("  - 复杂任务在 task.py start 前补充 design.md 和 implement.md", file=sys.stderr)
+    print(
+        "  - 进入实施前生成并审查 execution.json；轻量任务可以是一节点 DAG",
+        file=sys.stderr,
+    )
+    print(
+        "  - 复杂任务在 task.py start 前补充 design.md、implement.md 和真实依赖 DAG",
+        file=sys.stderr,
+    )
     if seeded_jsonl:
         print(
             "  - 子代理需要上下文时，整理 implement.jsonl / check.jsonl 作为 spec/research 清单",
@@ -917,4 +959,38 @@ def cmd_set_scope(args: argparse.Namespace) -> int:
     write_json(task_json, data)
 
     print(colored(f"✓ Scope set to: {scope}", Colors.GREEN))
+    return 0
+
+
+# =============================================================================
+# Command: set-meta
+# =============================================================================
+
+def cmd_set_meta(args: argparse.Namespace) -> int:
+    """Set or overwrite one key without rebuilding the task metadata object."""
+    repo_root = get_repo_root()
+    target_dir = resolve_task_dir(args.dir, repo_root)
+    key = args.key
+    value = args.value
+
+    if not key:
+        print(colored("Error: Missing arguments", Colors.RED))
+        print("Usage: python3 task.py set-meta <task-dir> <key> <value>")
+        return 1
+
+    task_json = target_dir / FILE_TASK_JSON
+    if not task_json.is_file():
+        print(colored(f"Error: task.json not found at {target_dir}", Colors.RED))
+        return 1
+
+    data = read_json(task_json)
+    if not data:
+        return 1
+    meta = data.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+    meta[key] = value
+    data["meta"] = meta
+    write_json(task_json, data)
+    print(colored(f"✓ Meta set: {key} = {value}", Colors.GREEN))
     return 0

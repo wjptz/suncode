@@ -39,7 +39,10 @@ export function createTemplateReader(importMetaUrl: string): TemplateReader {
 
   function listFiles(dir: string): string[] {
     try {
-      return readdirSync(join(__dirname, dir)).sort();
+      return readdirSync(join(__dirname, dir), { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .sort();
     } catch {
       return [];
     }

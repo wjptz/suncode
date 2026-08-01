@@ -54,6 +54,8 @@ import {
   isManagedRootDir,
 } from "../configurators/index.js";
 import { replacePythonCommandLiterals } from "../configurators/shared.js";
+import { preserveCodexAgentModelKeys } from "../configurators/codex.js";
+import { ensureGitattributes } from "../configurators/workflow.js";
 import { pruneOrphanManifestKeys } from "../utils/manifest-prune.js";
 import {
   fetchRegistrySpecTemplates,
@@ -813,6 +815,10 @@ async function collectTemplateFiles(
     }
   }
 
+  if (platforms.has("codex")) {
+    preserveCodexAgentModelKeys(cwd, files);
+  }
+
   preserveExistingClaudeStatusLine(cwd, files);
 
   for (const [filePath, content] of await collectRegistrySpecTemplates(cwd)) {
@@ -1236,6 +1242,14 @@ async function getLatestNpmVersion(): Promise<string | null> {
  */
 function collectAllFiles(dirPath: string, cwd = process.cwd()): string[] {
   if (!fs.existsSync(dirPath)) return [];
+
+  const rootStat = fs.statSync(dirPath);
+  if (rootStat.isFile()) {
+    return [dirPath];
+  }
+  if (!rootStat.isDirectory()) {
+    return [];
+  }
 
   const files: string[] = [];
   const stack = [dirPath];
@@ -2264,6 +2278,11 @@ export async function update(options: UpdateOptions): Promise<void> {
         "   After this update, hash tracking will accurately detect changes.\n",
       ),
     );
+  }
+
+  // Additive-only project-root rule; dry-run must never touch the filesystem.
+  if (!options.dryRun) {
+    ensureGitattributes(cwd);
   }
 
   // Check if there's anything to do

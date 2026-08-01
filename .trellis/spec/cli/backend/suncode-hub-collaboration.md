@@ -22,6 +22,16 @@ suncode hub logout [--api-base-url <url>]
 suncode hub state [--json]
 ```
 
+`suncode hub init` 的交互契约：
+
+- 未传 `--api-base-url` 且全局 `defaultApiBaseUrl` 存在时，先询问是否复用；
+  默认选择复用。
+- 接受复用时不再显示 URL 输入；拒绝时才要求输入新的全局 URL。
+- 普通交互不询问 `developerId`。只有显式 `--developer-id <id>` 才写入项目级
+  Hub 成员 / 用户 ID override。
+- `--yes` 保持非交互契约：仍必须显式提供 `--api-base-url` 和
+  `--project-id`，不产生确认问题。
+
 Hub login API:
 
 ```http
@@ -124,6 +134,9 @@ Authentication contract:
 - Login state is global but bound to the normalized `apiBaseUrl`.
 - State is project-local because it depends on the current project, active task,
   and available work.
+- 项目 `hub.developerId` 是高级 override，不是初始化必填身份。未显式传
+  `--developer-id` 时保持 `null`，运行期优先使用对应 Hub 登录 session 的
+  `developerId`；不要把用户私有的 session ID 自动固化进团队共享配置。
 
 Hook contract:
 
@@ -185,12 +198,18 @@ Spec sync config:
 | `SUNCODE_HUB_TOKEN` is set | Ignore it; behavior depends only on login session |
 | `hub.autoPullSpec` is missing | Resolve as `true` |
 | `hub.autoPullSpec: false` | `hub intake` skips automatic spec pull; manual `pull-spec` still works |
+| 交互初始化存在全局 URL，用户确认复用 | 跳过 URL 输入，并继续使用已规范化的全局 URL |
+| 交互初始化存在全局 URL，用户拒绝复用 | 显示 URL 输入；成功初始化后以新 URL 更新全局默认值 |
+| 交互初始化未传 `--developer-id` | 不显示 Developer ID 问题；项目配置写 `developerId: null`，运行期从登录 session 解析 |
+| 显式传 `--developer-id <id>` | 保留兼容行为，将该值写为项目级 override |
 
 ### 5. Good/Base/Bad Cases
 
 - Good: Two projects resolve to the same normalized Hub base URL and reuse one
   global login session while keeping separate `.suncode/.runtime/hub-state.json`
   files.
+- Good：第二个项目执行交互式 `hub init` 时确认复用已有全局 URL，只需继续输入
+  project ID 和项目策略，不重复输入 URL 或 Developer ID。
 - Good: `hub state` writes available-work counts and current-task classification
   without caching credentials.
 - Good: `<hub-state>` says `workflow:primary` and uses `Flow add-on:` so the
@@ -204,11 +223,17 @@ Spec sync config:
   `mark-started` without explicit Hub binding.
 - Bad: A command silently falls back to `SUNCODE_HUB_TOKEN` when no login
   session exists.
+- Bad：`hub init` 明明能读取全局 `defaultApiBaseUrl`，却仍无条件要求重新输入 URL。
+- Bad：把已登录用户的 `developerId` 自动写进可提交的项目配置，导致其他成员继承
+  错误的个人身份。
 
 ### 6. Tests Required
 
 - Command tests for `hub init`:
   - writes global `defaultApiBaseUrl`
+  - 交互模式检测到全局 URL 时先询问复用；确认后不再出现 URL 输入
+  - 拒绝复用时要求新 URL，并更新全局默认值
+  - 普通交互不出现 `developerId` 问题；显式 `--developer-id` 仍可写 override
   - writes/replaces only the project `hub:` block
   - preserves unrelated project config
   - supports optional project `apiBaseUrl` override
@@ -277,6 +302,31 @@ if (currentTask.state === "local-only") {
 
 This keeps auth explicit, bound to the resolved Hub service, and scoped to tasks
 that actually carry Hub metadata.
+
+#### Wrong：重复收集可推导身份
+
+```ts
+await inquirer.prompt([
+  { name: "apiBaseUrl", type: "input" },
+  { name: "developerId", type: "input" },
+]);
+```
+
+这会忽略已经持久化的全局 URL，并让普通用户手工输入可由登录 session 解析的
+Hub 成员 ID。
+
+#### Correct：先复用全局 URL，身份只接受显式 override
+
+```ts
+const globalUrl = loadGlobalHubConfig({ homeDir }).defaultApiBaseUrl;
+const apiBaseUrl = globalUrl && (await confirmReuse(globalUrl))
+  ? globalUrl
+  : await promptForApiBaseUrl();
+const developerId = options.developerId;
+```
+
+这让全局 URL 真正承担跨项目默认值职责，同时保留 `developerId` 协议字段和高级
+override，不把登录用户身份写入共享配置。
 
 ## Scenario: Hub Finish Binding Ensure
 
@@ -1131,6 +1181,15 @@ SUNCODE_HUB_DEBUG_PLAN_READY=true
 - Debug logs must not include authorization headers, login tokens, raw request
   bodies, artifact contents, passwords, or signed URL query strings. URLs with
   query strings must redact the query as `?[redacted]`.
+- Artifact upload 请求默认不打印成功路径的调试输出。上传收到非 2xx HTTP
+  响应时，面向用户的错误必须包含实际 HTTP method 和脱敏后的 upload URL，
+  使 `submit-plan`、`submit-spec`、`submit-completion`、`submit-review`
+  失败时能够定位反向代理路由问题，同时不暴露签名查询参数：
+
+```text
+Hub artifact upload failed for <path>: <METHOD> <sanitizedUrl> -> HTTP <status>
+```
+
 - When a network request throws before a response exists, debug mode should
   rethrow a user-facing error that includes the method and sanitized URL, e.g.:
 
@@ -1148,6 +1207,8 @@ plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-st
 | Request throws before response | Log the failing request and rethrow with method + sanitized URL |
 | URL has query parameters | Log path plus `?[redacted]`, not the raw query string |
 | Headers or body contain secrets | Do not log headers or bodies |
+| Artifact upload 返回非 2xx | 抛出包含 artifact path、method、脱敏 URL 和 HTTP status 的错误 |
+| Artifact upload 在非 debug 模式下成功 | 不增加常规 request 日志 |
 
 ### 5. Good/Base/Bad Cases
 
@@ -1155,12 +1216,16 @@ plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-st
   `preflight-start` failed while calling
   `/api/v1/projects/{projectId}/tasks/{remoteTaskId}/preflight-start`.
 - Good: a signed upload URL is logged without its query string.
+- Good: `submit-spec` 收到上传目标的 HTTP 405 时，错误直接显示实际
+  `PUT` 路径，并把签名查询参数显示为 `?[redacted]`。
 - Base: without `--debug`, `plan-ready` behaves exactly like the normal
   high-level command and only prints the final command result or top-level
   error.
 - Bad: a generic `Error: fetch failed` gives no failing step or URL.
 - Bad: debug logs print `Authorization`, JWTs, artifact contents, or signed URL
   query parameters.
+- Bad：artifact upload 只报告 `HTTP 405`，迫使用户猜测实际访问了 Hub
+  返回的哪个 upload target。
 
 ### 6. Tests Required
 
@@ -1168,6 +1233,10 @@ plan-ready request failed: POST https://hub.example.test/api/v1/.../preflight-st
   - logs step start/success/failure lines
   - logs method and sanitized URL for preflight
   - rethrows a network failure with method and sanitized URL
+- Artifact upload 回归测试：
+  - 非 2xx upload 错误包含 artifact path、HTTP method、脱敏 URL 和
+    response status
+  - 错误中不存在签名查询参数的名称和值
 - Existing plan-ready success and stop-before-preflight tests must continue to
   pass without debug logging requirements.
 
@@ -1187,8 +1256,12 @@ parameters.
 #### Correct
 
 ```ts
-logger(`[hub plan-ready] request POST ${sanitizeDebugUrl(url)}`);
-throw new Error(`plan-ready request failed: POST ${sanitizeDebugUrl(url)}: ${message}`);
+logger(`[hub plan-ready] request POST ${sanitizeUrlForLogging(url)}`);
+throw new Error(`plan-ready request failed: POST ${sanitizeUrlForLogging(url)}: ${message}`);
+
+throw new Error(
+  `Hub artifact upload failed for ${artifact.path}: ${method} ${sanitizeUrlForLogging(uploadUrl)} -> HTTP ${response.status}`,
+);
 ```
 
 This gives enough context to debug routing and connectivity while keeping
@@ -1234,8 +1307,24 @@ Local source, scoped to the target task directory only:
 
 1. If `.suncode/tasks/<task>/subtasks.json` exists, treat it as the explicit
    override.
-2. Otherwise derive structured subtasks from parseable checklist lines in
+2. Otherwise, if `.suncode/tasks/<task>/execution.json` exists, project its
+   nodes into stable topological order.
+3. Otherwise derive structured subtasks from parseable checklist lines in
    `.suncode/tasks/<task>/implement.md`.
+
+Hub projection is not allowed to reinterpret an invalid DAG identity. Before
+projecting `execution.json` it must require:
+
+- raw top-level `version` token is exactly integer `1`，不能是 `true`、`1.0`、
+  `1e0` 或 `"1"`；
+- `task` equals the target task directory basename；
+- node IDs are unique，all dependencies exist，and the graph is acyclic；
+- output order is stable topological order with original node order as the
+  tie-breaker.
+
+JavaScript `JSON.parse()` 会把 `1.0` 变成 `Number 1`，所以 projection reader
+必须同时读取原始 JSON 文本并执行 version token 词法检查，不能只比较
+`plan.version === 1`。
 
 Every complex task `implement.md` must include this parseable checklist section:
 
@@ -1296,6 +1385,9 @@ Task manifest fields after success:
 | Hub disabled | Return `disabled`; no network |
 | Task has no remote Hub binding | Return `skipped`; no network |
 | `subtasks.json` missing and `implement.md` has parseable checklist items | Derive subtasks from `implement.md` and submit |
+| `subtasks.json` missing and valid `execution.json` exists | Project DAG nodes in stable topological order before considering `implement.md` |
+| `execution.json.version` raw token is `1.0` / `1e0` | Throw before any subtask request |
+| `execution.json.task` differs from target directory | Throw before any subtask request |
 | `subtasks.json` missing and `implement.md` has no parseable checklist items | Return `skipped`; no network |
 | `subtasks` empty | Return `skipped`; no network |
 | Entry missing `priority`, `name`, or `description` | Throw a user-facing error |
@@ -1309,12 +1401,16 @@ Task manifest fields after success:
   subtasks; command POSTs exactly those items and stores `lastSubtasksHash`.
 - Good: Current task has no override but `implement.md` contains a parseable
   `## 实施清单` checklist; command derives and POSTs those items.
+- Good: A diamond `execution.json` projects root, stable sibling order, then
+  integration barrier，and ignores the legacy checklist fallback.
 - Base: Local-only project has no Hub enabled; `after_start` does not add Hub
   hooks.
 - Bad: Command scans `.suncode/tasks/**/subtasks.json` and uploads sibling task
   work.
 - Bad: Command sends `prd.md`, `design.md`, or `implement.md` bodies in the
   subtask API payload.
+- Bad: Hub accepts `version: 1.0` because `JSON.parse()` converted it to `1`，
+  or projects a plan whose `task` belongs to a sibling directory.
 - Bad: Workflow template asks for subtasks in prose or an ordered list that is
   not parseable as checklist items.
 
@@ -1322,6 +1418,8 @@ Task manifest fields after success:
 
 - Unit/function-level test for `submitSubtasks`:
   - uses the target task's `subtasks.json` override when present
+  - projects `execution.json` before `implement.md` in stable topological order
+  - rejects raw boolean/float/string version tokens and task-directory mismatch
   - generates structured subtasks from the target task's `implement.md`
     `## 实施清单` checklist when no override exists
   - rejects or ignores sibling task `subtasks.json`

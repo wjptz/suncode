@@ -361,7 +361,14 @@ def _get_task_status(suncode_dir: Path, input_data: dict) -> str:
 
     task_title = task_data.get("title", task_ref)
     task_status = task_data.get("status", "unknown")
-    artifact_names = ("prd.md", "design.md", "implement.md", "implement.jsonl", "check.jsonl")
+    artifact_names = (
+        "prd.md",
+        "design.md",
+        "implement.md",
+        "execution.json",
+        "implement.jsonl",
+        "check.jsonl",
+    )
     present = [name for name in artifact_names if (task_dir / name).is_file()]
     if (task_dir / "research").is_dir():
         present.append("research/")
@@ -377,6 +384,7 @@ def _get_task_status(suncode_dir: Path, input_data: dict) -> str:
     has_prd = (task_dir / "prd.md").is_file()
     has_design = (task_dir / "design.md").is_file()
     has_implement_plan = (task_dir / "implement.md").is_file()
+    has_execution_plan = (task_dir / "execution.json").is_file()
     implement_jsonl = task_dir / "implement.jsonl"
     check_jsonl = task_dir / "check.jsonl"
     jsonl_ready = (
@@ -407,6 +415,15 @@ def _get_task_status(suncode_dir: Path, input_data: dict) -> str:
             )
         else:
             next_bits.append("Planning artifacts are present; ask for review before `task.py start`")
+        if has_execution_plan:
+            next_bits.append(
+                "validate and review `execution.json` dependencies, scopes, validation, and final barrier"
+            )
+        else:
+            next_bits.append(
+                "when `execution.dag.enabled`, create `execution.json` before implementation "
+                "(a lightweight task may use one node; a complex task must express real dependencies)"
+            )
         if not jsonl_ready:
             next_bits.append("curate `implement.jsonl` and `check.jsonl` before sub-agent mode start")
         return (

@@ -28,9 +28,18 @@ warnings.filterwarnings("ignore")
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
+
+# Hook hosts send UTF-8 JSON regardless of the process locale.
+_stdin_reconfigure = getattr(sys.stdin, "reconfigure", None)
+if callable(_stdin_reconfigure):
+    try:
+        _stdin_reconfigure(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
+        pass
 
 # IMPORTANT: Force stdout to use UTF-8 on Windows
 # This fixes UnicodeEncodeError when outputting non-ASCII characters
@@ -62,6 +71,16 @@ AGENT_RESEARCH = "suncode-research"
 AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, AGENT_CHECK)
 # All supported agents
 AGENTS_ALL = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_RESEARCH)
+
+_CONTEXT_MANIFEST_HINT_RE = re.compile(
+    r"^\s*Suncode context manifest:\s*(\S+)\s*$",
+    re.MULTILINE,
+)
+_MANIFEST_ROLES_BY_AGENT = {
+    AGENT_IMPLEMENT: ("implement", "fix", "integration"),
+    AGENT_CHECK: ("check",),
+    AGENT_RESEARCH: ("research",),
+}
 
 
 def find_repo_root(start_path: str) -> str | None:
@@ -145,212 +164,389 @@ def get_current_task(
     return active.task_path
 
 
-def read_file_content(base_path: str, file_path: str) -> str | None:
-    """Read file content, return None if file doesn't exist"""
+# =============================================================================
+# Context Injection Limits
+#
+# Notice wording is mirrored by the Pi and OpenCode implementations. Keep the
+# three adapters aligned whenever this contract changes.
+# =============================================================================
+
+DEFAULT_MAX_FILE_BYTES = 32768
+DEFAULT_MAX_ARTIFACT_BYTES = 65536
+DEFAULT_MAX_TOTAL_BYTES = 131072
+
+DEFAULT_LIMITS: dict[str, int] = {
+    "max_file_bytes": DEFAULT_MAX_FILE_BYTES,
+    "max_artifact_bytes": DEFAULT_MAX_ARTIFACT_BYTES,
+    "max_total_bytes": DEFAULT_MAX_TOTAL_BYTES,
+}
+
+
+def _get_limits(repo_root: str) -> dict[str, int]:
+    """Load context-injection limits with a fail-open default."""
+    scripts_dir = Path(repo_root) / DIR_WORKFLOW / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.config import get_context_injection_limits  # type: ignore[import-not-found]
+
+        return get_context_injection_limits(Path(repo_root))
+    except Exception:
+        return dict(DEFAULT_LIMITS)
+
+
+def truncate_utf8(data: bytes, cap: int) -> bytes:
+    """Truncate bytes without splitting a UTF-8 code point.
+
+    ``cap <= 0`` disables the limit.
+    """
+    if cap <= 0 or len(data) <= cap:
+        return data
+
+    truncated = data[:cap]
+    end = len(truncated)
+    while end > 0 and (truncated[end - 1] & 0xC0) == 0x80:
+        end -= 1
+    if end == 0:
+        return b""
+
+    lead = truncated[end - 1]
+    if lead & 0x80:
+        if (lead & 0xE0) == 0xC0:
+            sequence_length = 2
+        elif (lead & 0xF0) == 0xE0:
+            sequence_length = 3
+        elif (lead & 0xF8) == 0xF0:
+            sequence_length = 4
+        else:
+            sequence_length = 1
+        if (end - 1) + sequence_length > len(truncated):
+            end -= 1
+    return truncated[:end]
+
+
+class _Budget:
+    """Track emitted UTF-8 bytes across one injected context."""
+
+    def __init__(self, max_total_bytes: int) -> None:
+        self.max_total_bytes = max_total_bytes
+        self.used = 0
+        self.exhausted = False
+
+    def has_room(self, size: int) -> bool:
+        return self.max_total_bytes <= 0 or self.used + size <= self.max_total_bytes
+
+    def add(self, size: int) -> None:
+        self.used += size
+
+
+def _read_file_bytes(base_path: str, file_path: str) -> bytes | None:
+    """Read raw bytes, returning ``None`` when the path is unavailable."""
     full_path = os.path.join(base_path, file_path)
-    if os.path.exists(full_path) and os.path.isfile(full_path):
-        try:
-            with open(full_path, "r", encoding="utf-8") as f:
-                return f.read()
-        except Exception:
-            return None
-    return None
+    if not os.path.isfile(full_path):
+        return None
+    try:
+        with open(full_path, "rb") as file_handle:
+            return file_handle.read()
+    except Exception:
+        return None
 
 
-def read_directory_contents(
-    base_path: str, dir_path: str, max_files: int = 20
-) -> list[tuple[str, str]]:
-    """
-    Read all .md files in a directory
+def _truncate_notice(path: str, cap: int) -> str:
+    return f"\n[Suncode: truncated at {cap} bytes — read {path} for the full content]"
 
-    Args:
-        base_path: Base path (usually repo_root)
-        dir_path: Directory relative path
-        max_files: Max files to read (prevent huge directories)
 
-    Returns:
-        [(file_path, content), ...]
-    """
+def _is_binary_content(data: bytes) -> bool:
+    """Return whether raw bytes must not be decoded into model context."""
+    if b"\x00" in data:
+        return True
+    try:
+        data.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
+def _binary_notice(path: str, size: int, reason: str) -> str:
+    return f"[Suncode: not inlined (binary file) — {path} ({size} bytes): {reason}]"
+
+
+def _index_notice(path: str, size: int, reason: str) -> str:
+    return (
+        "[Suncode: not inlined (total context limit reached) — "
+        f"{path} ({size} bytes): {reason}]"
+    )
+
+
+_TOTAL_LIMIT_EXHAUSTED_NOTICE = (
+    "[Suncode: total context limit reached — remaining context entries omitted]"
+)
+
+
+def _budgeted_notice(budget: _Budget, notice: str) -> str | None:
+    """Add a detailed notice, or emit one bounded terminal notice."""
+    if budget.exhausted:
+        return None
+    notice_size = len(notice.encode("utf-8"))
+    if budget.has_room(notice_size):
+        budget.add(notice_size)
+        return notice
+    budget.exhausted = True
+    budget.add(len(_TOTAL_LIMIT_EXHAUSTED_NOTICE.encode("utf-8")))
+    return _TOTAL_LIMIT_EXHAUSTED_NOTICE
+
+
+def _budgeted_block(
+    budget: _Budget,
+    header: str,
+    plain_path: str,
+    content: str,
+    reason: str,
+    size_for_index: int,
+) -> str | None:
+    if budget.exhausted:
+        return None
+    block = f"=== {header} ===\n{content}"
+    block_size = len(block.encode("utf-8"))
+    if not budget.has_room(block_size):
+        notice = _index_notice(plain_path, size_for_index, reason)
+        return _budgeted_notice(budget, notice)
+    budget.add(block_size)
+    return block
+
+
+def _materialize_file(
+    base_path: str,
+    file_path: str,
+    reason: str,
+    limits: dict[str, int],
+    budget: _Budget,
+) -> str | None:
+    if budget.exhausted:
+        return None
+    data = _read_file_bytes(base_path, file_path)
+    if data is None:
+        return None
+
+    size = len(data)
+    if _is_binary_content(data):
+        notice = _binary_notice(file_path, size, reason)
+        return _budgeted_notice(budget, notice)
+
+    cap = limits["max_file_bytes"]
+    truncated = truncate_utf8(data, cap)
+    content = truncated.decode("utf-8", errors="strict")
+    if len(truncated) < size:
+        content += _truncate_notice(file_path, cap)
+    return _budgeted_block(budget, file_path, file_path, content, reason, size)
+
+
+def _materialize_directory(
+    base_path: str,
+    dir_path: str,
+    reason: str,
+    limits: dict[str, int],
+    budget: _Budget,
+    max_files: int = 20,
+) -> list[str]:
     full_path = os.path.join(base_path, dir_path)
-    if not os.path.exists(full_path) or not os.path.isdir(full_path):
+    if not os.path.isdir(full_path):
+        return []
+    try:
+        names = sorted(
+            name
+            for name in os.listdir(full_path)
+            if name.endswith(".md") and os.path.isfile(os.path.join(full_path, name))
+        )
+    except Exception:
         return []
 
-    results = []
-    try:
-        # Only read .md files, sorted by filename
-        md_files = sorted(
-            [
-                f
-                for f in os.listdir(full_path)
-                if f.endswith(".md") and os.path.isfile(os.path.join(full_path, f))
-            ]
-        )
-
-        for filename in md_files[:max_files]:
-            file_full_path = os.path.join(full_path, filename)
-            relative_path = os.path.join(dir_path, filename)
-            try:
-                with open(file_full_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    results.append((relative_path, content))
-            except Exception:
-                continue
-    except Exception:
-        pass
-
-    return results
+    blocks: list[str] = []
+    for name in names[:max_files]:
+        if budget.exhausted:
+            break
+        relative_path = os.path.join(dir_path, name)
+        block = _materialize_file(base_path, relative_path, reason, limits, budget)
+        if block:
+            blocks.append(block)
+    return blocks
 
 
-def read_jsonl_entries(base_path: str, jsonl_path: str) -> list[tuple[str, str]]:
-    """
-    Read all file/directory contents referenced in jsonl file
-
-    Schema:
-        {"file": "path/to/file.md", "reason": "..."}
-        {"file": "path/to/dir/", "type": "directory", "reason": "..."}
-        {"_example": "..."}          # seed row — skipped (no `file` field)
-
-    Rows without a ``file`` field (e.g. the self-describing seed line written
-    by ``task.py create`` before the agent has curated entries) are skipped
-    silently. If the resulting entry list is empty, a stderr warning is
-    emitted so the operator can debug missing context.
-
-    Returns:
-        [(path, content), ...]
-    """
+def read_jsonl_entries(base_path: str, jsonl_path: str) -> list[dict]:
+    """Parse file/directory entries from a JSONL context manifest."""
     full_path = os.path.join(base_path, jsonl_path)
     if not os.path.exists(full_path):
         print(
             f"[inject-subagent-context] WARN: {jsonl_path} not found — "
-            f"sub-agent will receive only task artifacts",
+            "sub-agent will receive only task artifacts",
             file=sys.stderr,
         )
         return []
 
-    results = []
+    entries: list[dict] = []
     saw_real_entry = False
     try:
-        with open(full_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+        with open(full_path, "r", encoding="utf-8") as file_handle:
+            for raw_line in file_handle:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
                     item = json.loads(line)
-                    file_path = item.get("file") or item.get("path")
-                    entry_type = item.get("type", "file")
-
-                    if not file_path:
-                        # Seed / comment row — skip silently
-                        continue
-
-                    saw_real_entry = True
-                    if entry_type == "directory":
-                        # Read all .md files in directory
-                        dir_contents = read_directory_contents(base_path, file_path)
-                        results.extend(dir_contents)
-                    else:
-                        # Read single file
-                        content = read_file_content(base_path, file_path)
-                        if content:
-                            results.append((file_path, content))
                 except json.JSONDecodeError:
                     continue
+                file_path = item.get("file") or item.get("path")
+                if not file_path:
+                    continue
+                saw_real_entry = True
+                entries.append(
+                    {
+                        "file": file_path,
+                        "type": item.get("type", "file"),
+                        "reason": item.get("reason") or "-",
+                    }
+                )
     except Exception:
         pass
 
     if not saw_real_entry:
         print(
             f"[inject-subagent-context] WARN: {jsonl_path} has no curated "
-            f"entries (only seed / empty) — sub-agent will receive only "
-            f"task artifacts. See workflow.md planning artifact guidance.",
+            "entries (only seed / empty) — sub-agent will receive only "
+            "task artifacts. See workflow.md planning artifact guidance.",
             file=sys.stderr,
         )
-
-    return results
-
+    return entries
 
 
+def _materialize_jsonl_entries(
+    base_path: str,
+    jsonl_path: str,
+    limits: dict[str, int],
+    budget: _Budget,
+) -> list[str]:
+    blocks: list[str] = []
+    for entry in read_jsonl_entries(base_path, jsonl_path):
+        if budget.exhausted:
+            break
+        if entry["type"] == "directory":
+            blocks.extend(
+                _materialize_directory(
+                    base_path,
+                    entry["file"],
+                    entry["reason"],
+                    limits,
+                    budget,
+                )
+            )
+        else:
+            block = _materialize_file(
+                base_path,
+                entry["file"],
+                entry["reason"],
+                limits,
+                budget,
+            )
+            if block:
+                blocks.append(block)
+    return blocks
 
-def get_agent_context(repo_root: str, task_dir: str, agent_type: str) -> str:
-    """
-    Get context from {agent_type}.jsonl for the specified agent.
-    Only reads implement.jsonl or check.jsonl (the two JSONL files the task system creates).
-    """
-    context_parts = []
 
-    agent_jsonl = f"{task_dir}/{agent_type}.jsonl"
-    for file_path, content in read_jsonl_entries(repo_root, agent_jsonl):
-        context_parts.append(f"=== {file_path} ===\n{content}")
+def get_agent_context(
+    repo_root: str,
+    task_dir: str,
+    agent_type: str,
+    limits: dict[str, int],
+    budget: _Budget,
+) -> str:
+    blocks = _materialize_jsonl_entries(
+        repo_root,
+        f"{task_dir}/{agent_type}.jsonl",
+        limits,
+        budget,
+    )
+    return "\n\n".join(blocks)
 
-    return "\n\n".join(context_parts)
+
+def _materialize_artifact(
+    base_path: str,
+    file_path: str,
+    header_label: str,
+    reason: str,
+    limits: dict[str, int],
+    budget: _Budget,
+) -> str | None:
+    if budget.exhausted:
+        return None
+    data = _read_file_bytes(base_path, file_path)
+    if data is None:
+        return None
+
+    size = len(data)
+    if _is_binary_content(data):
+        notice = _binary_notice(file_path, size, reason)
+        return _budgeted_notice(budget, notice)
+
+    cap = limits["max_artifact_bytes"]
+    truncated = truncate_utf8(data, cap)
+    content = truncated.decode("utf-8", errors="strict")
+    if len(truncated) < size:
+        content += _truncate_notice(file_path, cap)
+    return _budgeted_block(
+        budget,
+        header_label,
+        file_path,
+        content,
+        reason,
+        size,
+    )
+
+
+def _task_context(repo_root: str, task_dir: str, agent_type: str) -> str:
+    limits = _get_limits(repo_root)
+    budget = _Budget(limits["max_total_bytes"])
+    parts: list[str] = []
+
+    base_context = get_agent_context(
+        repo_root,
+        task_dir,
+        agent_type,
+        limits,
+        budget,
+    )
+    if base_context:
+        parts.append(base_context)
+
+    artifacts = (
+        ("prd.md", "Requirements", "Requirements document"),
+        ("design.md", "Technical Design", "Technical design document"),
+        ("implement.md", "Execution Plan", "Execution plan document"),
+    )
+    for name, label, reason in artifacts:
+        if budget.exhausted:
+            break
+        file_path = f"{task_dir}/{name}"
+        block = _materialize_artifact(
+            repo_root,
+            file_path,
+            f"{file_path} ({label})",
+            reason,
+            limits,
+            budget,
+        )
+        if block:
+            parts.append(block)
+    return "\n\n".join(parts)
 
 
 def get_implement_context(repo_root: str, task_dir: str) -> str:
-    """
-    Complete context for Implement Agent
-
-    Read order:
-    1. All files in implement.jsonl (spec/research manifests)
-    2. prd.md (requirements)
-    3. design.md if present (technical design)
-    4. implement.md if present (execution plan)
-    """
-    context_parts = []
-
-    # 1. Read implement.jsonl
-    base_context = get_agent_context(repo_root, task_dir, "implement")
-    if base_context:
-        context_parts.append(base_context)
-
-    # 2. Requirements document
-    prd_content = read_file_content(repo_root, f"{task_dir}/prd.md")
-    if prd_content:
-        context_parts.append(f"=== {task_dir}/prd.md (Requirements) ===\n{prd_content}")
-
-    # 3. Technical design for complex tasks
-    design_content = read_file_content(repo_root, f"{task_dir}/design.md")
-    if design_content:
-        context_parts.append(
-            f"=== {task_dir}/design.md (Technical Design) ===\n{design_content}"
-        )
-
-    # 4. Execution plan for complex tasks
-    implement_plan_content = read_file_content(repo_root, f"{task_dir}/implement.md")
-    if implement_plan_content:
-        context_parts.append(
-            f"=== {task_dir}/implement.md (Execution Plan) ===\n{implement_plan_content}"
-        )
-
-    return "\n\n".join(context_parts)
+    """Return implement JSONL context followed by task artifacts."""
+    return _task_context(repo_root, task_dir, "implement")
 
 
 def get_check_context(repo_root: str, task_dir: str) -> str:
-    """
-    Context for Check Agent: check.jsonl + task artifacts.
-    """
-    context_parts = []
-
-    for file_path, content in read_jsonl_entries(repo_root, f"{task_dir}/check.jsonl"):
-        context_parts.append(f"=== {file_path} ===\n{content}")
-
-    prd_content = read_file_content(repo_root, f"{task_dir}/prd.md")
-    if prd_content:
-        context_parts.append(f"=== {task_dir}/prd.md (Requirements) ===\n{prd_content}")
-
-    design_content = read_file_content(repo_root, f"{task_dir}/design.md")
-    if design_content:
-        context_parts.append(
-            f"=== {task_dir}/design.md (Technical Design) ===\n{design_content}"
-        )
-
-    implement_plan_content = read_file_content(repo_root, f"{task_dir}/implement.md")
-    if implement_plan_content:
-        context_parts.append(
-            f"=== {task_dir}/implement.md (Execution Plan) ===\n{implement_plan_content}"
-        )
-
-    return "\n\n".join(context_parts)
+    """Return check JSONL context followed by task artifacts."""
+    return _task_context(repo_root, task_dir, "check")
 
 
 def get_finish_context(repo_root: str, task_dir: str) -> str:
@@ -359,6 +555,68 @@ def get_finish_context(repo_root: str, task_dir: str) -> str:
     (Finish is a final check, same context source.)
     """
     return get_check_context(repo_root, task_dir)
+
+
+def _context_manifest_hint(input_data: dict, prompt: str = "") -> str:
+    for key in ("context_manifest", "contextManifest"):
+        value = _string_value(input_data.get(key))
+        if value:
+            return value
+    match = _CONTEXT_MANIFEST_HINT_RE.search(prompt)
+    return match.group(1).strip() if match else ""
+
+
+def get_execution_manifest_context(
+    repo_root: str,
+    input_data: dict,
+    prompt: str,
+    subagent_type: str,
+) -> tuple[str, str] | None:
+    """Load the canonical node manifest when a dispatch explicitly references it."""
+    manifest_ref = _context_manifest_hint(input_data, prompt)
+    if not manifest_ref:
+        return None
+    scripts_dir = Path(repo_root) / DIR_WORKFLOW / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from common.execution_context import (  # type: ignore[import-not-found]
+            read_node_context_manifest,
+        )
+
+        manifest, content = read_node_context_manifest(
+            Path(repo_root),
+            manifest_ref,
+        )
+    except Exception as exc:
+        print(
+            f"[inject-subagent-context] WARN: invalid execution manifest: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    role = manifest.get("role")
+    if role not in _MANIFEST_ROLES_BY_AGENT.get(subagent_type, ()):
+        print(
+            f"[inject-subagent-context] WARN: manifest role {role!r} does not match {subagent_type}",
+            file=sys.stderr,
+        )
+        return None
+    task = manifest.get("task")
+    task_path = task.get("path") if isinstance(task, dict) else None
+    if not isinstance(task_path, str) or not task_path:
+        return None
+    run = manifest.get("run")
+    parent_session = run.get("parentSession") if isinstance(run, dict) else None
+    event_parent_session = _string_value(
+        input_data.get("session_id") or input_data.get("sessionId")
+    )
+    if parent_session and event_parent_session and parent_session != event_parent_session:
+        print(
+            "[inject-subagent-context] WARN: manifest parent session does not match hook event",
+            file=sys.stderr,
+        )
+        return None
+    return task_path, content
 
 
 
@@ -395,6 +653,23 @@ All the information you need has been prepared for you:
 - Do NOT execute git commit, only code modifications
 - Follow all dev specs injected above
 - Report list of modified/created files when done"""
+
+
+def build_execution_prompt(original_prompt: str, context: str) -> str:
+    """Build a role-neutral prompt around the canonical execution-node contract."""
+    return f"""<!-- suncode-hook-injected -->
+# Suncode Execution Node
+
+The immutable, budgeted node context is below. Its objective, boundaries,
+validation, and result protocol override legacy role defaults.
+
+{context}
+
+---
+
+## Dispatch Request
+
+{original_prompt}"""
 
 
 def build_check_prompt(original_prompt: str, context: str) -> str:
@@ -646,6 +921,30 @@ def _handle_codex_subagent_start(input_data: dict) -> None:
     if not repo_root:
         return
 
+    manifest_ref = _context_manifest_hint(input_data)
+    manifest_context = get_execution_manifest_context(
+        repo_root,
+        input_data,
+        "",
+        subagent_type,
+    )
+    if manifest_ref and manifest_context is None:
+        return
+    if manifest_context is not None:
+        task_dir, context = manifest_context
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStart",
+                "additionalContext": build_codex_subagent_context(
+                    subagent_type,
+                    task_dir,
+                    context,
+                ),
+            }
+        }
+        print(json.dumps(output, ensure_ascii=False))
+        return
+
     task_dir = get_current_task(
         repo_root,
         {"session_id": parent_session_id},
@@ -825,8 +1124,22 @@ def main():
     if not repo_root:
         sys.exit(0)
 
-    # Get current task directory (research doesn't require it)
-    task_dir = get_current_task(repo_root, input_data)
+    manifest_ref = _context_manifest_hint(input_data, original_prompt)
+    manifest_context = get_execution_manifest_context(
+        repo_root,
+        input_data,
+        original_prompt,
+        subagent_type,
+    )
+    if manifest_ref and manifest_context is None:
+        sys.exit(0)
+
+    # Get current task directory only when no explicit node manifest is present.
+    task_dir = (
+        manifest_context[0]
+        if manifest_context is not None
+        else get_current_task(repo_root, input_data)
+    )
 
     # implement/check need task directory
     if subagent_type in AGENTS_REQUIRE_TASK:
@@ -837,11 +1150,20 @@ def main():
         if not os.path.exists(task_dir_full):
             sys.exit(0)
 
+    if manifest_context is not None:
+        context = manifest_context[1]
+        new_prompt = build_execution_prompt(original_prompt, context)
+    else:
+        context = ""
+        new_prompt = ""
+
     # Check for [finish] marker in prompt (check agent with finish context)
     is_finish_phase = "[finish]" in original_prompt.lower()
 
     # Get context and build prompt based on subagent type
-    if subagent_type == AGENT_IMPLEMENT:
+    if manifest_context is not None:
+        pass
+    elif subagent_type == AGENT_IMPLEMENT:
         assert task_dir is not None  # validated above
         context = get_implement_context(repo_root, task_dir)
         new_prompt = build_implement_prompt(original_prompt, context)

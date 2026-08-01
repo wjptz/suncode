@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -26,6 +26,16 @@ interface PiRunConfig {
   tools?: string[];
 }
 
+interface ContextLimits {
+  max_file_bytes: number;
+  max_artifact_bytes: number;
+  max_total_bytes: number;
+}
+
+interface ContextBudgetLike {
+  used: number;
+}
+
 interface PiExtensionInternals {
   normalizeAgent: (agent: string | undefined) => string;
   isSuncodeAgent: (root: string, agent: string) => boolean;
@@ -35,13 +45,38 @@ interface PiExtensionInternals {
     input: { model?: string; thinking?: string },
     agentCfg: AgentConfig,
     inheritedThinking?: string,
+    inheritedModel?: string,
   ) => PiRunConfig;
+  contextModelRef: (ctx?: {
+    model?: { provider?: string; id?: string };
+  }) => string | undefined;
+  readContextInjectionLimits: (root: string) => ContextLimits;
+  truncateUtf8: (data: Buffer, cap: number) => Buffer;
+  ContextBudget: new (max: number) => ContextBudgetLike;
+  materializeFile: (
+    root: string,
+    file: string,
+    reason: string,
+    limits: ContextLimits,
+    budget: ContextBudgetLike,
+  ) => string | null;
+  materializeArtifact: (
+    root: string,
+    file: string,
+    label: string,
+    reason: string,
+    limits: ContextLimits,
+    budget: ContextBudgetLike,
+  ) => string | null;
   cmdHasSuncodeCtx: (cmd: string) => boolean;
   shellQuote: (v: string) => string;
   suncodeExtension: (pi: {
     registerTool?: (tool: unknown) => void;
     registerShortcut?: (key: string, opts: unknown) => void;
-    on?: (event: string, handler: (event: unknown, ctx?: unknown) => unknown) => void;
+    on?: (
+      event: string,
+      handler: (event: unknown, ctx?: unknown) => unknown,
+    ) => void;
   }) => void;
 }
 
@@ -54,6 +89,12 @@ export {
   parseAgentFM,
   buildPiArgs,
   resolveRunCfg,
+  contextModelRef,
+  readContextInjectionLimits,
+  truncateUtf8,
+  ContextBudget,
+  materializeFile,
+  materializeArtifact,
   cmdHasSuncodeCtx,
   shellQuote,
   suncodeExtension,
@@ -176,15 +217,103 @@ describe("pi templates", () => {
 
     // Schema must declare the three dispatch modes and the thinking enum so the LLM
     // can pick a valid mode and override thinking per call.
+    expect(extension).toContain('enum: ["single", "parallel", "chain"]');
     expect(extension).toContain(
-      'enum: ["single", "parallel", "chain"]',
-    );
-    expect(extension).toContain(
-      'enum: ["off", "minimal", "low", "medium", "high", "xhigh"]',
+      'enum: ["off", "minimal", "low", "medium", "high", "xhigh", "max"]',
     );
 
     // Dispatch protocol carries the "Active task: <path>" prefix rule.
     expect(extension).toContain("Active task:");
+  });
+
+  it("uses Suncode context limits with UTF-8-safe truncation", () => {
+    const {
+      readContextInjectionLimits,
+      truncateUtf8,
+      ContextBudget,
+      materializeFile,
+    } = loadExtensionInternals();
+    const root = mkdtempSync(join(tmpdir(), "suncode-pi-context-"));
+    try {
+      mkdirSync(join(root, ".suncode"), { recursive: true });
+      expect(readContextInjectionLimits(root)).toEqual({
+        max_file_bytes: 32768,
+        max_artifact_bytes: 65536,
+        max_total_bytes: 131072,
+      });
+      writeFileSync(
+        join(root, ".suncode", "config.yaml"),
+        [
+          "context_injection:",
+          "  max_file_bytes: 3",
+          "  max_artifact_bytes: 0",
+          "  max_total_bytes: 100",
+        ].join("\n"),
+      );
+      const limits = readContextInjectionLimits(root);
+      expect(limits).toEqual({
+        max_file_bytes: 3,
+        max_artifact_bytes: 0,
+        max_total_bytes: 100,
+      });
+      expect(truncateUtf8(Buffer.from("éé"), 3).toString("utf-8")).toBe("é");
+
+      writeFileSync(join(root, "utf8.txt"), "éé");
+      const block = materializeFile(
+        root,
+        "utf8.txt",
+        "contract",
+        limits,
+        new ContextBudget(0),
+      );
+      expect(block).toContain("é");
+      expect(block).not.toContain("�");
+      expect(block).toContain("truncated at 3 bytes");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("references binary Pi context and shares the total budget", () => {
+    const { ContextBudget, materializeFile } = loadExtensionInternals();
+    const root = mkdtempSync(join(tmpdir(), "suncode-pi-binary-"));
+    try {
+      writeFileSync(join(root, "binary.bin"), Buffer.from([0x61, 0x00, 0x62]));
+      writeFileSync(join(root, "binary-2.bin"), Buffer.from([0x63, 0x00]));
+      writeFileSync(join(root, "first.txt"), "a".repeat(30));
+      writeFileSync(join(root, "second.txt"), "b".repeat(30));
+      const limits = {
+        max_file_bytes: 0,
+        max_artifact_bytes: 0,
+        max_total_bytes: 55,
+      };
+      const budget = new ContextBudget(80);
+
+      expect(
+        materializeFile(root, "binary.bin", "fixture", limits, budget),
+      ).toContain("not inlined (binary file)");
+      expect(
+        materializeFile(root, "binary-2.bin", "fixture", limits, budget),
+      ).toBe(
+        "[Suncode: total context limit reached — remaining context entries omitted]",
+      );
+      expect(
+        materializeFile(root, "binary.bin", "fixture", limits, budget),
+      ).toBeNull();
+
+      const textBudget = new ContextBudget(limits.max_total_bytes);
+      expect(
+        materializeFile(root, "first.txt", "first", limits, textBudget),
+      ).toContain("=== first.txt ===");
+      expect(
+        materializeFile(root, "second.txt", "second", limits, textBudget),
+      ).toContain("total context limit reached");
+      expect(
+        materializeFile(root, "first.txt", "first", limits, textBudget),
+      ).toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("extension wires the Pi events Suncode needs for context flow", () => {
@@ -440,7 +569,9 @@ fallbackModels:
     const { buildPiArgs } = loadExtensionInternals();
 
     // model + thinking → composes "model:thinking" suffix when not already present
-    expect(buildPiArgs({ model: "anthropic/claude-sonnet-4", thinking: "high" })).toEqual([
+    expect(
+      buildPiArgs({ model: "anthropic/claude-sonnet-4", thinking: "high" }),
+    ).toEqual([
       "--mode",
       "json",
       "-p",
@@ -481,6 +612,10 @@ fallbackModels:
       "gpt-5",
     ]);
 
+    expect(buildPiArgs({ model: "openai/gpt-5", thinking: "max" })).toContain(
+      "openai/gpt-5:max",
+    );
+
     // tools → --tools flag
     expect(
       buildPiArgs({ tools: ["Read", "Write", "Bash", "find", "Grep"] }),
@@ -506,11 +641,12 @@ fallbackModels:
 
     // Per-call model + thinking win over agent config
     expect(
-      resolveRunCfg(
-        { model: "openai/gpt-5", thinking: "xhigh" },
-        agentCfg,
-      ),
-    ).toEqual({ model: "openai/gpt-5:xhigh", thinking: "xhigh", tools: agentCfg.tools });
+      resolveRunCfg({ model: "openai/gpt-5", thinking: "xhigh" }, agentCfg),
+    ).toEqual({
+      model: "openai/gpt-5:xhigh",
+      thinking: "xhigh",
+      tools: agentCfg.tools,
+    });
 
     // No overrides → fall back to agent config
     expect(resolveRunCfg({}, agentCfg)).toEqual({
@@ -521,12 +657,41 @@ fallbackModels:
 
     // Inherited thinking is the last fallback
     expect(
+      resolveRunCfg({}, { model: "gpt-5", fallbackModels: [] }, "medium"),
+    ).toEqual({ model: "gpt-5:medium", thinking: "medium" });
+
+    expect(
       resolveRunCfg(
         {},
-        { model: "gpt-5", fallbackModels: [] },
-        "medium",
+        { fallbackModels: [] },
+        "high",
+        "anthropic/claude-parent",
       ),
-    ).toEqual({ model: "gpt-5:medium", thinking: "medium" });
+    ).toEqual({
+      model: "anthropic/claude-parent:high",
+      thinking: "high",
+    });
+
+    expect(
+      resolveRunCfg(
+        { model: "openai/per-call", thinking: "max" },
+        { model: "anthropic/agent", fallbackModels: [] },
+        "low",
+        "google/parent",
+      ),
+    ).toEqual({ model: "openai/per-call:max", thinking: "max" });
+  });
+
+  it("qualifies the invoking Pi model only when provider and id both exist", () => {
+    const { contextModelRef } = loadExtensionInternals();
+
+    expect(
+      contextModelRef({ model: { provider: "anthropic", id: "claude" } }),
+    ).toBe("anthropic/claude");
+    expect(
+      contextModelRef({ model: { provider: "anthropic" } }),
+    ).toBeUndefined();
+    expect(contextModelRef({ model: { id: "claude" } })).toBeUndefined();
   });
 
   it("cmdHasSuncodeCtx detects already-prefixed bash commands", () => {
@@ -554,6 +719,12 @@ fallbackModels:
     // task.py current resolves to the same task.
     expect(extension).toContain("SUNCODE_CONTEXT_ID:");
     expect(extension).toContain("...process.env");
+  });
+
+  it("passes the invoking provider/model into child run resolution", () => {
+    const extension = getExtensionTemplate();
+    expect(extension).toContain("const inheritedModel = contextModelRef(ctx)");
+    expect(extension).toContain("inheritedThinking,\n        inheritedModel");
   });
 
   it("extension validates agent definition before spawning a child pi process", () => {

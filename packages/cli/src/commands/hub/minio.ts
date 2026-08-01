@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { hashBuffer, readNormalizedTextFile } from "./hash.js";
+import { sanitizeUrlForLogging } from "./logging.js";
 import type {
   FetchLike,
   HubArtifact,
@@ -30,6 +31,8 @@ export async function uploadArtifactToMinio(
   hubAuth?: HubUploadAuth,
 ): Promise<UploadedArtifact> {
   const body = Buffer.from(readNormalizedTextFile(artifact.absolutePath), "utf-8");
+  const method = upload.method ?? "PUT";
+  const requestTarget = `${method.toUpperCase()} ${sanitizeUrlForLogging(upload.uploadUrl)}`;
   const headers = new Headers(
     upload.headers ?? { "content-type": artifact.contentType },
   );
@@ -37,13 +40,13 @@ export async function uploadArtifactToMinio(
     headers.set("authorization", `Bearer ${hubAuth.token}`);
   }
   const response = await fetchImpl(upload.uploadUrl, {
-    method: upload.method ?? "PUT",
+    method,
     headers,
     body,
   });
   if (!response.ok) {
     throw new Error(
-      `Hub artifact upload failed for ${artifact.path}: HTTP ${response.status}`,
+      `Hub artifact upload failed for ${artifact.path}: ${requestTarget} -> HTTP ${response.status}`,
     );
   }
 

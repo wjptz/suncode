@@ -4065,16 +4065,25 @@ print(len(entries))
     }
   });
 
-  it("[workflow-state-r2] template workflow.md [workflow-state:planning] mentions artifact gates + required jsonl curation", () => {
+  it("[workflow-state-r2] planning breadcrumbs gate one-time DAG finalization after artifact convergence", () => {
     const wf = templateWorkflowMd();
-    const match = wf.match(
-      /\[workflow-state:planning\]([\s\S]*?)\[\/workflow-state:planning\]/,
-    );
-    expect(match).toBeTruthy();
-    const body = match?.[1] ?? "";
-    expect(body).toMatch(/Lightweight: `prd\.md` can be enough/);
-    expect(body).toMatch(/Complex: finish `prd\.md`, `design\.md`, and `implement\.md`/);
-    expect(body).toContain(
+    for (const status of ["planning", "planning-inline"]) {
+      const match = new RegExp(
+        `^\\[workflow-state:${status}\\]\\r?\\n([\\s\\S]*?)\\r?\\n\\[/workflow-state:${status}\\]$`,
+        "m",
+      ).exec(wf);
+      expect(match).toBeTruthy();
+      const body = match?.[1] ?? "";
+      expect(body).toMatch(/Lightweight: `prd\.md` can be enough/);
+      expect(body).toMatch(
+        /Complex: finish `prd\.md`, `design\.md`, and `implement\.md`/,
+      );
+      expect(body).toContain("DAG finalization is not a per-turn action");
+      expect(body).toContain("do not scaffold or validate");
+      expect(body).toContain("reuse it without scaffold or validation");
+      expect(body).toContain("Never automatically run `scaffold --force`");
+    }
+    expect(wf).toContain(
       "curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start",
     );
   });
@@ -6289,6 +6298,8 @@ describe("regression: class-2 platforms use pull-based sub-agent context", () =>
           const content = fs.readFileSync(path.join(tmpDir, file), "utf-8");
           expect(content).toContain("Active task:");
           expect(content).toContain("dispatch prompt");
+          expect(content).toContain("Suncode context manifest:");
+          expect(content).toContain("task.py execution context");
         }
       });
 
@@ -7169,6 +7180,48 @@ describe("regression: configSectionsAdded (issue-codex-dispatch-mode)", () => {
     const tmpl = fs.readFileSync(tmplPath, "utf-8");
     expect(tmpl).toContain("# Codex (dispatch behavior)");
     expect(tmpl).toContain("dispatch_mode");
+  });
+
+  it("[config-sections] manifest 0.6.12 declares the execution DAG section", () => {
+    const manifestPath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "src",
+      "migrations",
+      "manifests",
+      "0.6.12.json",
+    );
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as {
+      version: string;
+      migrations: unknown[];
+      configSectionsAdded?: {
+        file: string;
+        sentinel: string;
+        sectionHeading: string;
+      }[];
+    };
+    expect(manifest.version).toBe("0.6.12");
+    expect(manifest.migrations).toEqual([]);
+    expect(manifest.configSectionsAdded).toEqual([
+      {
+        file: ".suncode/config.yaml",
+        sentinel: "execution:",
+        sectionHeading: "Execution DAG",
+      },
+    ]);
+
+    const templatePath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "src",
+      "templates",
+      "suncode",
+      "config.yaml",
+    );
+    const template = fs.readFileSync(templatePath, "utf-8");
+    expect(template).toContain("# Execution DAG");
+    expect(template).toContain("require_for_complex_tasks");
+    expect(template).toContain("max_concurrency");
   });
 });
 

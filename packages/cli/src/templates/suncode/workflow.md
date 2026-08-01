@@ -47,7 +47,7 @@ python3 ./.suncode/scripts/get_context.py --mode packages   # list packages / la
 
 ### Task System
 
-Every task has its own directory under `.suncode/tasks/{MM-DD-name}/` holding `task.json`, `prd.md`, optional `design.md`, optional `implement.md`, optional `research/`, and context manifests (`implement.jsonl`, `check.jsonl`) for sub-agent-capable platforms.
+Every task has its own directory under `.suncode/tasks/{MM-DD-name}/` holding `task.json`, `prd.md`, optional `design.md`, optional `implement.md`, optional `research/`, the reviewed execution plan (`execution.json`), and context manifests (`implement.jsonl`, `check.jsonl`) for sub-agent-capable platforms.
 
 ```bash
 # Task lifecycle
@@ -65,6 +65,16 @@ python3 ./.suncode/scripts/task.py list-archive
 python3 ./.suncode/scripts/task.py add-context <name> <action> <file> <reason>
 python3 ./.suncode/scripts/task.py list-context <name> [action]
 python3 ./.suncode/scripts/task.py validate <name>
+
+# Execution DAG (same graph for inline, native sub-agent, and channel)
+python3 ./.suncode/scripts/task.py execution scaffold <name>
+python3 ./.suncode/scripts/task.py execution validate <name>
+python3 ./.suncode/scripts/task.py execution show <name> --json
+python3 ./.suncode/scripts/task.py execution start-run <name> --executor <inline|native-subagent|channel>
+python3 ./.suncode/scripts/task.py execution ready <name> --json
+python3 ./.suncode/scripts/task.py execution claim <name> <node-id> --json
+python3 ./.suncode/scripts/task.py execution complete <name> <node-id> --result <node-result.json>
+python3 ./.suncode/scripts/task.py execution recover <name> --json
 
 # Task metadata
 python3 ./.suncode/scripts/task.py set-branch <name> <branch>
@@ -167,10 +177,11 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 
 - `prd.md` — requirements, constraints, and acceptance criteria. Do not put technical design or execution checklists here.
 - `design.md` — technical design for complex tasks: boundaries, contracts, data flow, tradeoffs, compatibility, rollout / rollback shape.
-- `implement.md` — execution plan for complex tasks: ordered checklist, validation commands, review gates, and rollback points.
-- `subtasks.json` — optional structured execution map for local display and Hub override. For Hub team projects, `suncode hub submit-subtasks` can derive a default structure from `implement.md` when this file is absent.
+- `implement.md` — human-readable implementation view for complex tasks: deliverables, validation commands, review gates, and rollback points. It is a legacy serial fallback, not the canonical dependency graph.
+- `execution.json` — versioned canonical execution DAG. It records stable node IDs, real dependencies, roles, read/write scopes, resource locks, validation, context budgets, executor constraints, and the final integration barrier. Inline and sub-agent modes consume this same file.
+- `subtasks.json` — optional Hub v1 display override containing only `priority`, `name`, and `description`. Hub derives display items from `execution.json` first, then `implement.md`, when this file is absent.
 - `implement.jsonl` / `check.jsonl` — spec and research manifests for sub-agent context. They do not replace `implement.md`.
-- Lightweight tasks may be PRD-only. Complex tasks must have `prd.md`, `design.md`, and `implement.md` before `task.py start`.
+- Lightweight tasks may keep PRD-only human documentation, but when `execution.dag.enabled` they still use a reviewed one-node `execution.json` before implementation. Complex tasks must have `prd.md`, `design.md`, `implement.md`, and a dependency-aware `execution.json` before `task.py start` when the creation-time policy requires it.
 
 ### Parent / Child Task Trees
 
@@ -193,17 +204,19 @@ Complex task: ask the user if you can create a Suncode task and enter the planni
 - 1.1 Requirement exploration `[required · repeatable]` (`prd.md`; complex tasks also need `design.md` + `implement.md`)
 - 1.2 Research `[optional · repeatable]`
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix, Grok, Kimi Code (sub-agent-dispatch platforms only; inline platforms skip)
-- 1.4 Structure subtasks `[optional override for Hub team projects · once]` (`subtasks.json`; otherwise derived from `implement.md`)
-- 1.5 Activate task `[required · once]` (`suncode hub plan-ready` for Hub-bound tasks; quick tasks use it to upload plan artifacts only, then `task.py start`; status → in_progress)
-- 1.6 Completion criteria
+- 1.4 Plan execution DAG `[required · once when execution.dag.enabled]` (`execution.json`; same graph for every executor)
+- 1.5 Structure Hub display `[optional override for Hub team projects · once]` (`subtasks.json`; otherwise projected from `execution.json`, then `implement.md`)
+- 1.6 Activate task `[required · once]` (`suncode hub plan-ready` for Hub-bound tasks; quick tasks use it to upload plan artifacts only, then `task.py start`; status → in_progress)
+- 1.7 Completion criteria
 
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`. Present the latest final planning summary, stop, and wait for a subsequent user message that explicitly approves implementation before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
-Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
-Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
+Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the Hub display projected from `execution.json` (or `implement.md` fallback) needs an explicit override.
+Execution DAG: DAG finalization is not a per-turn action. When `execution.dag.enabled`, do not scaffold or validate while blocking questions remain or the PRD/design/implementation view is still changing. Once planning converges, if `execution.json` is missing, scaffold it once, review/edit it, and validate once; if the existing plan still matches, reuse it without scaffold or validation; if a material planning change affects deliverables, dependencies, scopes/resources, or validation, edit the existing plan in place and validate once. Never automatically run `scaffold --force`. Include the reviewed DAG in the latest final planning summary before asking for subsequent implementation approval. A lightweight task may use one node. A complex task must encode real dependencies, disjoint read/write scopes, resource locks, validation, node context, and a final integration/check barrier; do not serialize independent work merely because it is listed later in `implement.md`.
+Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; execution order is not implied by tree position. Put dependencies inside each task's `execution.json`.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
 
@@ -216,9 +229,10 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
 [workflow-state:planning-inline]
 Load `suncode-brainstorm`; stay in planning.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`. Present the latest final planning summary, stop, and wait for a subsequent user message that explicitly approves implementation before `task.py start`. Hub plan comments/status come from `suncode hub pull-review --task current`, not `suncode hub review`.
-Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the derived `implement.md` checklist needs an explicit override.
-Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
-Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `suncode-before-dev`.
+Hub team project: run `suncode hub plan-ready --task current` after planning. If meta.hub.taskType == `quick`, keep planning minimal; plan-ready uploads plan artifacts and skips Hub start preflight/plan approval. Write `subtasks.json` only when the Hub display projected from `execution.json` (or `implement.md` fallback) needs an explicit override.
+Execution DAG: DAG finalization is not a per-turn action. When `execution.dag.enabled`, do not scaffold or validate while blocking questions remain or the PRD/design/implementation view is still changing. Once planning converges, if `execution.json` is missing, scaffold it once, review/edit it, and validate once; if the existing plan still matches, reuse it without scaffold or validation; if a material planning change affects deliverables, dependencies, scopes/resources, or validation, edit the existing plan in place and validate once. Never automatically run `scaffold --force`. Include the reviewed DAG in the latest final planning summary before asking for subsequent implementation approval. Inline uses the same graph with `maxConcurrency=1`; it does not use a separate serial plan. A lightweight task may use one node; a complex task must encode real dependencies, scopes, resources, validation, context, and a final integration/check barrier.
+Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; execution order is not implied by tree position. Put dependencies inside each task's `execution.json`.
+Inline mode: skip jsonl curation; node execution reads the manifest plus relevant specs via `suncode-before-dev`.
 [/workflow-state:planning-inline]
 
 ### Phase 2: Execute
@@ -232,14 +246,14 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `suncode-bef
      therefore must cover every required step from implementation through
      commit, including Phase 3.3 spec update and Phase 3.4 commit. -->
 
-Sub-agent dispatch protocol applies to all platforms and all sub-agents, including native Codex `SubagentStart` context injection with child-side pull fallback, class-2 Gemini/Qoder/Copilot/ZCode/Reasonix/Trae/Grok/Kimi Code, and `suncode-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions. On Grok Build, use `spawn_subagent` with `subagent_type` set to the Suncode agent name (for example, `suncode-implement`). On Kimi Code, dispatch the built-in `coder` / `explore` sub-agent with the matching `.kimi-code/skills/suncode-<role>/SKILL.md` instructions.
+Sub-agent dispatch protocol applies to all platforms and all sub-agents/execution nodes. The coordinator first claims a ready node, then uses the returned dispatch envelope unchanged. Every prompt starts with `Active task: <task path>` and `Suncode context manifest: <manifest path>` before node-specific instructions. The immutable manifest is authoritative for task/run/node/attempt, objective, boundaries, validation, minimal source context, direct dependency results, budgets, truncation, and the NodeResult v1 contract. Do not copy the main transcript. Codex native dispatch uses `fork_turns = "none"`; channel passes the manifest/content paths as context files. On Grok Build, use `spawn_subagent` with `subagent_type` matching the node role. On Kimi Code, dispatch the built-in `coder` / `explore` sub-agent with the matching `.kimi-code/skills/suncode-<role>/SKILL.md` instructions.
 
 [workflow-state:in_progress]
-Tools: `suncode-implement` / `suncode-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `suncode-update-spec` is a skill. `suncode-check` exists as both; prefer the Agent form when verifying after code changes.
-Flow: `suncode-implement` -> `suncode-check` -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Tools: `suncode-implement` / `suncode-research` are sub-agent types only (Task/Agent tool, NOT Skill; there is no skill by these names). `suncode-update-spec` is a skill. `suncode-check` exists as both.
+Flow: validate `execution.json` -> `execution start-run` -> repeatedly `ready` + claim/dispatch every selected safe node before waiting -> complete the first returned NodeResult -> immediately recompute `ready` -> final integration/check barrier -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
 Quick Hub task (meta.hub.taskType == `quick`): skip Hub code review and check-agent review, keep validation minimal and evidence-based, and still run `suncode hub finish --task current` so completion artifacts upload.
-Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `suncode-implement`, do NOT spawn another `suncode-implement` or `suncode-check`; if already running as `suncode-check`, do NOT spawn another `suncode-check` or `suncode-implement`. Dispatch is main session only.
-Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
+Main-session default: the coordinator schedules only nodes returned by `execution ready` and claims all selected nodes before any wait. Sub-agent self-exemption: if already running as `suncode-implement`, do NOT spawn another `suncode-implement`; if already running as `suncode-check`, do NOT spawn another `suncode-check`. An execution-node worker performs only its claimed node and returns NodeResult v1; it does not coordinate the graph or spawn implement/check workers. Dispatch is main session only.
+Dispatch prompt starts with `Active task:` then `Suncode context manifest:`. Class-2 pull-based platforms such as Codex, Copilot, Gemini, and Qoder verify/pull that manifest in the worker. The manifest content replaces task-wide transcript inheritance and is verified by hook push or agent pull fallback.
 [/workflow-state:in_progress]
 
 <!-- Per-turn breadcrumb: shown while status='in_progress' when
@@ -248,10 +262,10 @@ Dispatch prompt starts with `Active task: <task path from task.py current>`. Rea
      instead of dispatching sub-agents. -->
 
 [workflow-state:in_progress-inline]
-Flow: `suncode-before-dev` -> edit -> `suncode-check` -> validation -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
+Flow: validate the same `execution.json` -> `execution start-run --executor inline` -> execute one ready node at a time from its claimed manifest -> record NodeResult v1 -> recompute ready -> final integration/check barrier -> `suncode-update-spec` -> Hub code review before commit when enabled/required -> commit (Phase 3.4) -> `/suncode:finish-work`.
 Quick Hub task (meta.hub.taskType == `quick`): skip Hub code review and check-agent review, keep validation minimal and evidence-based, and still run `suncode hub finish --task current` so completion artifacts upload.
-Do not dispatch implement/check sub-agents in inline mode.
-Read context: `prd.md` -> `design.md if present` -> `implement.md if present`, plus relevant spec/research loaded by skills.
+Do not dispatch implement/check sub-agents in inline mode. Inline still consumes the DAG and is forced to `maxConcurrency=1`.
+Read each claimed node's verified context manifest, then load any additional project spec through `suncode-before-dev` without broadening the node's declared boundaries.
 [/workflow-state:in_progress-inline]
 
 ### Phase 3: Finish
@@ -447,9 +461,41 @@ Skip this step. Context is loaded directly by the `suncode-before-dev` skill in 
 
 [/codex-inline, Kilo, Antigravity, Devin]
 
-#### 1.4 Structure subtasks `[optional override for Hub team projects · once]`
+#### 1.4 Plan execution DAG `[required · once when execution.dag.enabled]`
 
-For Hub team projects, `suncode hub submit-subtasks` derives structured Hub display data from the reviewed `implement.md` checklist when `{TASK_DIR}/subtasks.json` is absent. Write `subtasks.json` only when the derived structure needs an explicit override. The override must describe the current task only. Structured subtasks are uploaded automatically when the task starts; no manual submit step is needed.
+This is a planning-finalization gate, not a per-turn action. Seeing the planning breadcrumb again does not authorize rerunning it. Enter this step only after blocking questions are empty, the PRD/design/implementation view is internally consistent, and node boundaries, dependencies, scopes/resources, and validation can be stated reliably.
+
+Choose exactly one branch:
+
+- If `execution.json` is missing, scaffold it once, review/edit the resulting graph, validate once, and then show it for the final planning summary:
+
+  ```bash
+  python3 ./.suncode/scripts/task.py execution scaffold <task-dir>
+  python3 ./.suncode/scripts/task.py execution validate <task-dir>
+  python3 ./.suncode/scripts/task.py execution show <task-dir> --json
+  ```
+
+- If the existing plan still matches the converged artifacts, reuse it without scaffold or validation. Ordinary discussion, wording changes, explanations, commit-message edits, and explicitly deferred future work do not invalidate it.
+- If a material planning change affects the DAG (deliverables, dependencies, reads/writes/resources, executor constraints, or validation), edit the affected nodes and edges in place, run `execution validate` once, show the changed graph, and present a new final planning summary. Any earlier implementation approval is no longer current.
+
+Never automatically run `scaffold --force`; an existing reviewed graph is not disposable generated output.
+
+`scaffold` is only a conservative starting point. For a complex task, review and edit every node before approval:
+
+- Split by independently deliverable, independently verifiable outcomes—not by the order paragraphs appear in `implement.md`.
+- Declare only real `dependsOn` edges. Independent roots/siblings should remain independent so capable executors can fan out.
+- Give every node stable `id`, `name`, `description`, `priority`, and role (`implement`, `check`, `fix`, `integration`, or `research`).
+- Declare `reads`, `writes`, and logical `resources`. If disjointness cannot be demonstrated, use overlapping scopes/resources so the runtime serializes the nodes safely.
+- A shared-worktree `check` or `research` node is read-only. Parallel checks return findings; a single `fix` node owns resulting writes.
+- Declare node-local `validation`, allowed executors/isolation/retry policy, and minimal `context.include`; dependency context is direct structured NodeResult data, not transcripts.
+- End every branch at a declared final `integration`/global-check barrier. Local node success is not task completion.
+- Lightweight tasks may use one `integration` node. Inline uses the same graph with concurrency one.
+
+If `execution.dag.enabled` is false, keep the legacy serial workflow. If an explicit `execution.json` exists while DAG execution is enabled, validation errors are blocking; never silently fall back around a damaged reviewed plan. When `require_for_complex_tasks` was enabled at task creation, `task.py start` enforces this file only for that new complex task, so existing tasks are not bulk-rewritten.
+
+#### 1.5 Structure Hub display `[optional override for Hub team projects · once]`
+
+For Hub team projects, `suncode hub submit-subtasks` chooses display data in this order: explicit `{TASK_DIR}/subtasks.json` v1 override, stable topological projection of `execution.json`, then the reviewed `implement.md` checklist. Write `subtasks.json` only when that derived display needs an explicit override. It is not the execution graph. Structured subtasks are uploaded automatically when the task starts; no manual submit step is needed.
 
 Every complex task `implement.md` must include this parseable checklist section:
 
@@ -478,30 +524,32 @@ Override format:
 Rules:
 - Keep each subtask small enough to be understandable in Hub.
 - Use `priority`, `name`, and `description` only for each item.
-- Derive the list from the current task's `implement.md`; do not include sibling task work.
+- Derive the list from the current task's reviewed plan; do not include sibling task work or DAG-only fields.
 
-#### 1.5 Activate task `[required · once]`
+#### 1.6 Activate task `[required · once]`
 
-After planning artifact review, prepare Hub-bound tasks and then flip the task status to `in_progress`:
+Phase 1.4 has already finalized and validated the reviewed graph. Do not re-run `execution validate` here for an unchanged reviewed DAG. If planning artifacts changed materially after the latest final summary, stop, return to Phase 1.4, update and validate the existing graph once, present the new summary, and wait for fresh implementation approval.
+
+After the user approves the latest summary, prepare Hub-bound tasks and then flip the task status to `in_progress`:
 
 ```bash
 suncode hub plan-ready --task current
 python3 ./.suncode/scripts/task.py start <task-dir>
 ```
 
-`suncode hub plan-ready` submits planning artifacts and structured subtasks from `subtasks.json` or `implement.md`. For standard/change tasks it also runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound standard/change tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Quick, Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
+When DAG is disabled or an old task intentionally uses compatibility fallback, inspect the conservative normalized serial graph with `execution show --json` during Phase 1.4. `task.py start` remains the final lifecycle and structural gate; do not bypass it. `suncode hub plan-ready` submits planning artifacts and structured subtasks from `subtasks.json`, `execution.json`, or `implement.md`. For standard/change tasks it also runs Hub start preflight. `task.py start` also has a blocking `before_start` Hub preflight hook for Hub-bound standard/change tasks, so local state is not moved to `in_progress` when Hub says the task may not start. Quick, Hub off, local-only, and unbound tasks are not blocked by this Hub gate.
 
 For quick Hub tasks (meta.hub.taskType == `quick`), use the minimal PRD generated by intake, run `suncode hub plan-ready --task current` to upload the plan artifacts, skip Hub start preflight/plan approval, then run `python3 ./.suncode/scripts/task.py start <task-dir>` directly and keep the completion path focused on minimal validation plus `suncode hub finish --task current`. Quick tasks still skip Hub code review.
 
 If Hub returns plan review comments or start-review status after `plan-ready`, inspect them with `suncode hub pull-review --task current`. Do not run `suncode hub review` during planning; that command is for post-implementation code review rounds.
 
-For lightweight tasks, `prd.md` can be enough. For complex tasks, `prd.md`, `design.md`, and `implement.md` must exist and be reviewed before start. On sub-agent-dispatch platforms, `implement.jsonl` and `check.jsonl` must both have real curated entries before start. Runtime consumers tolerate missing or seed-only manifests for compatibility, but that tolerance is not a planning-ready state.
+For lightweight tasks, PRD-only human documentation plus a one-node DAG is enough when DAG is enabled. For complex tasks, `prd.md`, `design.md`, `implement.md`, and a reviewed dependency-aware `execution.json` must exist before start. On sub-agent-dispatch platforms, `implement.jsonl` and `check.jsonl` must both have real curated entries before start. Runtime consumers tolerate missing or seed-only manifests for compatibility, but that tolerance is not a planning-ready state.
 
 After this command succeeds, the breadcrumb auto-switches to `[workflow-state:in_progress]`, and the rest of Phase 2 / 3 follows.
 
 If `task.py start` errors with a session-identity message (no context key from hook input, `SUNCODE_CONTEXT_ID`, or platform-native session env), follow the hint in the error to set up session identity, then retry.
 
-#### 1.6 Completion criteria
+#### 1.7 Completion criteria
 
 | Condition | Required |
 |------|:---:|
@@ -511,8 +559,10 @@ If `task.py start` errors with a session-identity message (no context key from h
 | `research/` has artifacts (complex tasks) | recommended |
 | `design.md` exists (complex tasks) | ✅ |
 | `implement.md` exists (complex tasks) | ✅ |
+| `execution.json` exists and validates when `execution.dag.enabled` (one node is valid for lightweight tasks) | ✅ |
+| Complex DAG contains real dependencies/scopes/resources and a final integration/check barrier | ✅ |
 
-For Hub team projects, structured subtasks are derived from `implement.md` automatically; `subtasks.json` is only an explicit override, never a completion requirement.
+For Hub team projects, structured subtasks are projected from `execution.json` and can fall back to `implement.md`; `subtasks.json` is only an explicit v1 display override, never a completion requirement.
 
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix, Trae, Grok, Kimi Code]
 
@@ -528,89 +578,60 @@ Goal: turn reviewed planning artifacts into code that passes quality checks.
 
 #### 2.1 Implement `[required · repeatable]`
 
+The main session is the only DAG coordinator. Start or resume one recoverable run:
+
+```bash
+python3 ./.suncode/scripts/task.py execution start-run <task-dir> \
+  --executor <inline|native-subagent|channel> --parent-session <session-id> --json
+python3 ./.suncode/scripts/task.py execution recover <task-dir> --json  # after interruption
+python3 ./.suncode/scripts/task.py execution recover <task-dir> --force-orphan <node> --json  # only after confirming the worker is lost
+```
+
+Choose `native-subagent` only when the platform can dispatch role workers with the returned prompt; choose `channel` for channel workers; otherwise choose `inline`. The graph is unchanged. Inline is always concurrency one. A shared-worktree executor may parallelize only the safe set selected by the runtime.
+
+Repeat this coordinator loop until the final barrier succeeds:
+
+1. Run `execution ready <task-dir> --json` and read `selected`.
+2. Before waiting for anything, call `execution claim <task-dir> <node-id> --json` for **every** selected node and retain each returned dispatch envelope. This “fan-out before wait” rule is what turns independent DAG nodes into actual parallel work.
+3. Dispatch every claimed envelope:
+   - native sub-agent: choose the Suncode agent matching `dispatch.role`, pass `dispatch.prompt` unchanged, and use clean context. Codex must set `fork_turns = "none"`;
+   - channel: pass both paths in `dispatch.channelArgs` / `--context-file` and the node prompt;
+   - inline: verify/pull `dispatch.manifestRef`, Read `{TASK_DIR}/prd.md` plus the claimed minimal context, load `suncode-before-dev` when coding, and execute this one node directly without broadening its boundaries.
+4. After a worker actually starts, record `execution running <task-dir> <node-id> --executor-ref <ref> --json`.
+5. Wait-any, not wait-all. When the first worker returns, validate its NodeResult v1 and call `execution complete <task-dir> <node-id> --result <file> --json` immediately.
+6. Immediately run `execution ready` again and dispatch newly unlocked nodes even if older siblings are still running. Never wait for a whole batch before releasing successors.
+7. On interruption, run `execution recover` to reconcile persisted results. Ordinary recovery preserves `dispatched/running` nodes when executor liveness is unknown. Only after confirming a worker is lost may the coordinator use `recover --force-orphan <node>`; that transition automatically retries eligible idempotent nodes, while non-idempotent retries require a later explicit `recover --retry <node>`.
+
+Each node worker is self-contained. It reads only the verified context manifest, performs the declared objective within `writes`, runs declared validation, and returns structured status, summary, changes/findings, validation evidence, artifacts, and risks. It does not parse a sibling transcript, coordinate the graph, or spawn another implement/check worker.
+
+**Dispatch prompt guard**: if this prompt is already running inside the `suncode-implement` sub-agent, perform the claimed node directly and do not spawn another `suncode-implement` / `suncode-check`. If it is already the `suncode-check` sub-agent, perform the claimed check directly and do not spawn another `suncode-check` / `suncode-implement`.
+
 [Claude Code, Cursor, OpenCode, codex-sub-agent, CodeBuddy, Droid, Pi, Oh My Pi]
 
-Spawn the implement sub-agent:
-
-- **Agent type**: `suncode-implement`
-- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `suncode-implement` sub-agent and must implement directly, not spawn another `suncode-implement` / `suncode-check`.
-
-The platform hook/plugin auto-handles:
-- Reads `implement.jsonl` and injects referenced spec/research files into the agent prompt
-- Injects `prd.md`, `design.md` if present, and `implement.md` if present
-- For Codex, `SubagentStart` supplies native context injection; the agent profile keeps child-side loading as the fallback
+The platform hook/plugin auto-handles manifest-first context verification and injection; Pi provides the equivalent extension path. For Codex, `SubagentStart` supplies native context injection; keep child-side loading as the fallback when that hook is unavailable. A dispatch without a claimed manifest keeps the legacy path: Reads `implement.jsonl` / `check.jsonl` plus task artifacts before acting.
 
 [/Claude Code, Cursor, OpenCode, codex-sub-agent, CodeBuddy, Droid, Pi, Oh My Pi]
 
 [Gemini, Qoder, Copilot, ZCode, Reasonix, Trae, Grok, Kimi Code]
 
-Spawn the implement sub-agent:
-
-- **Agent type**: `suncode-implement`
-- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then explicitly say the spawned agent is already `suncode-implement` and must implement directly without spawning another `suncode-implement` / `suncode-check`.
-
-The pull-based sub-agent definition auto-handles the context load requirement:
-- Resolves the active task with `task.py current --source`, then reads `prd.md`, `design.md` if present, and `implement.md` if present
-- Reads `implement.jsonl` and requires the agent to load each referenced spec/research file before coding
+The pull-based sub-agent definition auto-handles the context load requirement. It verifies the claimed manifest first and uses its legacy JSONL + task-artifact prelude only when no manifest was provided.
 
 [/Gemini, Qoder, Copilot, ZCode, Reasonix, Trae, Grok, Kimi Code]
 
-[Kiro]
-
-Spawn the implement sub-agent:
-
-- **Agent type**: `suncode-implement`
-- **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `suncode-implement` sub-agent and must implement directly, not spawn another `suncode-implement` / `suncode-check`.
-
-The platform prelude auto-handles the context load requirement:
-- Reads `implement.jsonl` and injects referenced spec/research files into the agent prompt
-- Injects `prd.md`, `design.md` if present, and `implement.md` if present
-
-[/Kiro]
-
-[codex-inline, Kilo, Antigravity, Devin]
-
-1. Load the `suncode-before-dev` skill to read project guidelines
-2. Read `{TASK_DIR}/prd.md`, then `design.md` if present, then `implement.md` if present
-3. Consult materials under `{TASK_DIR}/research/`
-4. Implement the code per reviewed artifacts
-5. Run project lint and type-check
-
-[/codex-inline, Kilo, Antigravity, Devin]
+When `execution.dag.enabled` is false, use the previous safe serial platform flow. Old tasks without a graph may be normalized conservatively; do not infer parallel safety from checklist order.
 
 #### 2.2 Quality check `[required · repeatable]`
 
-[Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix, Trae, Grok, Kimi Code]
+Quality is part of the graph, not a single whole-task worker appended after implementation:
 
-Spawn the check sub-agent:
+**Dispatch prompt guard**: when already the `suncode-check` sub-agent, run the declared read-only check and return NodeResult v1; do not spawn another `suncode-check` / `suncode-implement`. When already the `suncode-implement` sub-agent, finish only the claimed implementation node and do not spawn another `suncode-implement` / `suncode-check`.
 
-- **Agent type**: `suncode-check`
-- **Task description**: Review all code changes against specs and task artifacts; fix any findings directly; ensure lint and type-check pass
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `suncode-check` sub-agent and must review/fix directly, not spawn another `suncode-check` / `suncode-implement`.
+- Independent `check` nodes may run in parallel and are read-only in a shared worktree. Use the `suncode-check` agent/skill for their declared scope and return findings through NodeResult v1.
+- Check workers do not edit the shared worktree. If findings need changes, a single dependent `fix` node owns the write scope, followed by another check/integration node.
+- The final barrier must include global integration/check coverage over every branch. It runs spec compliance, lint, type-check, tests, and cross-layer/multi-package consistency appropriate to the task.
+- A quick Hub task may omit a separate check-agent node, but its final node still records minimal evidence-based validation before `suncode hub finish --task current`.
 
-The check agent's job:
-- Review code changes against specs
-- Review code changes against `prd.md`, `design.md` if present, and `implement.md` if present
-- Auto-fix issues it finds
-- Run lint and typecheck to verify
-
-[/Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix, Trae, Grok, Kimi Code]
-
-[codex-inline, Kilo, Antigravity, Devin]
-
-Load the `suncode-check` skill and verify the code per its guidance:
-- Spec compliance
-- lint / type-check / tests
-- Cross-layer consistency (when changes span layers)
-
-If issues are found → fix → re-check, until green.
-
-[/codex-inline, Kilo, Antigravity, Devin]
-
-**Final pass (before Phase 3.4 commit)**: the last 2.2 of a task must run full-scope, not just on the latest implement chunk. List all affected packages with `python3 ./.suncode/scripts/get_context.py --mode packages`, then load each package's spec index Quality Check section. This catches cross-layer / multi-package issues a mid-iteration local 2.2 cannot.
+**Final pass (before Phase 3.4 commit)**: the final integration/check barrier must run full-scope, not just on the latest implement node. List all affected packages with `python3 ./.suncode/scripts/get_context.py --mode packages`, then load each package's spec index Quality Check section. This catches cross-layer / multi-package issues a local node check cannot.
 
 For Hub-bound standard/change tasks with code review enabled or required, run `suncode hub review --task current` after the final pass and before the work commit. Quick Hub tasks (`meta.hub.taskType == quick`) skip this review step and continue to minimal validation plus finish artifact upload. Stage intended new files first when needed so the reviewed diff matches the content that will be committed.
 

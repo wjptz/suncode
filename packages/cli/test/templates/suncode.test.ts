@@ -55,24 +55,26 @@ describe("suncode template constants", () => {
     gitignoreTemplate,
   };
 
-  function inProgressBreadcrumb(): string {
-    const inProgressMatch = /\[workflow-state:in_progress\]([\s\S]*?)\[\/workflow-state:in_progress\]/.exec(
-      workflowMdTemplate,
-    );
-    if (!inProgressMatch) {
-      throw new Error("in_progress breadcrumb block must exist in workflow.md");
-    }
-    return inProgressMatch[1];
-  }
-
-  function workflowStateBreadcrumb(status: string): string {
+  function workflowStateBreadcrumbFrom(
+    workflow: string,
+    status: string,
+  ): string {
     const match = new RegExp(
-      `\\[workflow-state:${status}\\]([\\s\\S]*?)\\[/workflow-state:${status}\\]`,
-    ).exec(workflowMdTemplate);
+      `^\\[workflow-state:${status}\\]\\r?\\n([\\s\\S]*?)\\r?\\n\\[/workflow-state:${status}\\]$`,
+      "m",
+    ).exec(workflow);
     if (!match) {
       throw new Error(`${status} breadcrumb block must exist in workflow.md`);
     }
     return match[1];
+  }
+
+  function inProgressBreadcrumb(): string {
+    return workflowStateBreadcrumbFrom(workflowMdTemplate, "in_progress");
+  }
+
+  function workflowStateBreadcrumb(status: string): string {
+    return workflowStateBreadcrumbFrom(workflowMdTemplate, status);
   }
 
   function stepSection(step: string): string {
@@ -96,6 +98,28 @@ describe("suncode template constants", () => {
       throw new Error(`workflow.md block ${openingMarker} must exist`);
     }
     return match[0];
+  }
+
+  function marketplaceWorkflow(
+    id: "native" | "tdd" | "channel-driven-subagent-dispatch",
+  ): string {
+    const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
+      ? process.cwd()
+      : path.resolve(process.cwd(), "../..");
+    return fs.readFileSync(
+      path.join(repoRoot, `marketplace/workflows/${id}/workflow.md`),
+      "utf-8",
+    );
+  }
+
+  function expectDAGPlanningConvergenceGate(block: string): void {
+    expect(block).toContain("DAG finalization is not a per-turn action");
+    expect(block).toContain("do not scaffold or validate");
+    expect(block).toContain("scaffold it once");
+    expect(block).toContain("reuse it without scaffold or validation");
+    expect(block).toContain("material planning change");
+    expect(block).toContain("Never automatically run `scaffold --force`");
+    expect(block).toContain("latest final planning summary");
   }
 
   it("all templates are non-empty strings", () => {
@@ -169,38 +193,56 @@ describe("suncode template constants", () => {
   });
 
   it("marketplace native workflow mirror matches the bundled workflow", () => {
-    const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
-      ? process.cwd()
-      : path.resolve(process.cwd(), "../..");
-    const marketplaceNative = fs.readFileSync(
-      path.join(repoRoot, "marketplace/workflows/native/workflow.md"),
-      "utf-8",
+    expect(marketplaceWorkflow("native")).toBe(workflowMdTemplate);
+  });
+
+  it("workflow finalizes the DAG once after planning convergence", () => {
+    for (const status of ["planning", "planning-inline"]) {
+      expectDAGPlanningConvergenceGate(workflowStateBreadcrumb(status));
+    }
+
+    const dagStep = stepSection("1.4");
+    expect(dagStep).toContain("planning-finalization gate");
+    expect(dagStep).toContain("If `execution.json` is missing");
+    expect(dagStep).toContain("If the existing plan still matches");
+    expect(dagStep).toContain("If a material planning change affects the DAG");
+
+    const activationStep = stepSection("1.6");
+    expect(activationStep).not.toContain(
+      "task.py execution validate <task-dir>",
     );
-    expect(marketplaceNative).toBe(workflowMdTemplate);
+    expect(activationStep).toContain(
+      "Do not re-run `execution validate` here for an unchanged reviewed DAG",
+    );
   });
 
   it("marketplace TDD workflow planning breadcrumbs include behavior gates", () => {
-    const repoRoot = fs.existsSync(path.join(process.cwd(), "marketplace"))
-      ? process.cwd()
-      : path.resolve(process.cwd(), "../..");
-    const tddWorkflow = fs.readFileSync(
-      path.join(repoRoot, "marketplace/workflows/tdd/workflow.md"),
-      "utf-8",
-    );
+    const tddWorkflow = marketplaceWorkflow("tdd");
     expect(tddWorkflow).toContain("## 语言策略");
     expect(tddWorkflow).toContain("默认以简体中文作为第一语言");
 
-    const planning = /\[workflow-state:planning\]([\s\S]*?)\[\/workflow-state:planning\]/.exec(
+    const planning = workflowStateBreadcrumbFrom(tddWorkflow, "planning");
+    const planningInline = workflowStateBreadcrumbFrom(
       tddWorkflow,
-    )?.[1];
-    const planningInline = /\[workflow-state:planning-inline\]([\s\S]*?)\[\/workflow-state:planning-inline\]/.exec(
-      tddWorkflow,
-    )?.[1];
+      "planning-inline",
+    );
 
     for (const block of [planning, planningInline]) {
       expect(block).toContain("observable behavior slices");
       expect(block).toContain("public interface under test");
       expect(block).toContain("mock boundaries");
+      expectDAGPlanningConvergenceGate(block);
+    }
+  });
+
+  it("marketplace channel workflow planning breadcrumbs gate DAG finalization", () => {
+    const channelWorkflow = marketplaceWorkflow(
+      "channel-driven-subagent-dispatch",
+    );
+    for (const status of ["planning", "planning-inline"]) {
+      expectDAGPlanningConvergenceGate(
+        workflowStateBreadcrumbFrom(channelWorkflow, status),
+      );
     }
   });
 
@@ -212,7 +254,7 @@ describe("suncode template constants", () => {
     const block = inProgressBreadcrumb();
     expect(block).toContain("Active task:");
     expect(block.toLowerCase()).toContain("class-2");
-    expect(block).toMatch(/codex|copilot|gemini|qoder/);
+    expect(block.toLowerCase()).toMatch(/codex|copilot|gemini|qoder/);
   });
 
   it("[issue-zcode-repeat] pull-based platforms use the pull-based implement block, not hook auto-handles", () => {

@@ -593,6 +593,10 @@ Try in order — stop at the first one that yields a task path:
 
 ### Step 2: Load task context from the resolved path
 
+If the dispatch prompt contains a \`Suncode context manifest: <path>\` line, that manifest is authoritative. Run \`python3 ./.suncode/scripts/task.py execution context <path>\` to verify its hash, budget, and content artifact, then use the returned node contract. Do not reload JSONL or infer broader scope. If verification fails, report the dispatch error; do not silently substitute context from another task or run.
+
+Only when the dispatch prompt has no context-manifest line, use the legacy task-artifact fallback below:
+
 1. Read \`<task-path>/${jsonl}\` — JSONL list of spec/research files relevant to this agent.
 2. For each entry in the JSONL, Read its \`file\` path — these are the specs and research notes you must follow.
    **Skip rows without a \`"file"\` field** (e.g. \`{"_example": "..."}\` seed rows left over from \`task.py create\` before the curator ran).

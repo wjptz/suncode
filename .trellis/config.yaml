@@ -99,10 +99,18 @@ default_package: cli
 # unless explicitly killed or given `--timeout`).
 # `max_live_workers: 0` disables the spawn-time budget check.
 #
+# `trusted_context_dirs` extends the `--file`/`--jsonl`/`--agent` containment
+# check beyond the worker cwd. `auto_trust_suncode_symlinks: false` disables
+# automatic trust for top-level `.suncode/tasks` and `.suncode/workspace`
+# symlinks (enabled by default).
+#
 channel:
   worker_guard:
     idle_timeout: 5m
     max_live_workers: 6
+  # trusted_context_dirs:
+  #   - /work/user/suncode_workspace
+  # auto_trust_suncode_symlinks: false
 
 #-------------------------------------------------------------------------------
 # Codex (dispatch behavior)
@@ -114,3 +122,25 @@ channel:
 #
 # codex:
 #   dispatch_mode: inline  # or "auto" to dispatch trellis-* sub-agents
+
+#-------------------------------------------------------------------------------
+# Sub-agent context injection limits
+#-------------------------------------------------------------------------------
+# Caps task context injected into a sub-agent's first prompt. Oversized files
+# are UTF-8-safely truncated; binary files are referenced but never decoded;
+# total-budget overflow degrades remaining entries to compact index notices.
+# All values are byte counts. `0` disables the corresponding limit.
+#
+# context_injection:
+#   max_file_bytes: 32768
+#   max_artifact_bytes: 65536
+#   max_total_bytes: 131072
+
+#-------------------------------------------------------------------------------
+# Per-turn prompt injection
+#-------------------------------------------------------------------------------
+# A standalone, case-insensitive keyword skips only that turn's workflow-state
+# breadcrumb. SessionStart and sub-agent context injection are unaffected.
+#
+# prompt_injection:
+#   skip_keyword: "no-trellis"   # "" disables this escape hatch

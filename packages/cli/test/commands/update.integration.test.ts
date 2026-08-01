@@ -243,9 +243,9 @@ describe("update() integration", () => {
   it("[issue-zcode-codex-upgrade] zcode private skills do not trigger legacy Codex backfill", async () => {
     await init({ yes: true, force: true, zcode: true });
 
-    expect(
-      fs.existsSync(projectFile(".zcode/commands/suncode/start.md")),
-    ).toBe(true);
+    expect(fs.existsSync(projectFile(".zcode/commands/suncode/start.md"))).toBe(
+      true,
+    );
     expect(
       fs.existsSync(projectFile(".agents/skills/suncode-start/SKILL.md")),
     ).toBe(false);
@@ -611,9 +611,7 @@ describe("update() integration", () => {
     expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).toContain(
       "[codex-inline, Kilo, Antigravity, Devin]",
     );
-    expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).not.toContain(
-      "[Codex]",
-    );
+    expect(readProjectFile(PATHS.WORKFLOW_GUIDE_FILE)).not.toContain("[Codex]");
 
     // Version-specific additive config sections still apply to a user-modified
     // config.yaml, while preserving the local content around the append.
@@ -626,9 +624,7 @@ describe("update() integration", () => {
 
     // User-modified template files are skipped under skipAll and their hashes
     // are not rewritten to bless the local modification as a template.
-    expect(readProjectFile(userModifiedScript)).toBe(
-      userModifiedScriptContent,
-    );
+    expect(readProjectFile(userModifiedScript)).toBe(userModifiedScriptContent);
     const hashes = readHashesV2(hashFilePath());
     expect(hashes[PATHS.WORKFLOW_GUIDE_FILE]).toBe(
       computeHash(expectedWorkflow),
@@ -817,6 +813,54 @@ describe("update() integration", () => {
 
     // File SHOULD be created (no hash = truly new)
     expect(fs.existsSync(targetPath)).toBe(true);
+  });
+
+  it("#15a backfills the Suncode journal merge rule when missing", async () => {
+    await setupProject();
+    const target = path.join(tmpDir, ".gitattributes");
+    fs.rmSync(target, { force: true });
+
+    await update({ force: true });
+
+    expect(fs.readFileSync(target, "utf-8")).toContain(
+      ".suncode/workspace/*/journal-*.md merge=union",
+    );
+  });
+
+  it("#15b preserves an existing user journal merge rule byte-for-byte", async () => {
+    await setupProject();
+    const target = path.join(tmpDir, ".gitattributes");
+    const userContent =
+      "# user rules\n*.png binary\n.suncode/workspace/*/journal-*.md    merge=union\n";
+    fs.writeFileSync(target, userContent);
+
+    await update({ force: true });
+
+    expect(fs.readFileSync(target, "utf-8")).toBe(userContent);
+  });
+
+  it("#15c leaves a missing .gitattributes untouched in dry-run", async () => {
+    await setupProject();
+    const target = path.join(tmpDir, ".gitattributes");
+    fs.rmSync(target, { force: true });
+
+    await update({ force: true, dryRun: true });
+
+    expect(fs.existsSync(target)).toBe(false);
+  });
+
+  it("#15d updates tracked Snow assets without touching user files", async () => {
+    await init({ yes: true, force: true, snow: true });
+    const guide = path.join(tmpDir, ".snow", "SNOW.md");
+    const original = fs.readFileSync(guide, "utf-8");
+    const userFile = path.join(tmpDir, ".snow", "user-notes.md");
+    fs.writeFileSync(guide, "user-modified Snow guide\n", "utf-8");
+    fs.writeFileSync(userFile, "keep me\n", "utf-8");
+
+    await update({ force: true });
+
+    expect(fs.readFileSync(guide, "utf-8")).toBe(original);
+    expect(fs.readFileSync(userFile, "utf-8")).toBe("keep me\n");
   });
 
   it("#16 config.yaml update.skip prevents file from being updated", async () => {
@@ -1283,6 +1327,10 @@ describe("update() integration", () => {
     );
     expect(updated).toContain(
       "For Codex, `SubagentStart` supplies native context injection",
+    );
+    expect(updated).toContain("DAG finalization is not a per-turn action");
+    expect(updated).toContain(
+      "Do not re-run `execution validate` here for an unchanged reviewed DAG",
     );
     expect(updated).toContain("[codex-inline, Kilo, Antigravity, Devin]");
     expect(updated).not.toContain("[Codex]");

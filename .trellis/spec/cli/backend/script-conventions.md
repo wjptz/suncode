@@ -289,7 +289,11 @@ All `log_*` functions print to **stdout** (not stderr). Use `print(..., file=sys
 ### `common/git.py` — Git Command Wrapper
 
 ```python
-def run_git(args: list[str], cwd: Path | None = None) -> tuple[int, str, str]
+def run_git(
+    args: list[str],
+    cwd: Path | None = None,
+    timeout: float | None = None,
+) -> tuple[int, str, str]
 def resolve_default_branch(repo_root: Path) -> str | None
 def branch_exists_locally(branch: str, repo_root: Path) -> bool
 ```
@@ -297,6 +301,9 @@ def branch_exists_locally(branch: str, repo_root: Path) -> bool
 - Prepends `git -c i18n.logOutputEncoding=UTF-8` to all commands (cross-platform UTF-8)
 - Uses `encoding="utf-8", errors="replace"` for subprocess output
 - Returns `(1, "", error_message)` on exception (never raises)
+- `timeout` 缺省为 `None`，因此普通 Git 操作保持无上限；只有自动、
+  advisory 型探测显式传入短超时。超时同样转换为 `(1, "", message)`，
+  不能向调用者抛出 `TimeoutExpired`。
 - Backward-compatible alias in `git_context.py`: `_run_git_command = run_git`
 - `resolve_default_branch()` first reads the local
   `refs/remotes/origin/HEAD` symbolic ref, then falls back to
@@ -329,7 +336,7 @@ for session/window scoped task state:
 | `resolve_context_key(platform_input, platform)` | Accepts `session_id` / `sessionId` / `sessionID`, Cursor `conversation_id`, and transcript path fallbacks |
 | `resolve_active_task(repo_root, platform_input, platform)` | Returns an `ActiveTask` with `task_path`, `source_type`, `context_key`, and `stale` |
 | `set_active_task(...)` | Writes session runtime state when a context key exists; returns `None` without a context key |
-| `clear_active_task(...)` | Deletes the current session file; returns no active task without a context key |
+| `clear_active_task(...)` | Deletes only the previously resolved session file; returns no active task without a context key |
 
 `TRELLIS_CONTEXT_ID` is a context-key override for subprocesses. It is not a
 second task pointer and must never store a task path. A plain AI-run shell
@@ -380,10 +387,11 @@ a `.current-task` fallback or a Python hook directory.
 
 ##### 2. Signatures
 
-- `python3 .trellis/scripts/task.py create "<title>" [--slug <slug>] [--base-branch <branch>]`
+- `python3 .trellis/scripts/task.py create "<title>" [--slug <slug>] [--base-branch <branch>] [--meta key=value ...]`
 - `python3 .trellis/scripts/task.py start <task-dir>`
 - `python3 .trellis/scripts/task.py current [--source] [--json]`
 - `python3 .trellis/scripts/task.py list [--mine] [--status <status>] [--json]`
+- `python3 .trellis/scripts/task.py set-meta <task-dir> <key> <value>`
 - `python3 .trellis/scripts/task.py finish`
 - `resolve_active_task(repo_root, platform_input=None, platform=None) -> ActiveTask`
 - `set_active_task(task_path, repo_root, platform_input=None, platform=None) -> ActiveTask | None`
@@ -413,6 +421,9 @@ a `.current-task` fallback or a Python hook directory.
 - `task.py finish` deletes only the current session file. Without a
   context key it returns "no current task" and must not delete
   `.trellis/.current-task`.
+- `clear_active_task` 必须先保存 resolver 返回的 previous state，再只删除
+  `previous.context_key` 对应的 session 文件。身份缺失、解析歧义或没有
+  previous key 时保持所有 session 文件不变，不能猜测或批量清理。
 - `task.py archive <task>` deletes every runtime session file whose
   `current_task` points at the archived task before moving the task directory.
 - `task.py current --json` prints `{current_task, source, stale}` on one line
@@ -428,6 +439,14 @@ a `.current-task` fallback or a Python hook directory.
 - `_display_status()` may show a stored `planning` parent as `active` when any
   child has progressed past planning. This is display-only in both human and
   JSON list output; it must never rewrite `task.json.status`.
+- `create --meta key=value` 可重复；每项按第一个 `=` 分割并写入
+  `task.json.meta`。相同 key 后值覆盖前值；缺少 `=` 或空 key 必须失败且
+  不创建任务。
+- `set-meta` 只设置/覆盖一个 `meta` key。若现有 `meta` 不是 object，则
+  从空 object 开始；写回时必须保留 `task.json` 的其他顶层字段与未知
+  metadata。
+- `task.py list` 的树根包括 parent 缺失或 parent 已归档的 orphan task；
+  这类任务必须作为顶层显示，不能因为无法从 active parent 遍历而消失。
 - Suncode keeps Codex dispatch inline by default. Missing or invalid
   `codex.dispatch_mode` resolves to `inline`; explicit `auto` and legacy
   `sub-agent` enable native dispatch and therefore JSONL seeding.
@@ -450,7 +469,11 @@ a `.current-task` fallback or a Python hook directory.
 | stale session task + stale `.current-task` exists | Returns stale session state; no `.current-task` fallback |
 | `finish` with context key and active task | Deletes `.runtime/sessions/<key>.json` |
 | `finish` without context key | Returns no current task; does not delete `.current-task` |
+| `finish` with ambiguous/unresolved identity | Preserve every session file; do not guess a key |
 | `archive` for a task referenced by runtime sessions | Deletes those session files even when `finish` was skipped |
+| `create --meta malformed` | Exit 1, print `expected key=value`, create no task directory |
+| `set-meta` on task with unknown top-level fields | Update one metadata key and preserve all unrelated fields |
+| active child references a missing/archived parent | Render the child once as a top-level orphan |
 
 ##### 5. Good/Base/Bad Cases
 
@@ -468,6 +491,8 @@ a `.current-task` fallback or a Python hook directory.
 - Regression tests for `start` without a context key failing without creating
   `.current-task`.
 - Regression tests for `TRELLIS_CONTEXT_ID` and platform-native env keys.
+- Regression tests proving ambiguous `finish` does not delete another
+  session's runtime file.
 - Regression tests for `current/list --json`, null/exit behavior, filters, and
   parent display status without persistence mutation.
 - Default-branch tests for `origin/HEAD`, remote fallback, explicit override,
@@ -475,6 +500,10 @@ a `.current-task` fallback or a Python hook directory.
 - Hook/statusline/plugin tests proving the resolver source is surfaced.
 - Stale session tests proving no `.current-task` fallback occurs when the session task
   path is stale.
+- Structured metadata tests for repeatable create values, duplicate-key
+  overwrite, malformed input, `set-meta`, and preservation of existing
+  Suncode execution/Hub metadata.
+- Tree tests proving orphan tasks stay visible and are not duplicated.
 
 ##### 7. Wrong vs Correct
 
@@ -654,6 +683,20 @@ if sys.platform == "win32":
 | `sys.stdout.reconfigure(encoding="utf-8")` | ⚠️ Partial | Only stdout; easy to forget stdin/stderr |
 | `io.TextIOWrapper(sys.stdout.buffer, ...)` | ❌ No | Creates wrapper, doesn't fix underlying encoding |
 | `PYTHONIOENCODING=utf-8` env var | ⚠️ Partial | Only works if set **before** Python starts |
+
+平台 hook 若在读取 stdin 前不能可靠导入 `common/__init__.py`，必须在自身
+入口执行等价的 Windows UTF-8 stdin guard。当前必须保持覆盖的 standalone
+入口包括 Claude `statusline.py`、shared
+`inject-shell-session-context.py` 与 sub-agent context hook。guard 必须发生在
+`json.load(sys.stdin)` / `sys.stdin.read()` 之前；只修 stdout 不能证明中文
+hook payload 安全。
+
+回归测试应以 GBK/CP936 包装 stdin，写入 UTF-8 中文 JSON/文本，并断言：
+
+- hook 退出 0；
+- payload 中的 session/task identity 保持完整；
+- 原 shell command 不被改写或截断；
+- stdout 仍为合法 UTF-8。
 
 ### CRITICAL: PEP 604 Annotations Require `from __future__ import annotations`
 
@@ -1172,6 +1215,11 @@ def _collect_package_git_info(
     repo_root: Path,
     discover_unconfigured: bool = False,
 ) -> list[dict]
+def run_git(
+    args: list[str],
+    cwd: Path | None = None,
+    timeout: float | None = None,
+) -> tuple[int, str, str]
 ```
 
 #### 3. Contracts
@@ -1211,6 +1259,15 @@ Package repository sections are appended after root context. Configured
 repo and no configured package repos are available, runtime may fall back to the
 bounded child-repository scan documented in `directory-structure.md`.
 
+自动 session-context 探测必须显式使用 2 秒超时；`run_git()` 的缺省仍为
+无上限，不能把 advisory 探测的时限施加到 create/archive 等用户主动 Git
+操作。fallback 最多接纳 8 个 child repository；一旦发现第 9 个候选，整次
+自动发现 fail safe 为 `[]` 并在 stderr 提示用户显式配置 `packages.*.git`。
+
+根仓库 `status --porcelain` 非零时仍可报告 `isRepo: true`，但必须设置
+`isClean: false`，不能把空 stdout 当成 clean。child repository 的 status
+探测失败时跳过该 child，不能伪造 clean 记录。
+
 #### 4. Validation & Error Matrix
 
 | Condition | Behavior |
@@ -1221,6 +1278,10 @@ bounded child-repository scan documented in `directory-structure.md`.
 | Configured package path lacks `.git` | Skip that package |
 | Root is not Git and configured package repos are empty | Run bounded child repo discovery |
 | Fewer than two child repos are discovered | Do not infer polyrepo layout |
+| 任一自动 Git probe 超过 2 秒 | 当作探测失败并继续生成上下文，不阻塞 SessionStart |
+| 发现 9 个或更多 child repos | 返回空 fallback 列表并警告显式配置 |
+| root status probe 返回非零 | `isRepo: true`、`isClean: false` |
+| child status probe 返回非零 | 跳过该 child |
 
 #### 5. Good/Base/Bad Cases
 
@@ -1236,6 +1297,10 @@ bounded child-repository scan documented in `directory-structure.md`.
 - Record context: same non-Git-root rendering as default text mode.
 - Runtime fallback: root non-Git with multiple unconfigured child repos.
 - JSON context: root non-Git has `isRepo: false` and `isClean: false`.
+- 8 个 child repos 正常收集；第 9 个触发 fail-safe warning 且返回空列表。
+- fake `run_git` 断言每个自动 probe 收到 `timeout=2`，普通调用默认收到
+  `timeout=None`。
+- root/child status probe 非零分别断言“保守判脏”和“跳过 child”。
 
 #### 7. Wrong vs Correct
 
@@ -1253,6 +1318,20 @@ Correct:
 ## GIT STATUS
 Root is not a Git repository.
 Run Git commands from the package repository paths listed below.
+```
+
+```python
+# Wrong: failed probe + empty stdout is misreported as clean.
+_, status, _ = run_git(["status", "--porcelain"], cwd=repo_root)
+is_clean = not status
+
+# Correct: status code is part of the truth contract.
+rc, status, _ = run_git(
+    ["status", "--porcelain"],
+    cwd=repo_root,
+    timeout=2.0,
+)
+is_clean = rc == 0 and not status.strip()
 ```
 
 **When to add a new mode** (not a new script):
@@ -1451,6 +1530,105 @@ When adding a new accessor in `common/config.py`:
 - For boolean accessors: each of `true / false / yes / no / 1 / 0 / on / off`
   in both upper and lower case.
 - Invalid value → returns default, prints stderr warning, does not raise.
+
+### 场景：上下文注入预算与单轮跳过键
+
+#### 1. 范围 / 触发条件
+
+修改 Python shared hook、OpenCode plugin/lib、Pi extension 或
+`config.yaml` 中 `context_injection` / `prompt_injection` 时适用。这是三套
+运行时对同一用户配置的跨实现契约。
+
+#### 2. 签名
+
+```python
+def get_context_injection_limits(
+    repo_root: Path | None = None,
+) -> dict[str, int]
+
+def get_prompt_injection_config(
+    repo_root: Path | None = None,
+) -> dict[str, str]
+```
+
+```yaml
+context_injection:
+  max_file_bytes: 32768
+  max_artifact_bytes: 65536
+  max_total_bytes: 131072
+prompt_injection:
+  skip_keyword: "no-suncode"
+```
+
+仓库 live `.trellis` dogfood 的默认跳过词是 `no-trellis`；发布模板的默认
+跳过词是 `no-suncode`。这是有意的身份映射，不是 source/template 漂移。
+
+#### 3. 契约
+
+- 三个 limit 均为 byte count；`0` 表示对应限制完全关闭。
+- 缺失值使用 32768 / 65536 / 131072；负数、布尔值或非整数警告并回退
+  到该字段默认值，不能让 hook 失败。
+- JSONL-referenced 普通文件受 `max_file_bytes`；`prd.md`、`design.md`、
+  `implement.md` 受 `max_artifact_bytes`；所有内联内容共享
+  `max_total_bytes`。
+- 内容顺序固定为 JSONL entries → `prd.md` → `design.md`（存在时）→
+  `implement.md`（存在时）。Python、OpenCode、Pi 必须保持相同顺序。
+- 截断只能在 UTF-8 code-point 边界发生，并输出含 cap 与原文件路径的
+  notice；不得产生 replacement character。
+- 含 NUL 或无效 UTF-8 的文件按 binary 处理：只输出 compact reference
+  notice，不解码、不内联。
+- 总预算不足时，详细索引 notice 也必须计入预算；详细 notice 仍放不下时，
+  只输出一次固定长度的“remaining context entries omitted”终止提示并停止
+  后续物化，不能继续按条目无界增长。该终止提示是唯一允许的常量级预算
+  余量；`0` 恢复 unlimited inlining。
+- `prompt_injection.skip_keyword` 只跳过当前 user turn 的 workflow-state
+  breadcrumb；不影响 SessionStart、task context 或后续 turn。
+- skip match 大小写不敏感，左右边界不能是 `\w` 或 `-`；空字符串关闭
+  escape hatch。
+
+#### 4. 校验与错误矩阵
+
+| 条件 | 预期行为 |
+|---|---|
+| limit 缺失 | 使用默认值 |
+| limit 为 `0` | 对应限制关闭 |
+| limit 为负数/布尔/非整数 | stderr 警告并使用默认值 |
+| 多字节字符跨 cap | 回退到前一个完整 UTF-8 边界 |
+| binary/invalid UTF-8 | reference notice，不内联 |
+| 总预算不足但详细 notice 可容纳 | 当前内容降级为详细索引 notice，顺序不变 |
+| 详细 notice 也无法容纳 | 输出一次固定终止提示，后续条目不再读取或输出 |
+| prompt 含独立 `NO-SUNCODE` | 只跳过本 turn breadcrumb |
+| prompt 含 `prefix-no-suncode` 或 `no-suncodex` | 不匹配 |
+| `skip_keyword: ""` | 不跳过任何 turn |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：中文 artifact 在 3-byte 边界被完整截断，notice 指向原文件。
+- Base：小型文本在默认预算内原样注入。
+- Bad：按 JavaScript `string.length` 计数，导致 CJK/emoji 实际字节超预算。
+- Bad：检测到 `no-suncode` 后永久关闭本 session 的所有上下文注入。
+
+#### 6. 必需测试
+
+- Python、OpenCode、Pi 分别覆盖默认/自定义/零/非法 limit、UTF-8
+  截断、binary notice、共享总预算、单一终止提示与 artifact 顺序。
+- 至少一个 parity assertion 同时锁定三实现的默认数值、notice 语义和
+  JSONL→PRD→design→implement 顺序。
+- shared Python hook、OpenCode plugin 覆盖 skip keyword 的独立边界、
+  大小写、空值与“只跳过一轮”。
+- live/template 身份断言：`.trellis` 使用 `no-trellis`，生成 Suncode
+  模板使用 `no-suncode`。
+
+#### 7. Wrong vs Correct
+
+```javascript
+// Wrong: character count is not the transport byte budget.
+const truncated = text.slice(0, maxBytes);
+
+// Correct: cap Buffer bytes, then remove incomplete UTF-8 suffix.
+const bytes = Buffer.from(text, "utf-8");
+const truncated = truncateUtf8(bytes, maxBytes).toString("utf-8");
+```
 
 ---
 

@@ -43,7 +43,8 @@ function loadOmpExtension(): OmpExtension {
   });
   vm.runInContext(compiled, sandbox);
   const extension = moduleObject.exports.default;
-  if (!extension) throw new Error("OMP extension template has no default export");
+  if (!extension)
+    throw new Error("OMP extension template has no default export");
   return extension;
 }
 
@@ -110,7 +111,9 @@ describe("omp templates", () => {
     expect(extension).not.toContain("process.env.SUNCODE_CONTEXT_ID =");
     expect(extension).toContain('buildContextKey("omp", "session", sessionId)');
     expect(extension).toContain("realpathSync");
-    expect(extension).toContain("resolveProjectFile(projectRoot, file)");
+    expect(extension).toContain(
+      "resolveProjectFile(projectRoot, file, trustedRoots)",
+    );
     expect(extension).toContain("readFileSync(targetPath");
     expect(extension).toContain("if (!key) return null;");
     expect(extension).toContain("return key;");
@@ -135,7 +138,12 @@ describe("omp templates", () => {
     };
 
     handler(
-      { type: "tool_call", toolName: "bash", toolCallId: "call-1", input: params },
+      {
+        type: "tool_call",
+        toolName: "bash",
+        toolCallId: "call-1",
+        input: params,
+      },
       { sessionManager: { getSessionId: () => "session/a" } },
     );
 
@@ -154,7 +162,12 @@ describe("omp templates", () => {
     };
 
     handler(
-      { type: "tool_call", toolName: "bash", toolCallId: "call-2", input: params },
+      {
+        type: "tool_call",
+        toolName: "bash",
+        toolCallId: "call-2",
+        input: params,
+      },
       { sessionManager: { getSessionId: () => "session/b" } },
     );
 
@@ -169,11 +182,21 @@ describe("omp templates", () => {
     const bashParams: Record<string, unknown> = { command: "pwd" };
 
     handler(
-      { type: "tool_call", toolName: "read", toolCallId: "call-3", input: readParams },
+      {
+        type: "tool_call",
+        toolName: "read",
+        toolCallId: "call-3",
+        input: readParams,
+      },
       { sessionManager: { getSessionId: () => "session/c" } },
     );
     handler(
-      { type: "tool_call", toolName: "bash", toolCallId: "call-4", input: bashParams },
+      {
+        type: "tool_call",
+        toolName: "bash",
+        toolCallId: "call-4",
+        input: bashParams,
+      },
       { sessionManager: { getSessionId: () => undefined } },
     );
 
@@ -201,6 +224,15 @@ describe("omp templates", () => {
     // Agent-type-specific jsonl selection
     expect(extension).toContain("implement.jsonl");
     expect(extension).toContain("check.jsonl");
+  });
+
+  it("mirrors trusted context roots with Suncode configuration identity", () => {
+    const extension = getExtensionTemplate();
+    expect(extension).toContain("resolveTrustedRoots");
+    expect(extension).toContain("trusted_context_dirs");
+    expect(extension).toContain("auto_trust_suncode_symlinks");
+    expect(extension).toContain('join(projectRoot, ".suncode", "config.yaml")');
+    expect(extension).not.toContain("auto_trust_trellis_symlinks");
   });
 
   it("no settings.json or Python hooks exist in the template directory", () => {

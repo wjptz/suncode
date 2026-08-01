@@ -56,6 +56,23 @@ copySuncodeDir(
 - No data migration: Suncode must not rename, import, delete, or mutate an
   existing Trellis install. A project with only `.trellis/` is uninitialized
   from Suncode's perspective.
+- 仓库自身的开发工作流仍可使用 `.trellis/`；它不是发布给用户的
+  Suncode runtime。live dogfood 与 packaged template 同步行为时，必须做
+  身份映射：开发根保持 `.trellis` / `TRELLIS_*`，产品模板使用
+  `.suncode` / `SUNCODE_*`。
+- 平台自动识别必须基于 Suncode 所有权证据：当前模板路径出现在
+  `.suncode/.template-hashes.json`，或存在平台注册的 Suncode 唯一
+  `ownershipMarkers`。裸 `.claude`、`.codex`、`.snow`、`.omp` 等宿主
+  目录不能证明 Suncode 所有权。
+- manifest 中仍有模板 hash、但用户删除了对应文件时，平台所有权仍
+  保留，以便 update 尊重 `userDeletedFiles`；不能因为当前文件缺失就
+  把平台当成从未配置。
+- 根 `.gitattributes` 是项目协作配置，不属于 `.suncode` runtime
+  目录。生成项目必须包含精确规则
+  `.suncode/workspace/*/journal-*.md merge=union`；仓库 dogfood 根只使用
+  对应 `.trellis/workspace/*/...` 规则，两者不得互相冒充。
+- channel 的自动可信符号链接只能来自 `.suncode/tasks` 与
+  `.suncode/workspace`；不得把 `.trellis/**` 当成 Suncode 兼容入口。
 
 ### 4. Validation & Error Matrix
 
@@ -69,6 +86,9 @@ copySuncodeDir(
 | Channel root override set | Use `SUNCODE_CHANNEL_ROOT`; do not check `TRELLIS_CHANNEL_ROOT`. |
 | Generated hook injects context | Emit Suncode markers and `.suncode/*` paths only. |
 | Historical migration manifest mentions Trellis | Allowed only when describing old Trellis releases. |
+| 只存在宿主平台配置目录，没有 Suncode hash/marker | 不报告为 configured，不由 update 接管。 |
+| tracked 平台文件被用户删除但 hash 仍存在 | 保留平台所有权，同时尊重 user-deleted。 |
+| `.gitattributes` 只有 Trellis journal 规则 | 追加 Suncode 精确规则并保留原内容。 |
 
 ### 5. Good/Base/Bad Cases
 
@@ -97,6 +117,10 @@ copySuncodeDir(
 - Grep audit current runtime source/templates for non-historical
   `.trellis`, `TRELLIS_`, `trellis-hook`, `trellis-workflow`, and
   user-visible Trellis wording.
+- 平台归属测试覆盖裸目录、hash-owned、marker-owned、tracked 文件已删除、
+  OMP shared-root 与 legacy Windsurf Suncode marker。
+- `.gitattributes` 测试覆盖新建、增量追加、精确去重、Trellis/Suncode
+  规则区分，以及 `update --dry-run` 零写入。
 
 ### 7. Wrong vs Correct
 
@@ -119,4 +143,3 @@ export const DIR_NAMES = {
 
 const root = process.env.SUNCODE_CHANNEL_ROOT ?? "~/.suncode/channels";
 ```
-

@@ -142,7 +142,7 @@ export function registerHubCommand(program: Command): void {
     .option("--api-base-url <url>", "global default Hub API base URL")
     .option("--project-api-base-url <url>", "project-level Hub API URL override")
     .option("--project-id <id>", "Hub project ID")
-    .option("--developer-id <id>", "optional Hub developer ID")
+    .option("--developer-id <id>", "optional Hub member/user ID override")
     .option(
       "--start-review-policy <policy>",
       "confirm, block, or bypass",

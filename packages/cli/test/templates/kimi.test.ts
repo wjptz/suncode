@@ -27,8 +27,13 @@ describe("Kimi Code templates", () => {
     ]);
     expect(agents.find((agent) => agent.name === "suncode-implement")?.content)
       .toContain("built-in `coder`");
-    expect(agents.find((agent) => agent.name === "suncode-research")?.content)
-      .toContain("built-in `explore`");
+    const research = agents.find(
+      (agent) => agent.name === "suncode-research",
+    )?.content;
+    expect(research).toContain("built-in `coder`");
+    expect(research).toContain("Active task: <path");
+    expect(research).toContain("may write only under");
+    expect(research).not.toContain("built-in `explore`");
   });
 
   it("collects neutral shared skills and six Kimi-private entry skills", () => {

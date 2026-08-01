@@ -1,6 +1,6 @@
 # Platform Integration Guide
 
-How to add support for a new AI CLI platform (like Claude Code, Cursor, Gemini CLI, OpenCode, Codex, Kilo, Kiro, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, Grok Build, Kimi Code, Devin, Antigravity).
+How to add support for a new AI CLI platform (like Claude Code, Cursor, Gemini CLI, OpenCode, Codex, Kilo, Kiro, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, Grok Build, Kimi Code, Snow CLI, Devin, Antigravity).
 
 ---
 
@@ -152,8 +152,10 @@ When adding a new platform `{platform}`, update the following:
 > agent prompts are Kimi-private skills under
 > `.kimi-code/skills/<name>/SKILL.md`. Kimi has no project-level hooks/settings
 > file and no custom sub-agent definition directory; dispatch uses the built-in
-> `coder` / `explore` agents together with the matching Suncode role skill and
-> pull-based prelude.
+> `coder` agent for implement, check, and research together with the matching
+> Suncode role skill and pull-based prelude. Research must persist findings in
+> the active task's `research/` directory; do not route the Suncode research
+> role to Kimi's read-only `explore` agent.
 
 #### Rule: `.agents/skills/` writes use `resolvePlaceholdersNeutral()`
 
@@ -875,6 +877,200 @@ child.stdin?.end(prompt);
 ```
 
 Resolve npm-shim installs through the real JS entrypoint when possible, keep `pi` as the compatibility fallback, and transport generated prompts through stdin.
+
+---
+
+## 场景：Codex/Pi 子代理模型与截断上下文保真
+
+### 1. 范围 / 触发条件
+
+修改 Codex agent TOML 更新、Codex `SubagentStart` 回退说明、Pi child model/
+thinking 选择或 Pi tool schema 时适用。用户显式 agent 配置与父会话模型都
+属于运行时意图，模板刷新不能静默丢失。
+
+### 2. 签名
+
+```typescript
+interface CodexAgentModelKeys {
+  model?: string;
+  model_reasoning_effort?: string;
+}
+
+function extractCodexAgentModelKeys(content: string): CodexAgentModelKeys;
+function applyCodexAgentModelKeys(
+  freshContent: string,
+  preserved: CodexAgentModelKeys,
+): string;
+function preserveCodexAgentModelKeys(
+  cwd: string,
+  files: Map<string, string>,
+): void;
+```
+
+Pi extension：
+
+```typescript
+function resolveRunCfg(
+  input: SubagentInput,
+  agentCfg: AgentConfig,
+  inheritedThinking?: string,
+  inheritedModel?: string,
+): PiRunConfig;
+function contextModelRef(ctx?: PiExtensionContext): string | undefined;
+```
+
+### 3. 契约
+
+- Codex init/update 刷新 `.codex/agents/suncode-*.toml` 时，保留用户已有的
+  顶层 `model` 与 `model_reasoning_effort`；其他模板正文仍以当前版本为准。
+- parser 只读取合法 quoted TOML assignment，忽略注释与 triple-quoted
+  `developer_instructions` 内看似同名的文本，避免把提示词内容当配置。
+- 生成模板提供注释示例 `model = "gpt-5.6-terra"` 与
+  `model_reasoning_effort = "high"`，但默认不强制覆盖用户模型。
+- Codex 三类 agent 的上下文恢复顺序为：已有 manifest line → 输入中的
+  `Full hook output saved to: <path>` → active-task fallback。saved-output
+  文件不可读时继续 fallback，不能停止工作；Suncode execution manifest
+  仍高于该提示。
+- Pi thinking 枚举包含 `off|minimal|low|medium|high|xhigh|max`；tool schema、
+  suffix parser 与 child args builder 必须一致。
+- Pi model 选择优先级：per-call model → agent frontmatter model → invoking
+  parent model。thinking 优先级：per-call thinking/model suffix → agent
+  thinking/model suffix → inherited parent thinking。
+- parent model 只有 provider 和 id 同时存在时才格式化为
+  `<provider>/<id>`；任一缺失则不猜测。
+- `thinking=off` 不追加 suffix/flag；已有合法 model suffix 不重复追加。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 预期行为 |
+|---|---|
+| Codex agent 已有 custom model/effort | 模板刷新后两个值原样保留 |
+| 同名文本只出现在 multiline instructions | 不提取、不写成配置 |
+| hook 输出被截断且提供 saved path | 无 manifest 时先读取 saved file |
+| saved path 不可读 | 使用 active-task fallback |
+| Pi per-call model/thinking 存在 | 覆盖 agent 与 parent |
+| agent 未配 model、parent provider+id 完整 | child 继承 parent model |
+| parent model 信息不完整 | 不产生半截 model id |
+| thinking 为 `max` | schema 接受并生成 `model:max` 或 `--thinking max` |
+
+### 5. Good / Base / Bad Cases
+
+- Good：用户给 check agent 配 custom model/max，update 只刷新正文并保留两
+  个配置键。
+- Base：无自定义配置时使用模板默认行为，注释提示不生效。
+- Bad：对整个 TOML 做正则搜索，把 instructions 中示例
+  `model = "..."` 当成用户配置。
+- Bad：Pi agent 无 model 时退回硬编码模型，忽略 invoking parent model。
+
+### 6. 必需测试
+
+- Codex extract/apply/preserve：custom keys、escaping、multiline false positive、
+  注释 hints。
+- 三类 Codex agent 都包含 saved-output 读取步骤，且顺序位于 marker/fallback
+  之前。
+- Pi schema 接受 `max`；`resolveRunCfg` 覆盖 per-call、agent、parent 与
+  suffix precedence；`contextModelRef` 覆盖 provider/id 缺失。
+
+### 7. Wrong vs Correct
+
+```typescript
+// Wrong: template refresh discards user model selection.
+await writeFile(agentPath, freshTemplate);
+
+// Correct: preserve only the two explicit user-owned model keys.
+const keys = extractCodexAgentModelKeys(existing);
+await writeFile(agentPath, applyCodexAgentModelKeys(freshTemplate, keys));
+```
+
+---
+
+## 场景：Snow CLI 平台接入
+
+### 1. 范围 / 触发条件
+
+新增或修改 Snow 的 registry、`init/update/uninstall/platforms` 生命周期、项目模板、hook 或 agent 行为时适用。Snow 是 class-1、hook-capable 平台，不能按无 hook 的私有 skill 平台处理。
+
+### 2. 签名
+
+```typescript
+AI_TOOLS.snow = {
+  configDir: ".snow/skills",
+  extraManagedPaths: [
+    ".snow/commands",
+    ".snow/agents",
+    ".snow/hooks",
+    ".snow/SNOW.md",
+  ],
+  cliFlag: "snow",
+  hasPythonHooks: true,
+  templateContext: {
+    cmdRefPrefix: "/suncode-",
+    agentCapable: true,
+    hasHooks: true,
+  },
+};
+
+function configureSnow(cwd: string): Promise<void>;
+function collectSnowTemplates(): Map<string, string>;
+```
+
+CLI/初始化面必须同时声明 `--snow` 与 `InitOptions.snow?: boolean`。
+
+### 3. 契约
+
+- Snow 资产只能使用 `.snow/**`、`.suncode/**`、`SUNCODE_*` 和 `suncode-*` 身份；生成内容不得出现非历史性的 `.trellis`、`TRELLIS_` 或 `trellis-*`。
+- `.snow/skills/suncode-*/SKILL.md` 安装 workflow/bundled skills；`.snow/commands/suncode-*.json` 安装 prompt commands；`.snow/agents/suncode-{implement,check,research}.md` 安装三类 agent。
+- hook 面包含 `onSessionStart.json`、`onUserMessage.json`、`beforeSubAgentStart.json` 与 `write-suncode-context.py`。
+- `hasHooks: true` 必须过滤 `suncode-start` command；SessionStart 承担启动上下文注入。
+- Snow 是 class-1：agent 定义不添加 class-2 pull-based prelude，`beforeSubAgentStart` 是主要子代理上下文路径。
+- 现代 Snow 不生成遗留 `.snow/sub-agents.suncode.json`。
+- `collectSnowTemplates()` 的路径和字节必须与 `configureSnow()` 完全一致，并进入 `.suncode/.template-hashes.json`；这是 update、platform ownership 和 uninstall 的共同边界。
+- `.snow` 或 `.snow/skills` 目录单独存在不代表 Suncode 所有权；只有模板 hash/manifest 证据才允许自动识别。
+- uninstall 只删除 manifest 记录的 Snow 文件；同一 `.snow/` 下用户文件必须保留。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 预期行为 |
+|---|---|
+| `suncode init --snow --yes` | 写入 skills、commands、agents、hooks、guide，并记录全部 hash |
+| 默认 init 未选择 Snow | 不创建 `.snow/` |
+| Snow tracked 文件被用户删除 | 平台仍由历史 hash 识别；update 尊重 user-deleted，不凭目录重建所有权 |
+| Snow tracked 文件被修改且 `update --force` | 恢复当前模板字节；用户未跟踪文件保持不变 |
+| `.snow/` 只有用户资产 | `suncode platforms` 不报告 Snow，update 不接管 |
+| uninstall 遇到 `.snow/user-notes.md` | 删除 tracked 文件，保留 user-notes |
+| 生成内容含 Trellis runtime token | 模板身份测试失败 |
+
+### 5. Good / Base / Bad Cases
+
+- Good：init 后 `collectSnowTemplates()` 的每个 key 都存在且 hash 等于实际文件内容。
+- Base：未选择 Snow 时项目完全没有 `.snow/` 副作用。
+- Bad：用 `fs.existsSync(".snow")` 判断已配置，导致 Suncode 接管用户已有 Snow 配置。
+- Bad：同时生成 `suncode-start.json` 与 SessionStart hook，产生重复启动注入。
+
+### 6. 必需测试
+
+- `templates/snow.test.ts`：registry、路径集合、hook/agent 数量、无 Trellis 身份、configure/collect 字节一致。
+- `init.integration.test.ts`：完整文件面、无 `suncode-start`、无遗留 sub-agent fragment、hash 完整。
+- `update.integration.test.ts`：tracked Snow 文件可更新，用户文件不变。
+- `uninstall.integration.test.ts`：tracked Snow 文件删除，用户文件保留。
+- `platforms.integration.test.ts`：hash-owned Snow 出现在稳定 JSON schema；裸 `.snow` 不出现。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+if (fs.existsSync(path.join(cwd, ".snow"))) configured.add("snow");
+```
+
+#### Correct
+
+```typescript
+const owned = [...collectSnowTemplates().keys()].some(
+  (file) => hashes[file] !== undefined,
+);
+if (owned) configured.add("snow");
+```
 
 ---
 

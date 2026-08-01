@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "task": "07-23-universal-execution-dag",
+  "defaults": {
+    "timeoutSeconds": 1800,
+    "maxAttempts": 2,
+    "contextProfile": "implement"
+  },
+  "nodes": [
+    {
+      "id": "graph-runtime",
+      "name": "实现执行图与可恢复运行时",
+      "description": "实现 execution.json v1、旧任务归一化、冲突感知调度、NodeResult 和恢复状态机。",
+      "priority": "P1",
+      "role": "implement",
+      "dependsOn": [],
+      "reads": [
+        "packages/cli/src/templates/suncode/scripts/**",
+        "packages/cli/test/templates/**"
+      ],
+      "writes": [
+        "packages/cli/src/templates/suncode/scripts/common/execution_*.py",
+        "packages/cli/src/templates/suncode/scripts/common/task_execution.py",
+        "packages/cli/src/templates/suncode/scripts/task.py",
+        "packages/cli/src/templates/suncode/index.ts",
+        "packages/cli/test/templates/execution-runtime.test.ts"
+      ],
+      "resources": ["execution-runtime-core"],
+      "context": {
+        "profile": "implement",
+        "include": ["prd", "design", "implement", "implement-jsonl"],
+        "dependencyResults": "direct",
+        "maxBytes": 262144,
+        "perSourceBytes": 65536
+      },
+      "validation": ["execution runtime targeted tests and Python static checks"],
+      "execution": {
+        "isolation": "shared-worktree",
+        "allowed": ["inline", "native-subagent", "channel"],
+        "timeoutSeconds": 1800,
+        "maxAttempts": 2,
+        "idempotent": false
+      }
+    },
+    {
+      "id": "context-adapters",
+      "name": "接入节点上下文与平台适配",
+      "description": "让共享 hook、pull prelude、Codex 和 OpenCode 从同一不可变节点 manifest 获取最小上下文。",
+      "priority": "P1",
+      "role": "implement",
+      "dependsOn": ["graph-runtime"],
+      "reads": [
+        "packages/cli/src/templates/shared-hooks/**",
+        "packages/cli/src/templates/codex/**",
+        "packages/cli/src/templates/opencode/**",
+        "packages/cli/src/configurators/shared.ts"
+      ],
+      "writes": [
+        "packages/cli/src/templates/shared-hooks/inject-subagent-context.py",
+        "packages/cli/src/templates/codex/agents/**",
+        "packages/cli/src/templates/opencode/plugins/inject-subagent-context.js",
+        "packages/cli/src/configurators/shared.ts",
+        "packages/cli/test/configurators/**",
+        "packages/cli/test/templates/opencode.test.ts",
+        "packages/cli/test/regression.test.ts"
+      ],
+      "resources": ["platform-context-protocol"],
+      "context": {
+        "profile": "implement",
+        "include": ["prd", "design", "implement", "implement-jsonl"],
+        "dependencyResults": "direct",
+        "maxBytes": 262144,
+        "perSourceBytes": 65536
+      },
+      "validation": ["shared hook, Codex, OpenCode, and configurator contract tests"],
+      "execution": {
+        "isolation": "shared-worktree",
+        "allowed": ["inline", "native-subagent", "channel"],
+        "timeoutSeconds": 1800,
+        "maxAttempts": 2,
+        "idempotent": false
+      }
+    },
+    {
+      "id": "hub-projection",
+      "name": "保持 Hub v1 并投影 DAG",
+      "description": "保持 subtasks.json v1 payload/hash 不变，并增加 execution.json 的稳定三字段投影回退。",
+      "priority": "P1",
+      "role": "implement",
+      "dependsOn": ["graph-runtime"],
+      "reads": [
+        "packages/cli/src/commands/hub/**",
+        "packages/cli/test/commands/hub.test.ts"
+      ],
+      "writes": [
+        "packages/cli/src/commands/hub/submissions.ts",
+        "packages/cli/test/commands/hub.test.ts"
+      ],
+      "resources": ["hub-subtasks-v1"],
+      "context": {
+        "profile": "implement",
+        "include": ["prd", "design", "implement", "implement-jsonl"],
+        "dependencyResults": "direct",
+        "maxBytes": 262144,
+        "perSourceBytes": 65536
+      },
+      "validation": ["Hub submit-subtasks compatibility tests"],
+      "execution": {
+        "isolation": "shared-worktree",
+        "allowed": ["inline", "native-subagent", "channel"],
+        "timeoutSeconds": 1800,
+        "maxAttempts": 2,
+        "idempotent": false
+      }
+    },
+    {
+      "id": "config-workflow",
+      "name": "接入配置门禁与 DAG 工作流",
+      "description": "新增渐进启用配置、新任务策略快照、复杂任务启动门禁和跨执行器 fan-out/wait-any 工作流。",
+      "priority": "P1",
+      "role": "implement",
+      "dependsOn": ["context-adapters", "hub-projection"],
+      "reads": [
+        "packages/cli/src/templates/suncode/config.yaml",
+        "packages/cli/src/templates/suncode/workflow.md",
+        "packages/cli/src/templates/**/brainstorm*",
+        "marketplace/workflows/**"
+      ],
+      "writes": [
+        "packages/cli/src/templates/suncode/config.yaml",
+        "packages/cli/src/templates/suncode/scripts/common/config.py",
+        "packages/cli/src/templates/suncode/scripts/common/task_store.py",
+        "packages/cli/src/templates/suncode/scripts/task.py",
+        "packages/cli/src/templates/suncode/scripts/common/task_execution.py",
+        "packages/cli/src/templates/shared-hooks/session-start.py",
+        "packages/cli/src/templates/suncode/workflow.md",
+        "packages/cli/src/templates/**/brainstorm*",
+        "marketplace/workflows/**",
+        "packages/cli/test/**"
+      ],
+      "resources": ["workflow-contract", "task-lifecycle"],
+      "context": {
+        "profile": "implement",
+        "include": ["prd", "design", "implement", "implement-jsonl"],
+        "dependencyResults": "direct",
+        "maxBytes": 262144,
+        "perSourceBytes": 65536
+      },
+      "validation": ["workflow, task lifecycle, config, and marketplace contract tests"],
+      "execution": {
+        "isolation": "shared-worktree",
+        "allowed": ["inline", "native-subagent", "channel"],
+        "timeoutSeconds": 1800,
+        "maxAttempts": 2,
+        "idempotent": false
+      }
+    },
+    {
+      "id": "migration-docs",
+      "name": "补齐迁移与中英文文档",
+      "description": "新增后继 migration manifest，并同步架构、使用方式、回退、安全边界和变更日志。",
+      "priority": "P2",
+      "role": "implement",
+      "dependsOn": ["config-workflow"],
+      "reads": [
+        "packages/cli/src/migrations/manifests/**",
+        "docs-site/**",
+        "marketplace/**"
+      ],
+      "writes": [
+        "packages/cli/src/migrations/manifests/0.6.12.json",
+        "packages/cli/test/regression.test.ts",
+        "docs-site/**",
+        "marketplace/**"
+      ],
+      "resources": ["release-manifest", "docs-navigation"],
+      "context": {
+        "profile": "implement",
+        "include": ["prd", "design", "implement", "implement-jsonl"],
+        "dependencyResults": "direct",
+        "maxBytes": 262144,
+        "perSourceBytes": 65536
+      },
+      "validation": ["migration, marketplace, and docs checks"],
+      "execution": {
+        "isolation": "shared-worktree",
+        "allowed": ["inline", "native-subagent", "channel"],
+        "timeoutSeconds": 1800,
+        "maxAttempts": 2,
+        "idempotent": false
+      }
+    },
+    {
+      "id": "integration-check",
+      "name": "运行全局集成检查",
+      "description": "验证模板注册、运行时、Hub、平台、迁移、工作流、marketplace 和 docs 一致性，并检查最终影响范围。",
+      "priority": "P1",
+      "role": "integration",
+      "dependsOn": ["migration-docs"],
+      "reads": ["**/*"],
+      "writes": [],
+      "resources": ["global-quality-gate"],
+      "context": {
+        "profile": "integration",
+        "include": ["prd", "design", "implement", "check-jsonl"],
+        "dependencyResults": "direct",
+        "maxBytes": 262144,
+        "perSourceBytes": 65536
+      },
+      "validation": ["CLI lint, typecheck, tests, build, docs checks, and GitNexus detect_changes"],
+      "execution": {
+        "isolation": "shared-worktree",
+        "allowed": ["inline", "native-subagent", "channel"],
+        "timeoutSeconds": 3600,
+        "maxAttempts": 1,
+        "idempotent": true
+      }
+    }
+  ],
+  "barriers": {
+    "final": ["integration-check"]
+  },
+  "metadata": {
+    "plannedBy": "suncode-brainstorm",
+    "executionPolicy": "same-dag-all-executors"
+  }
+}

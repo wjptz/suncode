@@ -736,3 +736,154 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Harden execution DAG contracts
+
+**Date**: 2026-08-01
+**Task**: Harden execution DAG contracts
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+修复执行 DAG 复审阻断项，收紧恢复、scope、重试、结果验证、生命周期、final barrier、dispatch、JSON 整数词法、runtime 身份、并发上限与 context manifest 契约；定向 208/208、CLI 全量 1590/1590 通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `10620d3b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 23: Complete universal execution DAG
+
+**Date**: 2026-08-01
+**Task**: Complete universal execution DAG
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+完成平台无关执行 DAG、能力感知调度、并行安全、节点 context manifest、结构化结果、恢复、Hub 投影和多平台工作流；随后修复全部复审阻断项并通过 208/208 定向测试、1590/1590 CLI 全量测试及完整静态与构建质量门。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d62ba4f3` | (see git log) |
+| `10620d3b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 24: 同步 Trellis v0.6.9-v0.6.11
+
+**Date**: 2026-08-01
+**Task**: 同步 Trellis v0.6.9-v0.6.11
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+语义采纳官方 Trellis v0.6.9-v0.6.11 的 15 个行为包，完成验证与独立实现提交，推进检查点后归档任务。
+
+### Main Changes
+
+- 按 Suncode identity 与 ownership contract 采纳 A1-A15，包括上下文安全、Snow、任务 QoL、Codex/Pi/channel 与平台检测。
+- 记录完整 43-commit 分类矩阵，并将同步 ledger/checkpoint 从官方 v0.6.8 前移至 v0.6.11。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `313c6db3` | (see git log) |
+| `681bc559` | (see git log) |
+
+### Testing
+
+- [OK] Core 332/332 通过，1 个既有环境依赖用例跳过；CLI 1695/1695 通过，均满足 60 秒硬门。
+- [OK] Root lint、typecheck、build、Python 3.9 编译门、BasedPyright 0 error、模板字节一致性与 diff check 通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 后续稳定版审查从官方 a82d4d4c75abf85c6200c4528f750798d531a70f 之后开始；发布 v0.6.11 任务保持独立进行。
+
+
+## Session 25: DAG 规划收敛门禁
+
+**Date**: 2026-08-02
+**Task**: DAG 规划收敛门禁
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+修复启用 DAG 后每轮沟通都会重复生成和验证的问题：仅在规划收敛后完成一次 DAG finalization，匹配计划直接复用，实质变化才原地更新并重新验证；同步 marketplace workflow、补充回归测试与执行契约。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f19ab6ba` | (see git log) |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 26: 归档 Suncode v0.6.11 发布任务
+
+**Date**: 2026-08-02
+**Task**: 归档 Suncode v0.6.11 发布任务
+**Package**: cli
+**Branch**: `main`
+
+### Summary
+
+核验 v0.6.11 远端 tag、GitHub Actions 与 npm 双包发布结果，采纳 canonical 发布记录和 release-process 经验，并归档本地遗留的发布任务副本。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `275618c6` | (see git log) |
+| `ce00c1ee` | (see git log) |
+
+### Status
+
+[OK] **Completed**

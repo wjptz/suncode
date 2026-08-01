@@ -66,11 +66,11 @@ describe("uninstall() integration", () => {
 
   it("#2 errors when manifest is missing but .suncode/ exists", async () => {
     fs.mkdirSync(path.join(tmpDir, DIR_NAMES.WORKFLOW));
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(((code?: number) => {
-        throw new Error(`process.exit(${code ?? 0})`);
-      }) as never);
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Error(`process.exit(${code ?? 0})`);
+    }) as never);
 
     await expect(uninstall({ yes: true })).rejects.toThrow("process.exit(1)");
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -202,6 +202,26 @@ describe("uninstall() integration", () => {
     expect(fs.existsSync(userHookDir)).toBe(true);
   });
 
+  it("#7a removes tracked Snow assets and preserves Snow user files", async () => {
+    await init({ yes: true, snow: true, force: true });
+    const snowEntries = Object.keys(loadHashes(tmpDir)).filter((relativePath) =>
+      relativePath.startsWith(".snow/"),
+    );
+    expect(snowEntries.length).toBeGreaterThan(0);
+    const userFile = path.join(tmpDir, ".snow", "user-notes.md");
+    fs.writeFileSync(userFile, "keep me\n", "utf-8");
+
+    await uninstall({ yes: true });
+
+    for (const relativePath of snowEntries) {
+      expect(
+        fs.existsSync(path.join(tmpDir, ...relativePath.split("/"))),
+        relativePath,
+      ).toBe(false);
+    }
+    expect(fs.readFileSync(userFile, "utf-8")).toBe("keep me\n");
+  });
+
   it("#8a empty managed sub-dirs and root dir are pruned (kilo: no structured config)", async () => {
     // Kilo has no hooks.json/settings.json/config.toml/package.json — every
     // manifest file is opaque and gets deleted, so the entire .kilocode/
@@ -309,7 +329,9 @@ describe("uninstall() integration", () => {
     // We need this file in the manifest for it to be processed. If init
     // didn't track it, add it manually so the scrubber path runs.
     const hashes = loadHashes(tmpDir);
-    if (!Object.prototype.hasOwnProperty.call(hashes, ".claude/settings.json")) {
+    if (
+      !Object.prototype.hasOwnProperty.call(hashes, ".claude/settings.json")
+    ) {
       hashes[".claude/settings.json"] = "synthetic-hash";
       const hashFile = path.join(
         tmpDir,
@@ -326,10 +348,9 @@ describe("uninstall() integration", () => {
 
     // .suncode/ is gone, but settings.json should remain (had user fields).
     if (fs.existsSync(settingsPath)) {
-      const after = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as Record<
-        string,
-        unknown
-      >;
+      const after = JSON.parse(
+        fs.readFileSync(settingsPath, "utf-8"),
+      ) as Record<string, unknown>;
       expect(after.model).toBe("claude-sonnet-4");
       expect(after.permissions).toEqual({ allow: ["Bash(git:*)"] });
 

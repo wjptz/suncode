@@ -5,6 +5,14 @@ before editing any file under that path. Trigger qualifies for mandatory
 code-spec depth (new command surface + cross-layer event contract + infra
 integration via env wiring and storage layout).
 
+> **Suncode fork identity note**: this long-lived document still contains
+> upstream Trellis command/package examples in historical sections. They are
+> structural references, not a compatibility surface. Current executable
+> runtime uses `suncode channel`, `@wjptz/suncode-core/channel`,
+> `~/.suncode/channels`, `.suncode/` and `SUNCODE_*`; the authoritative naming
+> boundary is [suncode-runtime-identity.md](./suncode-runtime-identity.md).
+> New code and new spec sections must not copy legacy Trellis runtime tokens.
+
 ---
 
 ## 1. Scope / Trigger
@@ -674,6 +682,165 @@ if (
   writeShutdownReason(worker, "idle-timeout");
   process.kill(worker.pid, "SIGTERM");
 }
+```
+
+### 场景：Channel 可信上下文根
+
+#### 1. 范围 / 触发条件
+
+`channel spawn` 读取 `--file`、`--jsonl` 或 `--agent`，且项目需要通过
+符号链接或显式目录从 worker `cwd` 外加载资料时适用。完整 containment
+规则见 [filesystem-safety.md](./filesystem-safety.md)。
+
+#### 2. 签名
+
+```typescript
+function resolveTrustedRoots(cwd: string): string[];
+function assembleContext(
+  cwd: string,
+  files?: string[],
+  jsonls?: string[],
+  trustedRoots?: string[],
+): AssembledContext;
+function loadAgent(
+  name: string,
+  cwd?: string,
+  trustedRoots?: string[],
+): AgentDefinition;
+```
+
+#### 3. 契约
+
+- 当前 Suncode 配置键是 `channel.trusted_context_dirs` 与
+  `channel.auto_trust_suncode_symlinks`；不得读取 Trellis 同名根作为兼容
+  fallback。
+- spawn 开始时解析一次真实可信根，并把同一结果传给 agent/context 两条
+  loader；中途不能分别重读配置。
+- 缺省只自动信任 `.suncode/tasks` 与 `.suncode/workspace` 顶层符号链接；
+  `.suncode/agents` 外链必须显式列入 trusted roots。
+- `--jsonl` manifest 与其引用文件分别做 realpath containment；manifest
+  合法不代表 entry 自动合法。
+- trust 只允许读取，不能扩大 worker 写范围或 channel storage root。
+
+#### 4. 校验与错误矩阵
+
+| 条件 | 行为 |
+|---|---|
+| 显式 root 存在 | realpath 去重后允许读取 |
+| root 不存在/断裂 | stderr warning，跳过 |
+| 自动 trust 开关为 false | 顶层 tasks/workspace 外链不自动放行 |
+| sibling-prefix 或 jail 外 entry | 拒绝该文件，spawn 继续 |
+| agent name 非安全 identifier | 抛错，不做路径读取 |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：symlinked task manifest 与显式 agent root 使用同一 trust snapshot。
+- Base：无 trust 配置时只读 cwd 内文件。
+- Bad：因为 manifest 位于 cwd 内就跳过对 entry 的 containment 检查。
+
+#### 6. 必需测试
+
+- explicit/auto/disabled roots、missing warning、dedupe。
+- nested containment 与 sibling-prefix rejection。
+- manifest 外部 entry、agent 外链、unsafe agent name。
+- OMP extension 的轻量配置解析器必须与 channel parser 使用相同的 Suncode
+  key 与自动 trust 范围。
+
+#### 7. Wrong vs Correct
+
+```typescript
+// Wrong
+const context = assembleContext(cwd, files, jsonls);
+const agent = loadAgent(name, cwd);
+
+// Correct
+const trustedRoots = resolveTrustedRoots(cwd);
+const context = assembleContext(cwd, files, jsonls, trustedRoots);
+const agent = loadAgent(name, cwd, trustedRoots);
+```
+
+### 场景：Codex turn 终态与 supervisor idle 真相
+
+#### 1. 范围 / 触发条件
+
+修改 Codex app-server notification 解析、adapter terminal dedup、下一 turn
+重置或 supervisor idle timer 时适用。adapter 负责协议终态，child process
+与 shutdown controller 负责进程生命周期；两者不能互相冒充。
+
+#### 2. 签名
+
+```typescript
+interface CodexCtx {
+  terminalErrorSeen: boolean;
+  finalMessageSeen: boolean;
+  pendingDone: boolean;
+}
+
+function parseCodexLine(line: string, ctx: CodexCtx): ParseResult;
+function encodeCodexUserMessage(
+  ctx: CodexCtx,
+  text: string,
+): { id: number; line: string };
+function scheduleSupervisorIdleTimer(
+  args: ScheduleIdleTimerArgs,
+): IdleTimerHandle;
+```
+
+#### 3. 契约
+
+- `turn/completed` 且 `turn.status === "failed"` 产生一个 terminal `error`，
+  message 优先取结构化 `turn.error`。
+- app-server `error` 中 `willRetry: true` 只是
+  `progress.detail.kind="warning"`，不能终止 worker；无 retry 明确值或
+  `false` 才产生 terminal `error`。
+- `terminalErrorSeen` 在同一 turn 内去重 `error` 与随后到达的 failed
+  completion，并抑制该 turn 的 `done`。
+- `encodeCodexUserMessage()` 开始新 turn 时重置
+  `terminalErrorSeen/finalMessageSeen/pendingDone`，旧 turn 不能污染新 turn。
+- idle timer 的进程真相只有 `shutdown.isShuttingDown()` 与
+  `isChildExited()`。adapter 已写 terminal event 不代表 child 已退出，
+  不能用 `hasTerminalEvent()` 阻止 idle cleanup。
+- timer 到期时只请求正常
+  `shutdown.request("SIGTERM", "idle-timeout")`；exactly-one terminal event
+  仍由 shutdown funnel/adapter claim 契约保证。
+
+#### 4. 校验与错误矩阵
+
+| Codex/进程状态 | 行为 |
+|---|---|
+| failed completion | 一个 error，无 done |
+| `error{willRetry:true}` | warning progress，继续 turn |
+| non-retry error 后又 failed completion | 只保留第一个 terminal error |
+| 新 user message | terminal dedup state 全部重置 |
+| terminal event 已写但 child 仍存活且 idle | idle timer 仍可请求 shutdown |
+| shutdown 已开始或 child 已退出 | timer no-op |
+
+#### 5. Good / Base / Bad Cases
+
+- Good：retryable transport error 先警告，重试成功后正常 final message + done。
+- Base：正常 turn 不含 error，final message 后 done。
+- Bad：把所有 `method:"error"` 都当 terminal，导致可重试 turn 被提前关闭。
+- Bad：看到 `hasTerminalEvent` 就取消 idle guard，让已经输出答案但未退出的
+  child 永久驻留。
+
+#### 6. 必需测试
+
+- failed completion、retry/non-retry error、结构化 message、重复终态去重。
+- 新 turn 重置后可以再次产生合法 error/done。
+- idle timer 覆盖 shutdown、child exit、cancel、pause/reset，以及“已有
+  terminal event 但 child 尚未退出”仍请求 idle shutdown。
+- supervisor exactly-one terminal race 测试继续通过。
+
+#### 7. Wrong vs Correct
+
+```typescript
+// Wrong
+if (params.error) return terminalError(params.error);
+if (shutdown.hasTerminalEvent()) return;
+
+// Correct
+if (params.willRetry === true) return warningProgress(params.error);
+if (shutdown.isShuttingDown() || isChildExited()) return;
 ```
 
 ### Codex progress stream metadata

@@ -106,6 +106,7 @@ describe("init() integration", () => {
     expect(fs.existsSync(path.join(tmpDir, ".github", "copilot"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".factory"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".pi"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".snow"))).toBe(false);
 
     // Root files
     expect(fs.existsSync(path.join(tmpDir, "AGENTS.md"))).toBe(true);
@@ -140,6 +141,17 @@ describe("init() integration", () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  it("#1a writes the Suncode journal merge rule", async () => {
+    await init({ yes: true });
+
+    const content = fs.readFileSync(
+      path.join(tmpDir, ".gitattributes"),
+      "utf-8",
+    );
+    expect(content).toContain(".suncode/workspace/*/journal-*.md merge=union");
+    expect(content).not.toMatch(/^\.suncode\/workspace\/\*\/index\.md/m);
   });
 
   it("#1b does not print the promotional pain-point block", async () => {
@@ -632,12 +644,12 @@ describe("init() integration", () => {
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(
-        path.join(tmpDir, ".trae", "commands", "suncode-start.md"),
-      ),
+      fs.existsSync(path.join(tmpDir, ".trae", "commands", "suncode-start.md")),
     ).toBe(false);
     expect(
-      fs.existsSync(path.join(tmpDir, ".trae", "agents", "suncode-implement.md")),
+      fs.existsSync(
+        path.join(tmpDir, ".trae", "agents", "suncode-implement.md"),
+      ),
     ).toBe(true);
     expect(
       fs.readFileSync(
@@ -690,9 +702,7 @@ describe("init() integration", () => {
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(
-        path.join(tmpDir, ".zcode", "agents", "suncode-check.md"),
-      ),
+      fs.existsSync(path.join(tmpDir, ".zcode", "agents", "suncode-check.md")),
     ).toBe(true);
     expect(
       fs.existsSync(
@@ -806,7 +816,9 @@ describe("init() integration", () => {
       fs.existsSync(path.join(tmpDir, ".grok", "commands", "suncode-start.md")),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(tmpDir, ".grok", "agents", "suncode-implement.md")),
+      fs.existsSync(
+        path.join(tmpDir, ".grok", "agents", "suncode-implement.md"),
+      ),
     ).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, ".grok", "hooks"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, ".agents", "skills"))).toBe(false);
@@ -834,11 +846,46 @@ describe("init() integration", () => {
         ),
       ).toBe(true);
     }
-    expect(fs.existsSync(path.join(tmpDir, ".kimi-code", "hooks"))).toBe(
+    expect(fs.existsSync(path.join(tmpDir, ".kimi-code", "hooks"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".kimi-code", "config.toml"))).toBe(
       false,
     );
+  });
+
+  it("#3r snow platform writes and hash-tracks its full Suncode surface", async () => {
+    await init({ yes: true, snow: true });
+
+    const expected = [
+      ".snow/SNOW.md",
+      ".snow/skills/suncode-check/SKILL.md",
+      ".snow/commands/suncode-continue.json",
+      ".snow/agents/suncode-implement.md",
+      ".snow/hooks/onSessionStart.json",
+      ".snow/hooks/write-suncode-context.py",
+    ];
+    const hashFile = path.join(
+      tmpDir,
+      DIR_NAMES.WORKFLOW,
+      ".template-hashes.json",
+    );
+    const hashData = JSON.parse(fs.readFileSync(hashFile, "utf-8")) as {
+      hashes: Record<string, string>;
+    };
+
+    for (const relativePath of expected) {
+      const absolutePath = path.join(tmpDir, ...relativePath.split("/"));
+      expect(fs.existsSync(absolutePath), relativePath).toBe(true);
+      expect(hashData.hashes[relativePath], relativePath).toBe(
+        computeHash(fs.readFileSync(absolutePath, "utf-8")),
+      );
+    }
     expect(
-      fs.existsSync(path.join(tmpDir, ".kimi-code", "config.toml")),
+      fs.existsSync(
+        path.join(tmpDir, ".snow", "commands", "suncode-start.json"),
+      ),
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".snow", "sub-agents.suncode.json")),
     ).toBe(false);
   });
 

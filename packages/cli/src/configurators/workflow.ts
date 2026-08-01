@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 import { DIR_NAMES, PATHS } from "../constants/paths.js";
@@ -8,6 +9,7 @@ import {
   workflowMdTemplate,
   configYamlTemplate,
   gitignoreTemplate,
+  gitattributesTemplate,
   getAllAgents,
 } from "../templates/suncode/index.js";
 
@@ -71,6 +73,27 @@ export interface WorkflowOptions {
   workflowMdOverride?: string;
 }
 
+const JOURNAL_MERGE_UNION_PATTERN =
+  /^\.suncode\/workspace\/\*\/journal-\*\.md[ \t]+merge=union(?:[ \t]+#.*)?[ \t]*\r?$/m;
+
+/** Add the Suncode journal merge rule without replacing user-owned content. */
+export function ensureGitattributes(cwd: string): void {
+  const targetPath = path.join(cwd, ".gitattributes");
+
+  if (!fs.existsSync(targetPath)) {
+    fs.writeFileSync(targetPath, gitattributesTemplate);
+    return;
+  }
+
+  const existing = fs.readFileSync(targetPath, "utf-8");
+  if (JOURNAL_MERGE_UNION_PATTERN.test(existing)) {
+    return;
+  }
+
+  const separator = existing.endsWith("\n") ? "\n" : "\n\n";
+  fs.writeFileSync(targetPath, existing + separator + gitattributesTemplate);
+}
+
 /**
  * Create workflow structure based on project type
  *
@@ -119,6 +142,8 @@ export async function createWorkflowStructure(
     path.join(cwd, DIR_NAMES.WORKFLOW, "config.yaml"),
     configYamlTemplate,
   );
+
+  ensureGitattributes(cwd);
 
   // Dispatch channel runtime agent definitions. These are platform-agnostic
   // Suncode runtime files consumed by `suncode channel spawn --agent <name>`

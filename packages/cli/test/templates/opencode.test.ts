@@ -1,11 +1,23 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   contextCollector,
+  ContextBudget,
   isSuncodeSubagent,
+  materializeArtifact,
+  materializeFile,
+  readContextInjectionLimits,
   SuncodeContext,
+  truncateUtf8,
 } from "../../src/templates/opencode/lib/suncode-context.js";
 import {
   buildSessionContext,
@@ -21,6 +33,110 @@ interface TestContextCollector {
   isProcessed(directory: string, sessionID: string): boolean;
   clear(sessionID: string): void;
 }
+
+describe("OpenCode bounded context materialization", () => {
+  it("uses defaults, preserves zero, and rejects invalid negative limits", () => {
+    const root = mkdtempSync(join(tmpdir(), "suncode-opencode-limits-"));
+    try {
+      mkdirSync(join(root, ".suncode"), { recursive: true });
+      expect(readContextInjectionLimits(root)).toEqual({
+        max_file_bytes: 32768,
+        max_artifact_bytes: 65536,
+        max_total_bytes: 131072,
+      });
+      writeFileSync(
+        join(root, ".suncode", "config.yaml"),
+        [
+          "context_injection:",
+          "  max_file_bytes: -1",
+          "  max_artifact_bytes: 0",
+          "  max_total_bytes: invalid",
+        ].join("\n"),
+      );
+      expect(readContextInjectionLimits(root)).toEqual({
+        max_file_bytes: 32768,
+        max_artifact_bytes: 0,
+        max_total_bytes: 131072,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("truncates on UTF-8 boundaries and never decodes binary context", () => {
+    const root = mkdtempSync(join(tmpdir(), "suncode-opencode-binary-"));
+    try {
+      expect(truncateUtf8(Buffer.from("éé"), 3).toString("utf-8")).toBe("é");
+      writeFileSync(join(root, "nul.bin"), Buffer.from([0x61, 0x00, 0x62]));
+      writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff, 0xfe]));
+      const limits = {
+        max_file_bytes: 3,
+        max_artifact_bytes: 3,
+        max_total_bytes: 0,
+      };
+      for (const file of ["nul.bin", "invalid.bin"]) {
+        const block = materializeFile(
+          root,
+          file,
+          "fixture",
+          limits,
+          new ContextBudget(0),
+        );
+        expect(block).toContain("not inlined (binary file)");
+        expect(block).not.toContain("�");
+      }
+
+      const boundedBudget = new ContextBudget(80);
+      expect(
+        materializeFile(root, "nul.bin", "fixture", limits, boundedBudget),
+      ).toContain("not inlined (binary file)");
+      expect(
+        materializeFile(root, "invalid.bin", "fixture", limits, boundedBudget),
+      ).toBe(
+        "[Suncode: total context limit reached — remaining context entries omitted]",
+      );
+      expect(
+        materializeFile(root, "nul.bin", "fixture", limits, boundedBudget),
+      ).toBeNull();
+
+      writeFileSync(join(root, "artifact.md"), "éé");
+      const artifact = materializeArtifact(
+        root,
+        "artifact.md",
+        "PRD",
+        "task artifact",
+        limits,
+        new ContextBudget(0),
+      );
+      expect(artifact).toContain("truncated at 3 bytes");
+      expect(artifact).not.toContain("�");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses one total budget across successive files", () => {
+    const root = mkdtempSync(join(tmpdir(), "suncode-opencode-budget-"));
+    try {
+      writeFileSync(join(root, "first.txt"), "a".repeat(30));
+      writeFileSync(join(root, "second.txt"), "b".repeat(30));
+      const limits = {
+        max_file_bytes: 0,
+        max_artifact_bytes: 0,
+        max_total_bytes: 55,
+      };
+      const budget = new ContextBudget(limits.max_total_bytes);
+      expect(
+        materializeFile(root, "first.txt", "first", limits, budget),
+      ).toContain("=== first.txt ===");
+      expect(
+        materializeFile(root, "second.txt", "second", limits, budget),
+      ).toContain("total context limit reached");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 interface OpenCodeInjectHooks {
   "tool.execute.before": (
@@ -414,7 +530,10 @@ function setupSuncodeProject(): string {
   const taskDir = join(dir, ".suncode", "tasks", "demo-task");
   mkdirSync(taskDir, { recursive: true });
   mkdirSync(join(dir, ".suncode", ".runtime", "sessions"), { recursive: true });
-  writeFileSync(join(taskDir, "prd.md"), "# Demo PRD\n\nGoal: verify injection.");
+  writeFileSync(
+    join(taskDir, "prd.md"),
+    "# Demo PRD\n\nGoal: verify injection.",
+  );
   writeFileSync(join(taskDir, "implement.jsonl"), "");
   writeFileSync(join(taskDir, "check.jsonl"), "");
   writeFileSync(
@@ -627,9 +746,9 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     expect(output.args.prompt).toContain("do the implementation");
     // Marker must be at the top so generated agent definitions can detect
     // successful injection via a prefix check.
-    expect(output.args.prompt.startsWith("<!-- suncode-hook-injected -->")).toBe(
-      true,
-    );
+    expect(
+      output.args.prompt.startsWith("<!-- suncode-hook-injected -->"),
+    ).toBe(true);
   });
 
   it("inlines JSONL-referenced spec content into the implement prompt", async () => {
@@ -706,6 +825,201 @@ describe("opencode inject-subagent-context (issue #264)", () => {
     expect(output.args.prompt).toContain("Hint PRD");
     expect(output.args.prompt).not.toContain("Demo PRD");
   });
+
+  it("uses a verified execution manifest before session and legacy task context", async () => {
+    writeSessionFile(dir, "opencode_stranger", ".suncode/tasks/demo-task");
+    const attemptDir = join(
+      dir,
+      ".suncode",
+      ".runtime",
+      "execution",
+      "manifest-task",
+      "run-1",
+      "contexts",
+      "node-a",
+      "1",
+    );
+    mkdirSync(attemptDir, { recursive: true });
+    const content = "# Suncode execution node\n\nUNIQUE_MANIFEST_CONTEXT_73\n";
+    writeFileSync(join(attemptDir, "content.md"), content, "utf-8");
+    const manifestBase = {
+      version: 1,
+      task: {
+        id: "demo-task",
+        path: ".suncode/tasks/demo-task",
+        planVersion: 1,
+        planHash: "plan-hash",
+      },
+      run: {
+        id: "run-1",
+        nodeId: "node-a",
+        attempt: 1,
+        parentSession: "stranger",
+      },
+      role: "implement",
+      execution: {
+        allowed: ["inline", "native-subagent", "channel"],
+        isolation: "shared-worktree",
+        timeoutSeconds: 900,
+        maxAttempts: 2,
+        idempotent: true,
+      },
+      budget: {
+        perSourceBytes: 65_536,
+        totalBytes: 262_144,
+        usedBytes: Buffer.byteLength(content),
+      },
+      content: {
+        path: "content.md",
+        sha256: sha256ForTest(content),
+      },
+    };
+    const manifest = {
+      ...manifestBase,
+      manifestHash: sha256ForTest(
+        JSON.stringify(canonicalizeForTest(manifestBase)),
+      ),
+    };
+    const manifestPath = join(attemptDir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+    const manifestRef = manifestPath
+      .slice(dir.length + 1)
+      .replaceAll("\\", "/");
+    const output: TaskToolOutput = {
+      args: {
+        subagent_type: "suncode-implement",
+        prompt: [
+          "Active task: .suncode/tasks/demo-task",
+          `Suncode context manifest: ${manifestRef}`,
+          "",
+          "run the node",
+        ].join("\n"),
+      },
+    };
+
+    await hooks["tool.execute.before"](
+      { tool: "task", sessionID: "stranger" },
+      output,
+    );
+
+    expect(output.args.prompt).toContain("# Suncode Execution Node");
+    expect(output.args.prompt).toContain("UNIQUE_MANIFEST_CONTEXT_73");
+    expect(output.args.prompt).not.toContain("Demo PRD");
+  });
+
+  it.each([
+    {
+      name: "boolean top-level version",
+      target: '"version": 1',
+      replacement: '"version": true',
+    },
+    {
+      name: "float top-level version",
+      target: '"version": 1',
+      replacement: '"version": 1.0',
+    },
+    {
+      name: "exponent top-level version",
+      target: '"version": 1',
+      replacement: '"version": 1e0',
+    },
+    {
+      name: "string top-level version",
+      target: '"version": 1',
+      replacement: '"version": "1"',
+    },
+    {
+      name: "float nested plan version",
+      target: '"planVersion": 1',
+      replacement: '"planVersion": 1.0',
+    },
+    {
+      name: "float nested attempt",
+      target: '"attempt": 1',
+      replacement: '"attempt": 1e0',
+    },
+  ])(
+    "rejects an execution manifest with a raw $name token",
+    async ({ target, replacement }) => {
+      const attemptDir = join(
+        dir,
+        ".suncode",
+        ".runtime",
+        "execution",
+        "manifest-task",
+        "run-invalid-version",
+        "contexts",
+        "node-a",
+        "1",
+      );
+      mkdirSync(attemptDir, { recursive: true });
+      const content = "# Suncode execution node\n\nINVALID_VERSION_CONTEXT\n";
+      writeFileSync(join(attemptDir, "content.md"), content, "utf-8");
+      const manifestBase = {
+        version: 1,
+        task: {
+          id: "demo-task",
+          path: ".suncode/tasks/demo-task",
+          planVersion: 1,
+          planHash: "plan-hash",
+        },
+        run: {
+          id: "run-invalid-version",
+          nodeId: "node-a",
+          attempt: 1,
+          parentSession: "stranger",
+        },
+        role: "implement",
+        execution: {
+          allowed: ["inline", "native-subagent", "channel"],
+          isolation: "shared-worktree",
+          timeoutSeconds: 900,
+          maxAttempts: 2,
+          idempotent: true,
+        },
+        budget: {
+          perSourceBytes: 65_536,
+          totalBytes: 262_144,
+          usedBytes: Buffer.byteLength(content),
+        },
+        content: {
+          path: "content.md",
+          sha256: sha256ForTest(content),
+        },
+      };
+      const manifest = {
+        ...manifestBase,
+        manifestHash: sha256ForTest(
+          JSON.stringify(canonicalizeForTest(manifestBase)),
+        ),
+      };
+      const serialized = JSON.stringify(manifest, null, 2).replace(
+        target,
+        replacement,
+      );
+      expect(serialized).not.toBe(JSON.stringify(manifest, null, 2));
+      const manifestPath = join(attemptDir, "manifest.json");
+      writeFileSync(manifestPath, serialized, "utf-8");
+      const manifestRef = manifestPath
+        .slice(dir.length + 1)
+        .replaceAll("\\", "/");
+      const output: TaskToolOutput = {
+        args: {
+          subagent_type: "suncode-implement",
+          prompt: `Suncode context manifest: ${manifestRef}\n\nrun the node`,
+        },
+      };
+      const originalPrompt = output.args.prompt;
+
+      await hooks["tool.execute.before"](
+        { tool: "task", sessionID: "stranger" },
+        output,
+      );
+
+      expect(output.args.prompt).toBe(originalPrompt);
+      expect(output.args.prompt).not.toContain("INVALID_VERSION_CONTEXT");
+    },
+  );
 
   it("emits the suncode-hook-injected marker for research agent too", async () => {
     const output: TaskToolOutput = {
@@ -819,6 +1133,86 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     expect(parts[0].text).toContain("user prompt");
   });
 
+  it("skips the current turn when the prompt contains the default keyword", async () => {
+    const hooks = (await injectWorkflowStatePlugin({
+      directory: dir,
+    })) as ChatMessageHooks;
+    const parts: ChatMessagePart[] = [
+      { type: "text", text: "no-suncode explain this regex" },
+    ];
+
+    await hooks["chat.message"](
+      { sessionID: "main-session", agent: "build" },
+      { parts },
+    );
+
+    expect(parts).toEqual([
+      { type: "text", text: "no-suncode explain this regex" },
+    ]);
+  });
+
+  it("does not skip when the default keyword lacks a word boundary", async () => {
+    const hooks = (await injectWorkflowStatePlugin({
+      directory: dir,
+    })) as ChatMessageHooks;
+    const parts: ChatMessagePart[] = [
+      { type: "text", text: "no-suncodefoo is not the escape hatch" },
+    ];
+
+    await hooks["chat.message"](
+      { sessionID: "main-session", agent: "build" },
+      { parts },
+    );
+    expect(parts[0].text).toContain("<workflow-state>");
+  });
+
+  it("honors a custom prompt_injection.skip_keyword", async () => {
+    writeFileSync(
+      join(dir, ".suncode", "config.yaml"),
+      ["prompt_injection:", '  skip_keyword: "off-topic"'].join("\n"),
+    );
+    const hooks = (await injectWorkflowStatePlugin({
+      directory: dir,
+    })) as ChatMessageHooks;
+
+    const skipped: ChatMessagePart[] = [
+      { type: "text", text: "off-topic question" },
+    ];
+    await hooks["chat.message"](
+      { sessionID: "main-session", agent: "build" },
+      { parts: skipped },
+    );
+    expect(skipped[0].text).toBe("off-topic question");
+
+    const normal: ChatMessagePart[] = [
+      { type: "text", text: "no-suncode question" },
+    ];
+    await hooks["chat.message"](
+      { sessionID: "main-session-2", agent: "build" },
+      { parts: normal },
+    );
+    expect(normal[0].text).toContain("<workflow-state>");
+  });
+
+  it('disables the escape hatch with skip_keyword: ""', async () => {
+    writeFileSync(
+      join(dir, ".suncode", "config.yaml"),
+      ["prompt_injection:", '  skip_keyword: ""'].join("\n"),
+    );
+    const hooks = (await injectWorkflowStatePlugin({
+      directory: dir,
+    })) as ChatMessageHooks;
+    const parts: ChatMessagePart[] = [
+      { type: "text", text: "no-suncode question" },
+    ];
+
+    await hooks["chat.message"](
+      { sessionID: "main-session", agent: "build" },
+      { parts },
+    );
+    expect(parts[0].text).toContain("<workflow-state>");
+  });
+
   it("inject-workflow-state.js refreshes Hub state through the suncode CLI", async () => {
     const home = join(dir, "home");
     setupOpencodeHubState(dir, home);
@@ -921,3 +1315,22 @@ describe("opencode chat.message subagent skip (issue #264)", () => {
     });
   });
 });
+
+function canonicalizeForTest(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeForTest);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [
+          key,
+          canonicalizeForTest((value as Record<string, unknown>)[key]),
+        ]),
+    );
+  }
+  return value;
+}
+
+function sha256ForTest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}

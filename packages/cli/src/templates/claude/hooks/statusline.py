@@ -22,6 +22,13 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+_stdin_reconfigure = getattr(sys.stdin, "reconfigure", None)
+if callable(_stdin_reconfigure):
+    try:
+        _stdin_reconfigure(encoding="utf-8", errors="replace")
+    except (OSError, ValueError):
+        pass
+
 # Fix: Windows Python defaults to GBK encoding, which corrupts UTF-8
 # characters like the middle dot (·). Wrap stdout/stderr with UTF-8.
 if sys.platform == "win32":

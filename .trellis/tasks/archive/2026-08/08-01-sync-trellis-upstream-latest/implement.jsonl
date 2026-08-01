@@ -1,0 +1,11 @@
+{"file":".trellis/tasks/08-01-sync-trellis-upstream-latest/research/release-evidence.md","reason":"Verified official remote, checkpoint, stable tags, isolated release refs, ancestry, commit counts, and dirty-work boundaries."}
+{"file":".trellis/tasks/08-01-sync-trellis-upstream-latest/research/upstream-v0.6.9-v0.6.11-adoption.md","reason":"Complete 43-commit adoption matrix and the 15 Suncode behavior packages."}
+{"file":".trellis/spec/cli/backend/platform-integration.md","reason":"Platform template, hook, agent, and identity contracts for Snow, Codex, Pi, Kimi, OpenCode, and OMP."}
+{"file":".trellis/spec/cli/backend/suncode-runtime-identity.md","reason":"Suncode runtime identity, ownership, persistence, and template-hash boundaries."}
+{"file":".trellis/spec/cli/backend/filesystem-safety.md","reason":"Channel trusted-root, realpath containment, symlink, JSONL, and agent-read safety contracts."}
+{"file":".trellis/spec/cli/backend/script-conventions.md","reason":"Python live/template synchronization, compatibility, and task script conventions."}
+{"file":".trellis/spec/cli/backend/directory-structure.md","reason":"Workspace journal and generated runtime directory contracts."}
+{"file":".trellis/spec/cli/backend/commands-update.md","reason":"Template hash, update preservation, migration, and user-owned file behavior."}
+{"file":".trellis/spec/cli/backend/commands-platforms.md","reason":"Configured-platform detection and CLI output contract."}
+{"file":".trellis/spec/cli/backend/commands-channel.md","reason":"Channel adapter, supervisor, context, and worker lifecycle contract."}
+{"file":".trellis/spec/cli/unit-test/index.md","reason":"Repository CI and verification requirements."}

@@ -16,6 +16,7 @@ import {
   type AITool,
   type CliFlag,
 } from "../types/ai-tools.js";
+import { loadHashes } from "../utils/template-hash.js";
 
 // Platform configurators
 import { configureClaude } from "./claude.js";
@@ -43,6 +44,7 @@ import { configureZcode, collectZcodeTemplates } from "./zcode.js";
 import { configureTrae } from "./trae.js";
 import { configureGrok, collectGrokTemplates } from "./grok.js";
 import { configureKimi, collectKimiTemplates } from "./kimi.js";
+import { configureSnow, collectSnowTemplates } from "./snow.js";
 
 // Shared utilities
 import {
@@ -510,6 +512,10 @@ const PLATFORM_FUNCTIONS: Record<AITool, PlatformFunctions> = {
     configure: configureKimi,
     collectTemplates: () => collectKimiTemplates(),
   },
+  snow: {
+    configure: configureSnow,
+    collectTemplates: () => collectSnowTemplates(),
+  },
 };
 
 // =============================================================================
@@ -530,30 +536,42 @@ export const PLATFORM_MANAGED_DIRS = PLATFORM_IDS.flatMap((id) =>
 /** All directories managed by Suncode (including .suncode itself) */
 export const ALL_MANAGED_DIRS = [".suncode", ...new Set(PLATFORM_MANAGED_DIRS)];
 
-/**
- * Detect which platforms are configured by checking for configDir existence.
- *
- * Note: Detection uses only `configDir` (the platform-specific directory),
- * NOT shared layers like `.agents/skills/`. This prevents false positives
- * where a shared directory triggers detection of a specific platform.
- */
+/** Detect Suncode-managed platforms from ownership evidence. */
 export function getConfiguredPlatforms(cwd: string): Set<AITool> {
   const platforms = new Set<AITool>();
+  const hashes = loadHashes(cwd);
+
   for (const id of PLATFORM_IDS) {
     const config = AI_TOOLS[id];
-    const configured = config.ownershipMarkers?.length
-      ? config.ownershipMarkers.some((marker) =>
-          fs.existsSync(path.join(cwd, marker)),
-        )
-      : fs.existsSync(path.join(cwd, config.configDir));
-    if (configured) {
+    const templates = collectPlatformTemplates(id);
+    const hasTrackedTemplate = [...(templates?.keys() ?? [])].some(
+      (relativePath) =>
+        (relativePath === config.configDir ||
+          relativePath.startsWith(`${config.configDir}/`)) &&
+        hashes[relativePath] !== undefined,
+    );
+    const hasOwnershipMarker =
+      config.ownershipMarkers?.some((marker) =>
+        fs.existsSync(path.join(cwd, marker)),
+      ) ?? false;
+    if (hasTrackedTemplate || hasOwnershipMarker) {
       platforms.add(id);
     }
   }
-  // Back-compat: Windsurf was renamed to Devin (config dir .windsurf → .devin).
-  // A pre-rename install with only `.windsurf/workflows/` still counts as Devin
-  // so re-init / update recognize it (and `--migrate` can move it to `.devin/`).
-  if (fs.existsSync(path.join(cwd, ".windsurf", "workflows"))) {
+
+  const legacyWindsurfRoot = ".windsurf/workflows";
+  const hasTrackedWindsurfTemplate = Object.keys(hashes).some((relativePath) =>
+    relativePath.startsWith(`${legacyWindsurfRoot}/suncode-`),
+  );
+  let hasLegacyWindsurfTemplate = false;
+  try {
+    hasLegacyWindsurfTemplate = fs
+      .readdirSync(path.join(cwd, legacyWindsurfRoot))
+      .some((name) => name.startsWith("suncode-"));
+  } catch {
+    // Missing or unreadable legacy directory is not Suncode ownership.
+  }
+  if (hasTrackedWindsurfTemplate || hasLegacyWindsurfTemplate) {
     platforms.add("devin");
   }
   return platforms;

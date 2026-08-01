@@ -49,6 +49,18 @@ export const commonTypes = readTemplate("scripts/common/types.py");
 export const commonTasks = readTemplate("scripts/common/tasks.py");
 export const commonTaskContext = readTemplate("scripts/common/task_context.py");
 export const commonTaskStore = readTemplate("scripts/common/task_store.py");
+export const commonExecutionModel = readTemplate(
+  "scripts/common/execution_model.py",
+);
+export const commonExecutionContext = readTemplate(
+  "scripts/common/execution_context.py",
+);
+export const commonExecutionRuntime = readTemplate(
+  "scripts/common/execution_runtime.py",
+);
+export const commonTaskExecution = readTemplate(
+  "scripts/common/task_execution.py",
+);
 export const commonSessionContext = readTemplate(
   "scripts/common/session_context.py",
 );
@@ -74,6 +86,7 @@ export const addSessionScript = readTemplate("scripts/add_session.py");
 export const workflowMdTemplate = readTemplate("workflow.md");
 export const configYamlTemplate = readTemplate("config.yaml");
 export const gitignoreTemplate = readTemplate("gitignore.txt");
+export const gitattributesTemplate = readTemplate("gitattributes.txt");
 
 // Channel runtime agent definitions (loaded by
 // `packages/cli/src/commands/channel/agent-loader.ts` from `.suncode/agents/`).
@@ -108,6 +121,10 @@ export function getAllScripts(): Map<string, string> {
   scripts.set("common/tasks.py", commonTasks);
   scripts.set("common/task_context.py", commonTaskContext);
   scripts.set("common/task_store.py", commonTaskStore);
+  scripts.set("common/execution_model.py", commonExecutionModel);
+  scripts.set("common/execution_context.py", commonExecutionContext);
+  scripts.set("common/execution_runtime.py", commonExecutionRuntime);
+  scripts.set("common/task_execution.py", commonTaskExecution);
   scripts.set("common/session_context.py", commonSessionContext);
   scripts.set("common/packages_context.py", commonPackagesContext);
   scripts.set("common/workflow_phase.py", commonWorkflowPhase);

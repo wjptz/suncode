@@ -33,6 +33,74 @@ import { SuncodeContext, debugLog, isSuncodeSubagent } from "../lib/suncode-cont
 // (so "in-review" / "blocked-by-team" work alongside "in_progress").
 const TAG_RE = /\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n([\s\S]*?)\n\s*\[\/workflow-state:\1\]/g
 
+const DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD = "no-suncode"
+
+function stripInlineComment(value) {
+  let quote = null
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]
+    if (quote) {
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === '"' || character === "'") {
+      quote = character
+      continue
+    }
+    if (character === "#" && (index === 0 || /\s/.test(value[index - 1]))) {
+      return value.slice(0, index)
+    }
+  }
+  return value
+}
+
+function unquoteYaml(value) {
+  if (
+    value.length >= 2 &&
+    value[0] === value[value.length - 1] &&
+    (value[0] === '"' || value[0] === "'")
+  ) {
+    return value.slice(1, -1)
+  }
+  return value
+}
+
+function readSkipKeyword(directory) {
+  const configPath = join(directory, ".suncode", "config.yaml")
+  if (!existsSync(configPath)) return DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD
+  let text
+  try {
+    text = readFileSync(configPath, "utf-8")
+  } catch {
+    return DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD
+  }
+
+  let inSection = false
+  let sectionIndent = -1
+  for (const rawLine of text.split(/\r?\n/)) {
+    const trimmed = rawLine.trim()
+    if (!inSection) {
+      if (/^prompt_injection\s*:\s*(#.*)?$/.test(trimmed)) {
+        inSection = true
+        sectionIndent = rawLine.length - rawLine.trimStart().length
+      }
+      continue
+    }
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const indent = rawLine.length - rawLine.trimStart().length
+    if (indent <= sectionIndent) break
+    const match = trimmed.match(/^skip_keyword\s*:\s*(.*)$/)
+    if (match) return unquoteYaml(stripInlineComment(match[1]).trim())
+  }
+  return DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD
+}
+
+function promptHasSkipKeyword(text, keyword) {
+  if (!keyword || typeof text !== "string") return false
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, "i").test(text)
+}
+
 /**
  * Parse workflow.md for [workflow-state:STATUS] blocks.
  *
@@ -341,6 +409,18 @@ export default async ({ directory }) => {
           if (!ctx.isSuncodeProject()) {
             return
           }
+
+          const parts = output?.parts || []
+          const textPartIndex = parts.findIndex(
+            part => part.type === "text" && part.text !== undefined,
+          )
+          const originalText =
+            textPartIndex !== -1 ? (parts[textPartIndex].text || "") : ""
+          if (promptHasSkipKeyword(originalText, readSkipKeyword(directory))) {
+            debugLog("workflow-state", "Skipping turn: skip keyword present in prompt")
+            return
+          }
+
           const templates = loadBreadcrumbs(directory)
           const task = getActiveTask(ctx, input)
           const breadcrumb = task
@@ -348,12 +428,7 @@ export default async ({ directory }) => {
             : buildBreadcrumb(null, "no_task", templates)
           const context = `${breadcrumb}\n\n${buildHubState(ctx, input)}`
 
-          const parts = output?.parts || []
-          const textPartIndex = parts.findIndex(
-            p => p.type === "text" && p.text !== undefined,
-          )
           if (textPartIndex !== -1) {
-            const originalText = parts[textPartIndex].text || ""
             parts[textPartIndex].text = `${context}\n\n${originalText}`
           } else {
             parts.unshift({ type: "text", text: context })

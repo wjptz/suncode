@@ -28,7 +28,8 @@ export type AITool =
   | "zcode"
   | "trae"
   | "grok"
-  | "kimi";
+  | "kimi"
+  | "snow";
 
 /**
  * Template directory categories
@@ -55,7 +56,8 @@ export type TemplateDir =
   | "zcode"
   | "trae"
   | "grok"
-  | "kimi";
+  | "kimi"
+  | "snow";
 
 /**
  * CLI flag names for platform selection (e.g., --claude, --cursor, --kilo, --kiro, --gemini, --antigravity)
@@ -82,7 +84,8 @@ export type CliFlag =
   | "zcode"
   | "trae"
   | "grok"
-  | "kimi";
+  | "kimi"
+  | "snow";
 
 /**
  * Template context for placeholder resolution.
@@ -533,6 +536,28 @@ export const AI_TOOLS: Record<AITool, AIToolConfig> = {
       agentCapable: true,
       hasHooks: false,
       cliFlag: "kimi",
+    },
+  },
+  snow: {
+    name: "Snow CLI",
+    templateDirs: ["common", "snow"],
+    configDir: ".snow/skills",
+    extraManagedPaths: [
+      ".snow/commands",
+      ".snow/agents",
+      ".snow/hooks",
+      ".snow/SNOW.md",
+    ],
+    cliFlag: "snow",
+    defaultChecked: false,
+    hasPythonHooks: true,
+    templateContext: {
+      cmdRefPrefix: "/suncode-",
+      executorAI: "Bash scripts or Agent calls",
+      userActionLabel: "Skills",
+      agentCapable: true,
+      hasHooks: true,
+      cliFlag: "snow",
     },
   },
 };

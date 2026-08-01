@@ -5,6 +5,7 @@ import inquirer from "inquirer";
 
 import { DIR_NAMES } from "../../constants/paths.js";
 import {
+  loadGlobalHubConfig,
   normalizeApiBaseUrl,
   saveGlobalHubConfig,
   type HubHomeOptions,
@@ -33,6 +34,15 @@ interface HubInitAnswers {
   projectApiBaseUrl?: string;
   projectId: string;
   developerId?: string;
+  startReviewPolicy: StartReviewPolicy;
+  autoPullSpec: boolean;
+}
+
+interface HubInitPromptAnswers {
+  apiBaseUrl?: string;
+  pinProjectApiBaseUrl: boolean;
+  projectApiBaseUrl?: string;
+  projectId: string;
   startReviewPolicy: StartReviewPolicy;
   autoPullSpec: boolean;
 }
@@ -86,15 +96,37 @@ async function resolveInitAnswers(
     };
   }
 
-  const answers = await inquirer.prompt<HubInitAnswers>([
-    {
-      type: "input",
-      name: "apiBaseUrl",
-      message: "Hub API base URL",
-      default: options.apiBaseUrl,
-      validate: (value: string) =>
-        value.trim() ? true : "Hub API base URL is required.",
-    },
+  const globalApiBaseUrl = options.apiBaseUrl
+    ? undefined
+    : loadGlobalHubConfig({ homeDir: options.homeDir }).defaultApiBaseUrl;
+  let reusedGlobalApiBaseUrl: string | undefined;
+  if (globalApiBaseUrl) {
+    const reuse = await inquirer.prompt<{ reuseGlobalApiBaseUrl: boolean }>([
+      {
+        type: "confirm",
+        name: "reuseGlobalApiBaseUrl",
+        message: `Reuse global Hub API base URL (${globalApiBaseUrl})?`,
+        default: true,
+      },
+    ]);
+    if (reuse.reuseGlobalApiBaseUrl) {
+      reusedGlobalApiBaseUrl = globalApiBaseUrl;
+    }
+  }
+
+  const answers = await inquirer.prompt<HubInitPromptAnswers>([
+    ...(reusedGlobalApiBaseUrl
+      ? []
+      : [
+          {
+            type: "input" as const,
+            name: "apiBaseUrl",
+            message: "Hub API base URL",
+            default: options.apiBaseUrl,
+            validate: (value: string) =>
+              value.trim() ? true : "Hub API base URL is required.",
+          },
+        ]),
     {
       type: "confirm",
       name: "pinProjectApiBaseUrl",
@@ -106,7 +138,7 @@ async function resolveInitAnswers(
       name: "projectApiBaseUrl",
       message: "Project Hub API base URL override",
       default: options.projectApiBaseUrl,
-      when: (current: HubInitAnswers) => current.pinProjectApiBaseUrl,
+      when: (current: HubInitPromptAnswers) => current.pinProjectApiBaseUrl,
     },
     {
       type: "input",
@@ -115,12 +147,6 @@ async function resolveInitAnswers(
       default: options.projectId,
       validate: (value: string) =>
         value.trim() ? true : "Hub project ID is required.",
-    },
-    {
-      type: "input",
-      name: "developerId",
-      message: "Developer ID (optional)",
-      default: options.developerId,
     },
     {
       type: "list",
@@ -136,8 +162,14 @@ async function resolveInitAnswers(
       default: options.autoPullSpec ?? true,
     },
   ]);
+  const apiBaseUrl = reusedGlobalApiBaseUrl ?? answers.apiBaseUrl;
+  if (!apiBaseUrl) {
+    throw new Error("Hub API base URL is required.");
+  }
   return {
     ...answers,
+    apiBaseUrl,
+    developerId: options.developerId,
     projectApiBaseUrl: answers.pinProjectApiBaseUrl
       ? answers.projectApiBaseUrl
       : undefined,

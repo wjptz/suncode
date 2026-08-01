@@ -145,6 +145,34 @@ markers (`[Codex]` plus `[Kilo, Antigravity, Windsurf]`) must be replaced by
 the current packaged template so `--platform codex` can resolve to
 `codex-inline` or `codex-sub-agent` and still load Phase 2.1 detail.
 
+### Planning breadcrumb 的一次性 DAG finalization 契约
+
+`[workflow-state:planning]` 和 `[workflow-state:planning-inline]` 会在每个
+planning 回合重复注入，但 Phase 1.4 的 DAG planning 是
+**planning-finalization gate**，不是 per-turn action。重复看到 breadcrumb
+只表示该必需门禁仍然可达，不能被解释为再次执行命令的授权。
+
+两个 breadcrumb 与 Phase 1.4 walkthrough 必须保持以下同一语义：
+
+- 存在会改变交付物、验收标准、技术边界、节点依赖、reads/writes、
+  resources 或 validation 的阻塞性未决问题时，不得 scaffold 或 validate；
+- PRD/design/implement 尚在实质变化时，只继续需求澄清和规划材料更新；
+- 规划首次收敛且 `execution.json` 缺失时，只 scaffold 一次，人工校正后
+  validate 一次；
+- 已有 DAG 仍匹配收敛后的规划时直接复用，不 scaffold、不重复 validate，
+  也不重新审查整图；
+- 发生影响 DAG 的实质规划变化时，原地修改受影响的节点和边，validate
+  一次，并重新展示最终规划摘要；不得自动使用 `scaffold --force`；
+- 措辞润色、解释、提交信息和明确延后的未来工作不使 DAG 失效；
+- DAG 必须进入最新 final planning summary，用户在后续消息批准该摘要后
+  才能运行 `task.py start`；实质变化会使此前批准失效。
+
+是否收敛、一次变化是否实质影响 DAG，由 Agent 对照权威 planning artifacts
+判断。本契约不增加 `task.json.status`、fingerprint、sidecar、validated
+timestamp 或 `missing/current/stale/invalid` 文档状态机。`task.py start`
+继续承担 lifecycle 与最终结构门禁，activation walkthrough 不应在未变化的
+reviewed DAG 上再显式运行一次 `execution validate`。
+
 ---
 
 ## Status writer table
@@ -269,6 +297,9 @@ nested Trellis sub-agents.
 - When adding a `[required · once]` step to the workflow walkthrough, add a
   matching enforcement line to that phase's breadcrumb tag block in the
   same commit.
+- Keep repeated planning breadcrumbs idempotent: a required-once planning
+  finalization gate must state when to skip, reuse, or update; it must not read
+  as an unconditional command on every turn.
 
 ## DON'T
 

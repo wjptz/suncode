@@ -8,12 +8,22 @@ Usage:
     python3 task.py add-context <dir> <file> <path> [reason] # Add jsonl entry
     python3 task.py validate <dir>              # Validate jsonl files
     python3 task.py list-context <dir>          # List jsonl entries
+    python3 task.py execution validate <dir>    # Validate execution.json
+    python3 task.py execution show <dir>        # Show normalized execution DAG
+    python3 task.py execution scaffold <dir>    # Create a conservative serial DAG
+    python3 task.py execution start-run <dir>   # Start recoverable DAG runtime
+    python3 task.py execution ready <dir>       # Select safe fan-out before wait
+    python3 task.py execution claim <dir> <node> # Build context and dispatch envelope
+    python3 task.py execution complete <dir> <node> --result <json>
+    python3 task.py execution recover <dir>     # Reconcile results without guessing worker loss
+    python3 task.py execution context <manifest> # Verify/print node context
     python3 task.py start <dir>                 # Set active task
     python3 task.py current [--source]          # Show active task
     python3 task.py finish                      # Clear active task
     python3 task.py set-branch <dir> <branch>   # Set git branch
     python3 task.py set-base-branch <dir> <branch>  # Set PR target branch
     python3 task.py set-scope <dir> <scope>     # Set scope for PR title
+    python3 task.py set-meta <dir> <key> <value>  # Set a task metadata key
     python3 task.py archive <task-dir>          # Archive completed task
     python3 task.py list                        # List active tasks
     python3 task.py list-archive [month]        # List archived tasks
@@ -26,6 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from common.log import Colors, colored
 from common.paths import (
@@ -44,6 +55,8 @@ from common.active_task import (
     set_active_task,
 )
 from common.io import read_json, write_json
+from common.config import get_execution_dag_settings
+from common.execution_model import ExecutionPlanError, load_execution_plan
 from common.task_utils import resolve_task_dir, run_task_hooks
 from common.tasks import iter_active_tasks, children_progress
 
@@ -54,6 +67,7 @@ from common.task_store import (
     cmd_set_branch,
     cmd_set_base_branch,
     cmd_set_scope,
+    cmd_set_meta,
     cmd_add_subtask,
     cmd_remove_subtask,
 )
@@ -62,11 +76,67 @@ from common.task_context import (
     cmd_validate,
     cmd_list_context,
 )
+from common.task_execution import configure_execution_parser, cmd_execution
 
 
 # =============================================================================
 # Command: start / finish
 # =============================================================================
+
+def _execution_plan_ready(
+    full_path: Path,
+    task_data: dict[str, object],
+    repo_root: Path,
+) -> bool:
+    """Enforce the creation-time DAG policy before planning becomes implementation."""
+    settings = get_execution_dag_settings(repo_root)
+    if not settings.enabled:
+        return True
+
+    plan_path = full_path / "execution.json"
+    if plan_path.is_file():
+        try:
+            load_execution_plan(full_path, allow_legacy=False)
+        except ExecutionPlanError as exc:
+            print(
+                colored(f"Error: execution plan is invalid: {exc}", Colors.RED),
+                file=sys.stderr,
+            )
+            print(
+                "Hint: run `python3 ./.suncode/scripts/task.py execution validate "
+                f"{full_path}` and fix execution.json before start.",
+                file=sys.stderr,
+            )
+            return False
+        return True
+
+    meta = task_data.get("meta")
+    execution_policy = meta.get("execution") if isinstance(meta, dict) else None
+    requires_explicit = (
+        isinstance(execution_policy, dict)
+        and execution_policy.get("policyVersion") == 1
+        and execution_policy.get("dagEnabled") is True
+        and execution_policy.get("requireForComplexTasks") is True
+    )
+    is_complex = (full_path / "design.md").is_file() and (
+        full_path / "implement.md"
+    ).is_file()
+    if requires_explicit and is_complex:
+        print(
+            colored(
+                "Error: this complex task requires an explicit execution.json before implementation",
+                Colors.RED,
+            ),
+            file=sys.stderr,
+        )
+        print(
+            "Hint: run `python3 ./.suncode/scripts/task.py execution scaffold "
+            f"{full_path}`, then review dependencies, scopes, resources, validation, and the final barrier.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
 
 def cmd_start(args: argparse.Namespace) -> int:
     """Set active task."""
@@ -94,6 +164,13 @@ def cmd_start(args: argparse.Namespace) -> int:
     task_json_path = full_path / FILE_TASK_JSON
 
     if task_json_path.is_file():
+        task_data = read_json(task_json_path) or {}
+        if task_data.get("status") == "planning" and not _execution_plan_ready(
+            full_path,
+            task_data,
+            repo_root,
+        ):
+            return 1
         if not run_task_hooks("before_start", task_json_path, repo_root, stop_on_failure=True):
             return 1
 
@@ -311,9 +388,10 @@ def cmd_list(args: argparse.Namespace) -> int:
             if child_name in all_tasks:
                 _print_task(child_name, indent + 1)
 
-    # Display only top-level tasks (those without a parent)
+    # Orphans with a missing active parent remain visible as top-level tasks.
     for dir_name in sorted(all_tasks.keys()):
-        if not all_tasks[dir_name].parent:
+        parent = all_tasks[dir_name].parent
+        if not parent or parent not in all_tasks:
             _print_task(dir_name)
 
     if count == 0:
@@ -383,6 +461,7 @@ Usage:
   python3 task.py set-branch <dir> <branch>          Set git branch
   python3 task.py set-base-branch <dir> <branch>     Set PR target branch
   python3 task.py set-scope <dir> <scope>            Set scope for PR title
+  python3 task.py set-meta <dir> <key> <value>       Set/overwrite a task metadata key
   python3 task.py archive <task-dir>                 Archive completed task
   python3 task.py add-subtask <parent> <child>       Link child task to parent
   python3 task.py remove-subtask <parent> <child>    Unlink child from parent
@@ -402,6 +481,7 @@ List options:
 Examples:
   python3 task.py create "Add login feature" --slug add-login
   python3 task.py create "Add login feature" --slug add-login --package cli
+  python3 task.py create "Add login feature" --meta linear=ENG-123 --meta epic=auth
   python3 task.py create "Hub feature" --slug hub-feature --hub-requirement-id REQ-1001 --hub-requirement-revision 7
   python3 task.py create "Child task" --slug child --parent .suncode/tasks/01-21-parent
   python3 task.py add-context <dir> implement .suncode/spec/cli/backend/auth.md "Auth guidelines"
@@ -474,6 +554,11 @@ def main() -> int:
         help="PR target branch (overrides origin/HEAD detection and the checked-out-branch fallback)",
     )
     p_create.add_argument(
+        "--meta",
+        action="append",
+        help="Task metadata key=value (repeatable)",
+    )
+    p_create.add_argument(
         "--no-start",
         action="store_true",
         help="Create the task without making it active in this session",
@@ -505,6 +590,13 @@ def main() -> int:
     p_listctx = subparsers.add_parser("list-context", help="List context entries")
     p_listctx.add_argument("dir", help="Task directory")
 
+    # execution DAG
+    p_execution = subparsers.add_parser(
+        "execution",
+        help="Validate, inspect, and scaffold task execution DAGs",
+    )
+    configure_execution_parser(p_execution)
+
     # start
     p_start = subparsers.add_parser("start", help="Set active task")
     p_start.add_argument("dir", help="Task directory")
@@ -533,6 +625,14 @@ def main() -> int:
     p_scope = subparsers.add_parser("set-scope", help="Set scope")
     p_scope.add_argument("dir", help="Task directory")
     p_scope.add_argument("scope", help="Scope name")
+
+    # set-meta
+    p_setmeta = subparsers.add_parser(
+        "set-meta", help="Set/overwrite a task metadata key"
+    )
+    p_setmeta.add_argument("dir", help="Task directory")
+    p_setmeta.add_argument("key", help="Metadata key")
+    p_setmeta.add_argument("value", help="Metadata value")
 
     # archive
     p_archive = subparsers.add_parser("archive", help="Archive task")
@@ -570,12 +670,14 @@ def main() -> int:
         "add-context": cmd_add_context,
         "validate": cmd_validate,
         "list-context": cmd_list_context,
+        "execution": cmd_execution,
         "start": cmd_start,
         "current": cmd_current,
         "finish": cmd_finish,
         "set-branch": cmd_set_branch,
         "set-base-branch": cmd_set_base_branch,
         "set-scope": cmd_set_scope,
+        "set-meta": cmd_set_meta,
         "archive": cmd_archive,
         "add-subtask": cmd_add_subtask,
         "remove-subtask": cmd_remove_subtask,

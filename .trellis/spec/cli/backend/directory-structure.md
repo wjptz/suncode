@@ -382,6 +382,103 @@ Packages that received a remote template download (tracked via `remoteSpecPackag
 
 ---
 
+## 场景：并行 worktree 的 journal 合并边界
+
+### 1. 范围 / 触发条件
+
+修改 workflow 目录初始化、`suncode update`、根 `.gitattributes`、
+`add_session.py` 或 session auto-commit 行为时适用。journal 是追加型协作
+数据；`workspace/index.md` 是可重建快照，两者不能使用相同 merge 策略。
+
+### 2. 签名
+
+```typescript
+function ensureGitattributes(cwd: string): void;
+```
+
+```python
+def is_git_worktree(repo_root: Path) -> bool: ...
+def warn_if_parallel_worktree(repo_root: Path) -> None: ...
+```
+
+生成项目规则：
+
+```gitattributes
+.suncode/workspace/*/journal-*.md merge=union
+```
+
+仓库 dogfood 根对应为：
+
+```gitattributes
+.trellis/workspace/*/journal-*.md merge=union
+```
+
+### 3. 契约
+
+- `createWorkflowStructure()` 必须以 additive-only 方式确保根
+  `.gitattributes` 含 Suncode journal 规则。
+- 文件不存在时写入 packaged `gitattributes.txt`；文件存在时只追加，
+  不重排、不格式化、不覆盖任何用户 rule。
+- 去重必须精确匹配 `.suncode/workspace/*/journal-*.md merge=union`，允许
+  合理空白与行尾注释；其他产品（尤其 `.trellis/...`）的同名 journal
+  规则不能抑制 Suncode 规则。
+- 不得为 `.suncode/workspace/*/index.md` 设置 `merge=union`。index 每次
+  session 完整重建，冲突可从 task state 重新生成；union 会拼出损坏索引。
+- `update()` 在非 dry-run 时，即使模板/版本已无其他变化，也要先回填
+  缺失规则；`--dry-run` 必须零写入。
+- `add_session.py` 仅在 linked worktree 且 `session_auto_commit` 启用时输出
+  一次提示；主 checkout 或 auto-commit 关闭时保持安静。
+- 提示只是解释 journal union 与 index 冲突预期，不能改变 staging、commit
+  或 merge 行为。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 预期行为 |
+|---|---|
+| 根文件不存在 | 创建文件并写一条 Suncode journal rule |
+| 根文件有用户属性 | 保留原字节并以空行追加模板 |
+| 已有 Suncode 空白变体 | no-op，不重复 |
+| 只有 Trellis journal rule | 保留 Trellis rule，并追加 Suncode rule |
+| `update --dry-run` 且文件缺失 | 文件仍不存在 |
+| linked worktree + auto-commit true | stderr 输出一次 NOTE |
+| linked worktree + auto-commit false | 不输出 worktree NOTE |
+| main worktree | 不输出 worktree NOTE |
+
+### 5. Good / Base / Bad Cases
+
+- Good：项目已有 `*.png binary` 与 Trellis journal 规则，Suncode init 只在
+  末尾追加自己的精确规则。
+- Base：新项目直接从模板创建 `.gitattributes`。
+- Bad：正则只搜索 `journal-*.md merge=union`，把 Trellis rule 误当成
+  Suncode ownership。
+- Bad：对 `workspace/*/index.md` 使用 union merge，产生重复目录项。
+
+### 6. 必需测试
+
+- `ensureGitattributes`：创建、追加、精确去重、Trellis/Suncode 区分。
+- init integration：fresh init 生成 Suncode rule，且没有 index rule。
+- update integration：缺失回填、用户文件字节保留、dry-run no-op。
+- real Git worktree integration：主 checkout 静默、linked worktree 提示一次、
+  `session_auto_commit: false` 静默。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+const alreadyPresent = /journal-\*\.md\s+merge=union/.test(existing);
+```
+
+#### Correct
+
+```typescript
+const alreadyPresent =
+  /^\.suncode\/workspace\/\*\/journal-\*\.md[ \t]+merge=union(?:[ \t]+#.*)?[ \t]*\r?$/m
+    .test(existing);
+```
+
+---
+
 ## DO / DON'T
 
 ### DO

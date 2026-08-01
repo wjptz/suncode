@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { hubCreateTask } from "./create-task.js";
 import { preflightStart } from "./lifecycle.js";
+import { sanitizeUrlForLogging } from "./logging.js";
 import { loadHubManifest } from "./manifest.js";
 import {
   submitCompletion,
@@ -282,7 +283,7 @@ function tracePlanReadyFetch(
   return async (input, init) => {
     const request = input instanceof Request ? input : undefined;
     const method = String(init?.method ?? request?.method ?? "GET").toUpperCase();
-    const url = sanitizeDebugUrl(request?.url ?? String(input));
+    const url = sanitizeUrlForLogging(request?.url ?? String(input));
     tracer.log(`request ${method} ${url}`);
     try {
       const response = await fetchImpl(input, init);
@@ -294,16 +295,6 @@ function tracePlanReadyFetch(
       throw new Error(`plan-ready request failed: ${method} ${url}: ${message}`);
     }
   };
-}
-
-function sanitizeDebugUrl(value: string): string {
-  try {
-    const url = new URL(value);
-    const query = url.search ? "?[redacted]" : "";
-    return `${url.origin}${url.pathname}${query}${url.hash}`;
-  } catch {
-    return value.replace(/\?.*$/, "?[redacted]");
-  }
 }
 
 function isDebugEnabled(value: string | undefined): boolean {
