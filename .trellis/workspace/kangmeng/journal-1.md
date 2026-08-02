@@ -887,3 +887,27 @@ Implemented Hub quick/standard/change task routing, quick upload-only plan flow,
 ### Status
 
 [OK] **Completed**
+
+
+## Session 27: 发布 Suncode v0.6.12
+
+**Date**: 2026-08-02
+**Task**: 发布 Suncode v0.6.12
+**Package**: cli
+**Branch**: `release/v0.6.12`
+
+### Summary
+
+修复 Windows immutable execution context 的 CRLF 哈希失配，完成 v0.6.12 文档与发布准备、干净 clone 正式发布、GitHub Actions/npm/公共安装验证，并归档发布任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8d4173fc6aa62c23f826fddea0098ccdae293dc1` | (see git log) |
+| `eeae67f97398fb67f362ecb0edcfb2a8a82dc648` | (see git log) |
+| `4032cc6a73a61484243d8156737dcf17ad57fff2` | (see git log) |
+
+### Status
+
+[OK] **Completed**
