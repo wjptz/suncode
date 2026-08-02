@@ -73,16 +73,16 @@
 
 ## 验收标准
 
-- [ ] AC1：在常规环境和模拟 Windows CRLF 翻译环境中，context builder 写出的 `content.md` 原始 bytes 与 manifest SHA-256、`budget.usedBytes` 一致。
-- [ ] AC2：Linux/macOS 的 LF 输出语义不变；字符串本身已有的换行 bytes 不被额外规范化。
-- [ ] AC3：manifest 或 content 被修改后仍被拒绝，且错误不会被吞掉后继续实施。
-- [ ] AC4：bundled shared-worktree 的 native hook push 与 pull 路径均成功读取同一不可变 context；发布文档不宣称未验证的 worktree/sandbox 传输能力。
-- [ ] AC5：`v0.6.11` 发布线和本地 DAG/Trellis 提交线在隔离 release 分支完整合并，CLI/Core 合并基线均为 `0.6.11`。
-- [ ] AC6：v0.6.12 manifest、双语 changelog、docs navigation、横切文档和 marketplace workflow 与实际发布制品一致。
-- [ ] AC7：定向测试、Python lint/typecheck、root lint/typecheck/test/build、manifest continuity、pack/全新安装、CLI/DAG context 烟测全部通过；任何未执行项均明确记录并阻断发布。
-- [ ] AC8：既有无关脏路径未被修改、暂存或提交；`git diff --check` 和 GitNexus `detect_changes` 只显示预期范围。
-- [ ] AC9：获得独立发布批准后，子模块提交先于主仓/tag远端可达，`v0.6.12` tag 指向版本一致的正式提交。
-- [ ] AC10：GitHub Actions CI/publish 成功，两个 npm 包均存在 `0.6.12` 且 `latest=0.6.12`；发布证据写入任务记录并归档。
+- [x] AC1：在常规环境和模拟 Windows CRLF 翻译环境中，context builder 写出的 `content.md` 原始 bytes 与 manifest SHA-256、`budget.usedBytes` 一致。
+- [x] AC2：Linux/macOS 的 LF 输出语义不变；字符串本身已有的换行 bytes 不被额外规范化。
+- [x] AC3：manifest 或 content 被修改后仍被拒绝，且错误不会被吞掉后继续实施。
+- [x] AC4：bundled shared-worktree 的 native hook push 与 pull 路径均成功读取同一不可变 context；发布文档不宣称未验证的 worktree/sandbox 传输能力。
+- [x] AC5：`v0.6.11` 发布线和本地 DAG/Trellis 提交线在隔离 release 分支完整合并，CLI/Core 合并基线均为 `0.6.11`。
+- [x] AC6：v0.6.12 manifest、双语 changelog、docs navigation、横切文档和 marketplace workflow 与实际发布制品一致。
+- [x] AC7：定向测试、Python lint/typecheck、root lint/typecheck/test/build、manifest continuity、pack/全新安装、CLI/DAG context 烟测全部通过；任何未执行项均明确记录并阻断发布。
+- [x] AC8：既有无关脏路径未被修改、暂存或提交；`git diff --check` 和 GitNexus `detect_changes` 只显示预期范围。
+- [x] AC9：获得独立发布批准后，子模块提交先于主仓/tag远端可达，`v0.6.12` tag 指向版本一致的正式提交。
+- [x] AC10：GitHub Actions CI/publish 成功，两个 npm 包均存在 `0.6.12` 且 `latest=0.6.12`；发布证据写入任务记录并归档。
 
 ## 不在范围内
 
@@ -101,4 +101,4 @@
 ## 已解决决策
 
 - 2026-08-02：用户批准将已确认的 context 完整性缺陷作为 v0.6.12 发布阻断项，修复并验证后继续发布。
-- 远端推送、tag 和 npm 发布继续保留独立 go/no-go 门禁；当前批准只覆盖本地实施与发布准备。
+- 2026-08-02：本地发布准备质量门通过后，用户以“批准发布”明确通过独立 go/no-go；子仓、主仓、tag、CI 与 npm 发布均已按设计完成。

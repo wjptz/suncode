@@ -42,26 +42,26 @@
 - [x] 运行双语 changelog/docs navigation 结构检查和三个仓库的 `git diff --check`。
 - [x] 运行 GitNexus `detect_changes({scope: "compare", base_ref: "main"})`，核对受影响符号和执行流。
 - [x] 对比 Phase 1 快照，确认原工作树无关 dirty paths 未被修改、暂存或提交。
-- [ ] 汇总本地提交 SHA、完整验证证据、未执行项、远端 ahead/reachability 和准确发布动作，向用户提供独立 go/no-go；停止等待批准。
+- [x] 汇总本地提交 SHA、完整验证证据、未执行项、远端 ahead/reachability 和准确发布动作，向用户提供独立 go/no-go；停止等待批准。
 
 ## Phase 5：正式发布（必须另获 go/no-go 批准）
 
-- [ ] push docs-site 目标提交并验证 origin 可达。
-- [ ] push marketplace `3a78f3e` 并验证 origin 可达。
-- [ ] push 主仓 release 准备历史到 `origin/main`，验证 gitlink 与 ancestry。
-- [ ] 从 `origin/main` 建立全新递归 clone，设置 LF checkout，确认主仓/子模块 clean 且 SHA 一致。
-- [ ] 安装冻结依赖，先执行 root build，再复核 release check/plan。
-- [ ] 执行官方 stable patch release 命令，由脚本生成并 push `0.6.12` 版本提交与 `v0.6.12` tag；禁止本地 npm publish。
-- [ ] 记录版本提交、tag SHA 和 GitHub Actions workflow URL。
+- [x] push docs-site 目标提交并验证 origin 可达。
+- [x] push marketplace `3a78f3e` 并验证 origin 可达。
+- [x] push 主仓 release 准备历史到 `origin/main`，验证 gitlink 与 ancestry。
+- [x] 从 `origin/main` 建立全新递归 clone，设置 LF checkout，确认主仓/子模块 clean 且 SHA 一致。
+- [x] 安装冻结依赖，先执行 root build，再复核 release check/plan。
+- [x] 执行官方 stable patch release 命令，由脚本生成并 push `0.6.12` 版本提交与 `v0.6.12` tag；禁止本地 npm publish。
+- [x] 记录版本提交、tag SHA 和 GitHub Actions workflow URL。
 
 ## Phase 6：发布后验证与归档
 
-- [ ] 监控 CI/publish workflow 到终态；失败时按设计中的 tag 后故障策略停止处理。
-- [ ] 验证 GitHub tag、`origin/main`、两个子仓目标提交与子模块 gitlink 一致。
-- [ ] 从公共 npm 验证 `@wjptz/suncode@0.6.12` 与 `@wjptz/suncode-core@0.6.12` 均存在，且 `latest=0.6.12`。
-- [ ] 从公共 npm 全新安装并复核 CLI/Core 版本、精确 core 依赖、manifest 和 CLI 可执行性。
-- [ ] 将测试、workflow、tag、npm、提交和工作区保护证据写入任务记录。
-- [ ] 运行 Trellis finish-work 质量收尾、journal 更新与任务归档。
+- [x] 监控 CI/publish workflow 到终态；失败时按设计中的 tag 后故障策略停止处理。
+- [x] 验证 GitHub tag、`origin/main`、两个子仓目标提交与子模块 gitlink 一致。
+- [x] 从公共 npm 验证 `@wjptz/suncode@0.6.12` 与 `@wjptz/suncode-core@0.6.12` 均存在，且 `latest=0.6.12`。
+- [x] 从公共 npm 全新安装并复核 CLI/Core 版本、精确 core 依赖、manifest 和 CLI 可执行性。
+- [x] 将测试、workflow、tag、npm、提交和工作区保护证据写入任务记录。
+- [x] 运行 Trellis finish-work 质量收尾、journal 更新与任务归档。
 
 ## 计划验证命令族
 

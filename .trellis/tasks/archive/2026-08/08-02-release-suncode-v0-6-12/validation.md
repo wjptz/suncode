@@ -116,3 +116,50 @@
 
 - `detect_changes({scope: "compare", base_ref: "main"})`：LOW。
 - 变更范围为 10 个文件、4 个已索引符号、0 条受影响执行流；生产符号只有 `_write_text_atomic`，其余为 `execution-runtime.test.ts` 中的测试常量。
+
+## 2026-08-02 正式发布与发布后验证
+
+### 独立批准与远端顺序
+
+- 本地 go/no-go 证据汇总完成后，用户明确回复“批准发布”，授权子仓、主仓、tag 与 CI/npm 发布。
+- docs-site `origin/main`：`1140966567911e4dd4476c34ae5ab43567946456`。
+- marketplace `origin/main`：`3a78f3e092624d09748d6175d65c19e4867725c3`。
+- 主仓发布准备提交：`eeae67f97398fb67f362ecb0edcfb2a8a82dc648`；子模块 gitlink 分别指向上述两个已远端可达提交。
+- 正式发布在全新递归 clone `/tmp/suncode-v0612-release-eeae67f-20260802-3` 中执行；root 与两个子模块均设置 `core.autocrlf=false`，工作树 clean，关键文件均为 LF checkout。
+
+### 正式版本提交与 tag
+
+- 官方 `pnpm release` 先复跑 manifest continuity、Core/CLI 完整测试，再生成版本提交并推送；没有执行本地 `npm publish`。
+- 版本提交：`4032cc6a73a61484243d8156737dcf17ad57fff2`，只把 CLI/Core `package.json` 从 `0.6.11` 更新为 `0.6.12`。
+- `origin/main`：`4032cc6a73a61484243d8156737dcf17ad57fff2`。
+- `v0.6.12`：`4032cc6a73a61484243d8156737dcf17ad57fff2`；tag、正式提交与双包版本一致。
+- 正式 clone 子模块保持 docs-site `1140966567911e4dd4476c34ae5ab43567946456`、marketplace `3a78f3e092624d09748d6175d65c19e4867725c3`，且 root/submodule 工作树 clean。
+
+### GitHub Actions
+
+- workflow：`publish.yml` run `30728839163`，URL：`https://github.com/wjptz/suncode/actions/runs/30728839163`。
+- event/head：tag push，`v0.6.12` / `4032cc6a73a61484243d8156737dcf17ad57fff2`。
+- 终态：`completed / success`；创建于 `2026-08-02T02:25:42Z`，结束于 `2026-08-02T02:28:25Z`。
+- publish job `91445350191` 的 version alignment、typecheck、build、Core/CLI test、packed CLI 精确依赖、publish plan、两个 npm publish 和公共 npm verification 步骤全部成功。
+- 项目发布 workflow 不创建独立 GitHub Release 对象；`gh release view v0.6.12` 返回 `release not found`，但 Git tag、Actions 与 npm 发布均正常，不属于本项目发布契约缺失。
+
+### 公共 npm 证据
+
+- `@wjptz/suncode@0.6.12` 已存在，`latest=0.6.12`；发布于 `2026-08-02T02:27:59.591Z`，shasum `e677568a6424246e53017992a0bc366ad4422f1b`。
+- 公共 CLI 包精确依赖 `@wjptz/suncode-core: 0.6.12`。
+- `@wjptz/suncode-core@0.6.12` 已存在，`latest=0.6.12`；发布于 `2026-08-02T02:27:08.513Z`，shasum `935e9bb83392187a3de2b78d0b1856033784b283`。
+
+### 公共包全新安装烟测
+
+- 全新目录：`/tmp/suncode-v0612-public-smoke-OXNN1SoZ`；从公共 registry 精确安装 CLI/Core `0.6.12` 成功，共安装 58 个包。
+- 安装后 CLI/Core package version 均为 `0.6.12`，CLI Core 依赖为精确 `0.6.12`；`suncode --version` 输出 `0.6.12`。
+- Core 根入口及 `channel`、`mem`、`task` 子路径均可成功导入。
+- 已安装产物包含 `dist/migrations/manifests/0.6.12.json`，其 `version=0.6.12`、`migrations=[]`，描述与本次发布能力一致。
+- 在全新 Git 项目执行 `suncode init --codex --yes --user public-smoke --no-monorepo` 成功，生成项目 `.suncode/.version=0.6.12`；`suncode update --dry-run` 判定 95 个模板均未变化且项目已是最新。
+- 已安装模板的 `_write_text_atomic` 明确使用 `newline="\n"`。在 Linux 中把未声明 `newline` 的 `os.fdopen` 模拟成 Windows CRLF 默认行为后，writer 仍写出精确 `b'alpha\nbeta\n'`（11 bytes），探针通过。
+
+### 最终状态
+
+- 归档前 GitNexus `detect_changes(scope=all, worktree=release)`：LOW；3 个任务文档、0 个代码符号、0 条受影响执行流。
+- 全部 10 项验收标准均满足；发布任务可归档。
+- 原主工作树 staging 仍为空，既有 5 个 GitNexus skill、`AGENTS.md`、`CLAUDE.md`、docs-site gitlink 和知识库草稿均保留，未被发布收尾修改或清理。
